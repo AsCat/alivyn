@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "pause-stops-outbound",
+  "timezone": "Asia/Shanghai",
+  "policy": { "quiet_start": "22:00", "quiet_end": "08:00", "daily_limit": 2 },
+  "events": [
+    { "at": "2026-10-26T10:00:00+08:00", "type": "user_event", "key": "interview", "happens_at": "2026-10-28T15:00:00+08:00", "source_text": "周三下午有面试" },
+    { "at": "2026-10-28T12:00:00+08:00", "type": "pause" },
+    { "at": "2026-10-28T16:00:00+08:00", "type": "clock_tick" },
+    { "at": "2026-10-29T09:00:00+08:00", "type": "resume" },
+    { "at": "2026-10-29T09:05:00+08:00", "type": "clock_tick" }
+  ],
+  "expect": [
+    { "at": "2026-10-28T16:00:00+08:00", "delivery_count": 0, "reason": "paused" },
+    { "at": "2026-10-29T09:05:00+08:00", "delivery_count": 0, "reason": "expired intent is not backfilled" }
+  ]
+}

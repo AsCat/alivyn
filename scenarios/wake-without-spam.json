@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "wake-without-spam",
+  "timezone": "Asia/Shanghai",
+  "policy": { "quiet_start": "22:00", "quiet_end": "08:00", "daily_limit": 2, "recovery_cooldown_hours": 72 },
+  "events": [
+    { "at": "2026-10-26T00:00:00+08:00", "type": "runtime_stopped" },
+    { "at": "2026-10-26T09:00:00+08:00", "type": "runtime_resumed" },
+    { "at": "2026-10-26T09:05:00+08:00", "type": "clock_tick" },
+    { "at": "2026-10-26T10:00:00+08:00", "type": "runtime_resumed" },
+    { "at": "2026-10-26T10:05:00+08:00", "type": "clock_tick" }
+  ],
+  "expect": [
+    { "at": "2026-10-26T09:05:00+08:00", "delivery_count": 1, "topic": "time_gap" },
+    { "at": "2026-10-26T10:05:00+08:00", "delivery_count": 1, "reason": "cooldown and duplicate suppression" }
+  ]
+}

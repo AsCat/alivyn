@@ -1,0 +1,23 @@
+name: Bug report
+description: Report reproducible behavior in the current prototype
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the observed and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include commands, operating system, and Alivyn version. Remove keys and private chat data.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste only redacted output. Never include API keys or private conversations.

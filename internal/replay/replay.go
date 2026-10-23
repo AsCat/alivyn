@@ -168,7 +168,7 @@ func Run(f Fixture) ([]Decision, error) {
 				count++
 				decision.DeliveryCount = count
 				decision.Topic = candidate.topic
-				decision.Reason = ""
+				decision.Reason = "event follow-up"
 				break
 			}
 			if gap != nil && decision.Topic == "" && !at.Before(gap.due) {
@@ -186,7 +186,7 @@ func Run(f Fixture) ([]Decision, error) {
 					count++
 					decision.DeliveryCount = count
 					decision.Topic = gap.topic
-					decision.Reason = ""
+					decision.Reason = "time gap after resume"
 					lastGapContact = &at
 					gap = nil
 				}

@@ -11,7 +11,7 @@
     { "at": "2026-10-26T10:05:00+08:00", "type": "clock_tick" }
   ],
   "expect": [
-    { "at": "2026-10-26T09:05:00+08:00", "delivery_count": 1, "topic": "time_gap" },
+    { "at": "2026-10-26T09:05:00+08:00", "delivery_count": 1, "topic": "time_gap", "reason": "time gap after resume" },
     { "at": "2026-10-26T10:05:00+08:00", "delivery_count": 1, "reason": "cooldown and duplicate suppression" }
   ]
 }

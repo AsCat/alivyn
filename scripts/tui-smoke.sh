@@ -9,9 +9,9 @@ go build -o "$smoke_dir/alivyn" ./cmd/alivyn
 printf '\n\n\n' | "$smoke_dir/alivyn" init > "$smoke_dir/init-output"
 
 if [[ $(uname -s) == Darwin ]]; then
-  (sleep 1; printf '\033') | script -q "$smoke_dir/terminal-output" "$smoke_dir/alivyn" tui > /dev/null
+  (sleep 2; printf '/exit\r') | script -q "$smoke_dir/terminal-output" "$smoke_dir/alivyn" tui > /dev/null
 else
-  (sleep 1; printf '\033') | script -q -c "$smoke_dir/alivyn tui" "$smoke_dir/terminal-output" > /dev/null
+  (sleep 2; printf '/exit\r') | timeout 15s script -q -c "$smoke_dir/alivyn tui" "$smoke_dir/terminal-output" > /dev/null
 fi
 
 grep -q 'An AI individual' "$smoke_dir/terminal-output"

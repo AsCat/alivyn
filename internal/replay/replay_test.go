@@ -44,3 +44,21 @@ func TestQuietHoursCrossMidnight(t *testing.T) {
 		}
 	}
 }
+
+func TestConversationCancellationSuppressesFollowUp(t *testing.T) {
+	for _, userText := range []string{"面试取消了", "忘记面试"} {
+		fixture := Fixture{
+			Timezone: "Asia/Shanghai",
+			Policy:   Policy{QuietStart: "22:00", QuietEnd: "08:00", DailyLimit: 2},
+			Events: []Event{
+				{At: "2026-10-26T10:00:00+08:00", Type: "user_message", SourceText: "周三下午有面试"},
+				{At: "2026-10-27T12:00:00+08:00", Type: "user_message", SourceText: userText},
+				{At: "2026-10-28T16:00:00+08:00", Type: "clock_tick"},
+			},
+		}
+		decisions, err := Run(fixture)
+		if err != nil || len(decisions) != 1 || decisions[0].DeliveryCount != 0 || decisions[0].Reason != "superseded intent" {
+			t.Fatalf("%q produced contact: %+v, %v", userText, decisions, err)
+		}
+	}
+}

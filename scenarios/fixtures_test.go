@@ -18,10 +18,9 @@ type fixture struct {
 		DailyLimit int    `json:"daily_limit"`
 	} `json:"policy"`
 	Events []struct {
-		At        string `json:"at"`
-		Type      string `json:"type"`
-		Key       string `json:"key"`
-		HappensAt string `json:"happens_at"`
+		At         string `json:"at"`
+		Type       string `json:"type"`
+		SourceText string `json:"source_text"`
 	} `json:"events"`
 	Expect []struct {
 		At            string `json:"at"`
@@ -71,11 +70,10 @@ func TestFixturesAreReplayable(t *testing.T) {
 				}
 				previous = at
 				switch event.Type {
-				case "user_event":
-					if event.Key == "" || event.HappensAt == "" {
-						t.Fatal("user event needs key and event time")
+				case "user_message":
+					if event.SourceText == "" {
+						t.Fatal("user message needs source text")
 					}
-					parseTime(t, event.HappensAt)
 				case "clock_tick":
 					ticks[event.At] = true
 				case "pause", "resume", "runtime_stopped", "runtime_resumed":

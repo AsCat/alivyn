@@ -3,11 +3,13 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/AsCat/alivyn/internal/config"
 	"github.com/AsCat/alivyn/internal/display"
@@ -53,7 +55,11 @@ func initialize(in io.Reader, out io.Writer) error {
 			return err
 		}
 	}
-	c := config.Config{SchemaVersion: 1, Name: name, Language: language, Provider: provider, BaseURL: baseURL, Model: modelName}
+	timezone, err := prompt(reader, out, label("Timezone (IANA name)", "时区（IANA 名称）"), "Local")
+	if err != nil {
+		return err
+	}
+	c := config.Config{SchemaVersion: 1, Name: name, Language: language, Provider: provider, BaseURL: baseURL, Model: modelName, Timezone: timezone}
 	if err := c.Validate(); err != nil {
 		return err
 	}
@@ -200,4 +206,52 @@ func showHistory(ctx context.Context, out io.Writer) error {
 		fmt.Fprintf(out, "%s %s: %s\n", entry.CreatedAt.Local().Format("2006-01-02 15:04"), entry.Role, display.Clean(entry.Content))
 	}
 	return nil
+}
+
+func runMemory(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) < 1 || len(args) > 2 {
+		return errors.New("usage: alivyn memory list|export|forget interview")
+	}
+	c, h, err := openConfiguredHistory(ctx)
+	if err != nil {
+		return err
+	}
+	defer h.Close()
+	zone, err := c.Location()
+	if err != nil {
+		return err
+	}
+	switch args[0] {
+	case "forget":
+		if len(args) != 2 || args[1] != "interview" {
+			return errors.New("usage: alivyn memory forget interview")
+		}
+		if err := h.AddUserMessage(ctx, "忘记面试", time.Now(), zone); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "Interview memory forgotten / 已忘记面试记忆")
+		return nil
+	case "list", "export":
+		if len(args) != 1 {
+			return errors.New("usage: alivyn memory list|export")
+		}
+		facts, err := h.ActiveFacts(ctx)
+		if err != nil {
+			return err
+		}
+		if args[0] == "export" {
+			if facts == nil {
+				facts = []store.Fact{}
+			}
+			return json.NewEncoder(out).Encode(facts)
+		}
+		for _, fact := range facts {
+			fmt.Fprintf(out, "%s %s (%s; %s; source #%d at %s)\n", fact.Topic,
+				fact.HappensAt.In(zone).Format("2006-01-02 15:04"), fact.Precision,
+				fact.Provenance, fact.SourceMessageID, fact.SourceAt.In(zone).Format(time.RFC3339))
+		}
+		return nil
+	default:
+		return errors.New("usage: alivyn memory list|export|forget interview")
+	}
 }

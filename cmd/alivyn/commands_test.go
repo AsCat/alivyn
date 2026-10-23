@@ -11,9 +11,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/AsCat/alivyn/internal/config"
 	"github.com/AsCat/alivyn/internal/model"
+	"github.com/AsCat/alivyn/internal/store"
 )
 
 func TestConversationPersistsAcrossChatRuns(t *testing.T) {
@@ -82,5 +84,46 @@ func TestConversationPersistsAcrossChatRuns(t *testing.T) {
 	c, err := config.Load()
 	if err != nil || c.Name != "Ari" || c.Provider != "custom" {
 		t.Fatalf("config changed after restart: %+v, %v", c, err)
+	}
+}
+
+func TestMemoryCommandsExportAndForget(t *testing.T) {
+	t.Setenv("ALIVYN_HOME", t.TempDir())
+	c := config.Config{SchemaVersion: 1, Name: "Ari", Language: "en", Provider: "custom", BaseURL: "http://localhost:1234/v1", Model: "mock"}
+	if err := config.SaveNew(c); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, os.Getenv("ALIVYN_HOME"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	zone, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.AddUserMessage(ctx, "周三下午有面试", time.Date(2026, 10, 26, 10, 0, 0, 0, zone), zone); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := runMemory(ctx, []string{"export"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "周三下午有面试") || !strings.Contains(out.String(), "user_stated") {
+		t.Fatalf("export lacked active source-linked memory: %s", out.String())
+	}
+	out.Reset()
+	if err := runMemory(ctx, []string{"forget", "interview"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := runMemory(ctx, []string{"export"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(out.String()) != "[]" {
+		t.Fatalf("forgotten memory remained in export: %s", out.String())
 	}
 }

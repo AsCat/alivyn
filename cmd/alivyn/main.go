@@ -24,7 +24,7 @@ func run(args []string) error {
 	if len(args) == 0 {
 		return runTUI()
 	}
-	if args[0] != "model" && args[0] != "replay" && len(args) != 1 {
+	if args[0] != "model" && args[0] != "replay" && args[0] != "memory" && len(args) != 1 {
 		return fmt.Errorf("unexpected arguments for %q", args[0])
 	}
 
@@ -47,6 +47,8 @@ func run(args []string) error {
 		usage()
 	case "history":
 		return showHistory(context.Background(), os.Stdout)
+	case "memory":
+		return runMemory(context.Background(), args[1:], os.Stdout)
 	case "model":
 		if len(args) != 2 || args[1] != "check" {
 			return fmt.Errorf("usage: alivyn model check")
@@ -79,7 +81,7 @@ func run(args []string) error {
 
 func usage() {
 	fmt.Println("Alivyn · 意续 — persistent conversation preview")
-	fmt.Println("Usage: alivyn [tui|init|chat|history|model check|replay|doctor|demo|version|help]")
+	fmt.Println("Usage: alivyn [tui|init|chat|history|memory list|memory export|memory forget interview|model check|replay|doctor|demo|version|help]")
 }
 
 type demoModel struct{}

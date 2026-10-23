@@ -51,11 +51,24 @@ func OpenHistory(ctx context.Context, dir string) (*History, error) {
 	h := &History{db: db}
 	if _, err := db.ExecContext(ctx, `
 PRAGMA busy_timeout = 5000;
+PRAGMA foreign_keys = ON;
+PRAGMA secure_delete = ON;
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   role TEXT NOT NULL CHECK(role IN ('user','assistant')),
   content TEXT NOT NULL,
   created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memory_revisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  topic TEXT NOT NULL,
+  action TEXT NOT NULL CHECK(action IN ('upsert','cancel','forget')),
+  happens_at TEXT,
+  precision TEXT,
+  provenance TEXT NOT NULL CHECK(provenance IN ('user_stated','model_inferred')),
+  source_message_id INTEGER REFERENCES messages(id),
+  source_at TEXT NOT NULL,
+  supersedes_id INTEGER REFERENCES memory_revisions(id)
 );`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)

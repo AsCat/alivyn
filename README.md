@@ -4,7 +4,7 @@
 
 Alivyn is a self-hosted project for one continuous AI individual. It is designed to remember shared experiences, maintain a consistent personality, notice the passage of time, and decide when a message is welcome. Users bring their own model provider and choose how Alivyn can contact them.
 
-> **Status: local preview.** The current repository can create one AI identity, configure a DeepSeek or custom compatible model, keep a continuous local TUI conversation, and replay contact-policy scenarios. Autonomous background contact and messaging bots are still being built. Follow the [roadmap](docs/roadmap.md) for the implementation sequence.
+> **Status: local preview.** The current repository can create one AI identity, configure a DeepSeek or custom compatible model, keep a continuous local TUI conversation, remember and revise an explicitly mentioned interview, and replay contact-policy scenarios. Autonomous background contact and messaging bots are still being built. Follow the [roadmap](docs/roadmap.md) for the implementation sequence.
 
 [简体中文](README.zh-CN.md) · [Vision](docs/vision.md) · [v0.1 specification](docs/spec-v0.1.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md) · [Prototype checks](docs/prototype-validation.md)
 
@@ -33,8 +33,11 @@ go run ./cmd/alivyn
 ```
 
 Choose `deepseek` to use the current `deepseek-flash` preset, or `custom` to enter an OpenAI-compatible base URL and model ID. The preset follows [DeepSeek's current model guide](https://api-docs.deepseek.com/quick_start/pricing/). Remote custom endpoints must use HTTPS; plain HTTP is allowed only for a model server on the same machine. The key is read from `ALIVYN_API_KEY` on each run and is never written to the config or database. On macOS, local data is under the user config directory; set `ALIVYN_HOME` to choose another location. Your provider receives the conversation context needed to answer.
+At setup, enter the user's IANA timezone (for example `Asia/Shanghai`) when the process may run on a server in another timezone. Existing local configs without this field continue to use the machine's local timezone.
 
 The default command opens one continuous TUI conversation. Press Enter to send, PgUp/PgDn to read history, and Esc to leave. `chat` remains a plain terminal fallback; both interfaces use the same local history. `history` prints stored messages, `doctor` checks SQLite, and `demo` remains a rendering probe. None of these commands starts the background agent runtime.
+
+The current memory extractor recognizes explicit interview statements such as “interview on Wednesday afternoon”, “interview moved to Friday”, and “cancel the interview”. It records the source message, time, and whether the fact was user-stated or model-inferred. It treats a day or part of a day as approximate, not an exact appointment. Unrecognized wording creates no memory. Inspect active facts with `go run ./cmd/alivyn memory list` or export them as JSON with `go run ./cmd/alivyn memory export`. `go run ./cmd/alivyn memory forget interview` removes the active fact and redacts interview-related text from local conversation history. This export contains active derived memory only; it is not a full account export.
 
 Replay a contact-decision story without a model key or channel account:
 
@@ -44,7 +47,7 @@ go run ./cmd/alivyn replay scenarios/wake-without-spam.json
 go run ./cmd/alivyn replay scenarios/pause-stops-outbound.json
 ```
 
-The replay makes deterministic decisions from normalized events in the fixtures. It does not yet extract events from free-form conversation or send messages.
+The interview replay extracts its dates from the same user-message parser used by the TUI and plain chat. Replay still does not send messages, and the extractor currently covers only a narrow set of interview phrases.
 
 ## How it is being built
 

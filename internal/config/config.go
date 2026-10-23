@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+	_ "time/tzdata"
 	"unicode"
 )
 
@@ -22,6 +24,7 @@ type Config struct {
 	Provider      string `json:"provider"`
 	BaseURL       string `json:"base_url"`
 	Model         string `json:"model"`
+	Timezone      string `json:"timezone,omitempty"`
 }
 
 func Directory() (string, error) {
@@ -70,7 +73,18 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.Model) == "" || strings.IndexFunc(c.Model, unicode.IsControl) >= 0 {
 		return errors.New("model must be nonempty and single-line")
 	}
+	if _, err := c.Location(); err != nil {
+		return fmt.Errorf("invalid timezone: %w", err)
+	}
 	return nil
+}
+
+// Location accepts old configs without a timezone and keeps their local-time behavior.
+func (c Config) Location() (*time.Location, error) {
+	if c.Timezone == "" || c.Timezone == "Local" {
+		return time.Local, nil
+	}
+	return time.LoadLocation(c.Timezone)
 }
 
 func Load() (Config, error) {

@@ -14,6 +14,6 @@ Recorded on 2026-10-23. These are local preview checks, not a stable product rel
 | `CGO_ENABLED=0` cross-builds | Passed for macOS amd64, Linux amd64, and Linux arm64 | The prototype compiles without CGo for these targets; execution was verified only on macOS arm64. |
 | `CGO_ENABLED=0 go build` | Passed on macOS arm64; binary approximately 11 MB | The prototype can be packaged as one executable. |
 
-The compatible model test uses a local mock server. The replay tests run deterministic policy decisions from normalized events, but do not parse natural language or deliver messages. A real DeepSeek account, Telegram bot, Feishu application, or background service has not yet been exercised. Conversation history persists locally; extracted long-term memory is still pending.
+The compatible model test uses a local mock server. Replay tests parse supported interview phrases and run deterministic policy decisions, but do not deliver messages. A real DeepSeek account, Telegram bot, Feishu application, or background service has not yet been exercised. Conversation history and source-linked interview memory persist locally; broader memory extraction remains pending.
 
 The module path is `github.com/AsCat/alivyn` to match the intended personal repository.

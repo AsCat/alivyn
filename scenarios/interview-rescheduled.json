@@ -4,8 +4,8 @@
   "timezone": "Asia/Shanghai",
   "policy": { "quiet_start": "22:00", "quiet_end": "08:00", "daily_limit": 2 },
   "events": [
-    { "at": "2026-10-26T10:00:00+08:00", "type": "user_event", "key": "interview", "happens_at": "2026-10-28T15:00:00+08:00", "source_text": "周三下午有面试" },
-    { "at": "2026-10-27T12:00:00+08:00", "type": "user_event", "key": "interview", "happens_at": "2026-10-30T15:00:00+08:00", "source_text": "面试改到周五了" },
+    { "at": "2026-10-26T10:00:00+08:00", "type": "user_message", "source_text": "周三下午有面试" },
+    { "at": "2026-10-27T12:00:00+08:00", "type": "user_message", "source_text": "面试改到周五了" },
     { "at": "2026-10-28T16:00:00+08:00", "type": "clock_tick" },
     { "at": "2026-10-30T16:00:00+08:00", "type": "clock_tick" }
   ],

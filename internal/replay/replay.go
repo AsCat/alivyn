@@ -9,6 +9,8 @@ import (
 	"os"
 	"sort"
 	"time"
+
+	"github.com/AsCat/alivyn/internal/memory"
 )
 
 type Policy struct {
@@ -19,10 +21,9 @@ type Policy struct {
 }
 
 type Event struct {
-	At        string `json:"at"`
-	Type      string `json:"type"`
-	Key       string `json:"key"`
-	HappensAt string `json:"happens_at"`
+	At         string `json:"at"`
+	Type       string `json:"type"`
+	SourceText string `json:"source_text"`
 }
 
 type Expected struct {
@@ -95,15 +96,22 @@ func Run(f Fixture) ([]Decision, error) {
 		}
 		previous = at
 		switch event.Type {
-		case "user_event":
-			when, err := time.Parse(time.RFC3339, event.HappensAt)
-			if err != nil || event.Key == "" {
-				return nil, fmt.Errorf("invalid user event at %s", event.At)
+		case "user_message":
+			if event.SourceText == "" {
+				return nil, fmt.Errorf("missing user message at %s", event.At)
 			}
-			if old, exists := active[event.Key]; exists {
+			change, ok := memory.Extract(event.SourceText, at, zone)
+			if !ok {
+				continue
+			}
+			if old, exists := active[change.Topic]; exists {
 				canceled = append(canceled, old)
 			}
-			active[event.Key] = intent{topic: event.Key, due: when.Add(time.Hour), expires: when.Add(6 * time.Hour)}
+			if change.Action == memory.Upsert {
+				active[change.Topic] = intent{topic: change.Topic, due: change.HappensAt.Add(time.Hour), expires: change.HappensAt.Add(6 * time.Hour)}
+			} else {
+				delete(active, change.Topic)
+			}
 		case "pause":
 			paused = true
 		case "resume":

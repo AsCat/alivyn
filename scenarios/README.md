@@ -1,8 +1,8 @@
 # Replay scenarios
 
-These JSON files describe the first external behaviors that Alivyn must reproduce. The `alivyn replay <file>` command now runs a deterministic local policy simulation and checks every expected decision. It does not call a model, parse `source_text`, or deliver any real message. Times include UTC offsets. `source_text` preserves what the user said, while normalized fields describe the event that a future model or parser should extract.
+These JSON files describe the first external behaviors that Alivyn must reproduce. The `alivyn replay <file>` command runs a deterministic local policy simulation and checks every expected decision. Interview `user_message` events are parsed from `source_text` by the same conservative extractor used in live chat. It does not call a model or deliver any real message. Times include UTC offsets.
 
-`go test ./scenarios` checks fixture structure and time consistency. `go test ./internal/replay` runs the decision simulation and verifies its expected outcomes. Neither test proves that a future model can extract the normalized events from user speech.
+`go test ./scenarios` checks fixture structure and time consistency. `go test ./internal/replay` runs the decision simulation and verifies its expected outcomes. These tests cover the supported interview phrases, not arbitrary natural language.
 
 Each fixture lists input events and expected outcomes. The runner advances through those event timestamps and compares simulated decisions and delivery counts with `expect`.
 

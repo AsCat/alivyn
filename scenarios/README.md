@@ -3,6 +3,7 @@
 These JSON files describe the first external behaviors that Alivyn must reproduce. The `alivyn replay <file>` command runs a deterministic local policy simulation and checks every expected decision. Interview `user_message` events are parsed from `source_text` by the same conservative extractor used in live chat. It does not call a model or deliver any real message. Times include UTC offsets.
 
 `go test ./scenarios` checks fixture structure and time consistency. `go test ./internal/replay` runs the decision simulation and verifies its expected outcomes. These tests cover the supported interview phrases, not arbitrary natural language.
+The replay and the persistent local runtime call the same `internal/contact` policy evaluator. The runtime also tests SQLite persistence, immediate revalidation, audit records, and at-most-once local outbox writes across restarts.
 
 Each fixture lists input events and expected outcomes. The runner advances through those event timestamps and compares simulated decisions and delivery counts with `expect`.
 

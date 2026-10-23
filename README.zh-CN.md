@@ -4,7 +4,7 @@
 
 Alivyn 是可自托管的开源项目。它围绕同一个持续存在的 AI 个体设计：记得共同经历，保持稳定的性格，感知时间流逝，并判断什么时候适合主动联系。用户自己配置模型，也决定联系渠道和打扰边界。
 
-> **当前状态：本地预览。** 现已能创建一个 AI 个体、配置 DeepSeek 或自定义兼容模型、在持续的本地 TUI 中对话、记住并修正明确提及的面试安排，以及复演主动联系决策。后台自主联系与聊天工具接入仍在开发。实施顺序见[开发路线](docs/roadmap.md)。
+> **当前状态：本地预览。** 现已能创建一个 AI 个体、配置 DeepSeek 或自定义兼容模型、在持续的本地 TUI 中对话、记住并修正明确提及的面试安排，以及用本地测试投递箱运行持久化的主动联系循环。真实聊天渠道仍在开发。实施顺序见[开发路线](docs/roadmap.md)。
 
 [English](README.md) · [目标](docs/vision.md) · [v0.1 规格](docs/spec-v0.1.md) · [架构](docs/architecture.md) · [路线](docs/roadmap.md) · [原型验证](docs/prototype-validation.md)
 
@@ -48,6 +48,18 @@ go run ./cmd/alivyn replay scenarios/pause-stops-outbound.json
 ```
 
 面试场景复演使用与 TUI、纯文字对话相同的用户话语提取器。复演仍不会实际发送消息；目前只覆盖有限的面试表达。
+
+## 运行本地主动联系循环
+
+完成初始化后，明确提到未来面试会形成待跟进意图。可在另一个终端或进程管理器下运行：
+
+```sh
+go run ./cmd/alivyn contact status
+go run ./cmd/alivyn contact policy 22:00 08:00 2
+go run ./cmd/alivyn serve
+```
+
+`serve once` 只处理一次并退出。`contact pause` 和 `contact resume` 控制所有主动联系；`contact intents` 查看意图状态，`contact audit` 查看发送、跳过、取消、失败的原因，`contact outbox` 查看测试投递。测试投递也会进入本地的持续对话。投递箱只是本地 SQLite 数据，**目前不会向聊天工具发消息**。每次投递前都会重新检查策略，重启后同一意图也最多写入测试投递箱一次。电脑睡眠时本机循环会暂停；如需持续运行，可部署在始终在线的服务器。
 
 ## 实现原则
 

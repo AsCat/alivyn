@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/AsCat/alivyn/internal/contact"
 	"github.com/AsCat/alivyn/internal/memory"
 )
 
@@ -75,8 +76,9 @@ func Run(f Fixture) ([]Decision, error) {
 	if err != nil {
 		return nil, err
 	}
-	if f.Policy.DailyLimit < 1 {
-		return nil, errors.New("daily limit must be positive")
+	basePolicy := contact.Policy{QuietStart: f.Policy.QuietStart, QuietEnd: f.Policy.QuietEnd, DailyLimit: f.Policy.DailyLimit}
+	if err := basePolicy.Validate(); err != nil {
+		return nil, err
 	}
 	active := map[string]intent{}
 	var canceled []intent
@@ -134,10 +136,8 @@ func Run(f Fixture) ([]Decision, error) {
 		case "clock_tick":
 			decision := Decision{At: event.At, DeliveryCount: count}
 			day := at.In(zone).Format("2006-01-02")
-			quiet, err := isQuiet(at.In(zone), f.Policy.QuietStart, f.Policy.QuietEnd)
-			if err != nil {
-				return nil, err
-			}
+			policy := basePolicy
+			policy.Paused = paused
 			topics := make([]string, 0, len(active))
 			for topic := range active {
 				topics = append(topics, topic)
@@ -151,24 +151,17 @@ func Run(f Fixture) ([]Decision, error) {
 			})
 			for _, topic := range topics {
 				candidate := active[topic]
-				if at.Before(candidate.due) {
+				result := contact.Evaluate(at, zone, policy, contact.Intent{Due: candidate.due, Expires: candidate.expires, Current: true}, daily[day])
+				if result.Reason == "not due" {
 					continue
 				}
-				if !at.Before(candidate.expires) {
+				if result.Final {
 					delete(active, topic)
-					decision.Reason = "expired intent is not backfilled"
+					decision.Reason = result.Reason
 					continue
 				}
-				if paused {
-					decision.Reason = "paused"
-					continue
-				}
-				if quiet {
-					decision.Reason = "quiet hours"
-					continue
-				}
-				if daily[day] >= f.Policy.DailyLimit {
-					decision.Reason = "daily contact limit"
+				if !result.Ready {
+					decision.Reason = result.Reason
 					continue
 				}
 				delete(active, topic)
@@ -180,16 +173,11 @@ func Run(f Fixture) ([]Decision, error) {
 				break
 			}
 			if gap != nil && decision.Topic == "" && !at.Before(gap.due) {
+				result := contact.Evaluate(at, zone, policy, contact.Intent{Due: gap.due, Expires: gap.expires, Current: true}, daily[day])
 				switch {
-				case !at.Before(gap.expires):
+				case result.Final:
 					gap = nil
-				case paused:
-					decision.Reason = "paused"
-				case quiet:
-					decision.Reason = "quiet hours"
-				case daily[day] >= f.Policy.DailyLimit:
-					decision.Reason = "daily contact limit"
-				default:
+				case result.Ready:
 					daily[day]++
 					count++
 					decision.DeliveryCount = count
@@ -197,6 +185,8 @@ func Run(f Fixture) ([]Decision, error) {
 					decision.Reason = "time gap after resume"
 					lastGapContact = &at
 					gap = nil
+				default:
+					decision.Reason = result.Reason
 				}
 			}
 			canceledDue := false
@@ -246,22 +236,8 @@ func Verify(f Fixture) ([]Decision, error) {
 }
 
 func isQuiet(at time.Time, start, end string) (bool, error) {
-	begin, err := time.Parse("15:04", start)
-	if err != nil {
+	if err := (contact.Policy{QuietStart: start, QuietEnd: end, DailyLimit: 1}).Validate(); err != nil {
 		return false, err
 	}
-	finish, err := time.Parse("15:04", end)
-	if err != nil {
-		return false, err
-	}
-	nowMinutes := at.Hour()*60 + at.Minute()
-	startMinutes := begin.Hour()*60 + begin.Minute()
-	endMinutes := finish.Hour()*60 + finish.Minute()
-	if startMinutes < endMinutes {
-		return nowMinutes >= startMinutes && nowMinutes < endMinutes, nil
-	}
-	if startMinutes == endMinutes {
-		return false, nil
-	}
-	return nowMinutes >= startMinutes || nowMinutes < endMinutes, nil
+	return contact.Quiet(at, start, end), nil
 }

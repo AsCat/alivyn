@@ -24,7 +24,7 @@ func run(args []string) error {
 	if len(args) == 0 {
 		return runTUI()
 	}
-	if args[0] != "model" && args[0] != "replay" && args[0] != "memory" && len(args) != 1 {
+	if args[0] != "model" && args[0] != "replay" && args[0] != "memory" && args[0] != "contact" && args[0] != "serve" && len(args) != 1 {
 		return fmt.Errorf("unexpected arguments for %q", args[0])
 	}
 
@@ -36,7 +36,7 @@ func run(args []string) error {
 			return fmt.Errorf("SQLite probe failed: %w", err)
 		}
 		fmt.Println("SQLite: available")
-		fmt.Println("Background agent runtime: not implemented yet")
+		fmt.Println("Background contact runtime: available with 'alivyn serve' (local test outbox)")
 	case "init":
 		return initialize(os.Stdin, os.Stdout)
 	case "chat":
@@ -49,6 +49,13 @@ func run(args []string) error {
 		return showHistory(context.Background(), os.Stdout)
 	case "memory":
 		return runMemory(context.Background(), args[1:], os.Stdout)
+	case "contact":
+		return runContact(context.Background(), args[1:], os.Stdout)
+	case "serve":
+		if len(args) > 2 || (len(args) == 2 && args[1] != "once") {
+			return fmt.Errorf("usage: alivyn serve [once]")
+		}
+		return runServe(len(args) == 2, os.Stdout)
 	case "model":
 		if len(args) != 2 || args[1] != "check" {
 			return fmt.Errorf("usage: alivyn model check")
@@ -81,7 +88,7 @@ func run(args []string) error {
 
 func usage() {
 	fmt.Println("Alivyn · 意续 — persistent conversation preview")
-	fmt.Println("Usage: alivyn [tui|init|chat|history|memory list|memory export|memory forget interview|model check|replay|doctor|demo|version|help]")
+	fmt.Println("Usage: alivyn [tui|init|chat|history|memory ...|contact status|contact pause|contact resume|contact policy <start> <end> <daily-limit>|contact intents|contact audit|contact outbox|serve [once]|model check|replay|doctor|demo|version|help]")
 }
 
 type demoModel struct{}

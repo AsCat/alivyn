@@ -87,7 +87,7 @@ scenarios/             可重现的时间线与预期结果
 docs/                  中英文用户与贡献者文档
 ```
 
-进程间使用本机 Unix socket，权限限制为当前用户；不默认开放网络监听端口。macOS 使用用户级 launch agent，Linux 使用 systemd 用户服务或服务器服务配置。Apple 文档说明用户级进程可交由 `launchd` 管理。[Apple 文档](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html)
+当前预览让 TUI 与后台循环通过权限受限的本地 SQLite 数据库共享状态；不默认开放网络监听端口。后续如需进程间实时通知，可增加权限限制为当前用户的 Unix socket。macOS 可使用用户级 launch agent，Linux 可使用 systemd 用户服务或服务器服务配置。Apple 文档说明用户级进程可交由 `launchd` 管理。[Apple 文档](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html)
 
 Telegram 可用长轮询，飞书支持应用通过 WebSocket 长连接接收事件，因此自托管实例不必为了首版渠道暴露公网回调地址。飞书应用机器人仍需所要求的权限及管理员审核。[Telegram Bot API](https://core.telegram.org/bots/api) · [飞书长连接文档](https://open.feishu.cn/document/ukTMukTMukTM/uYDNxYjL2QTM24iN0EjN/event-subscription-configure-) · [飞书机器人概览](https://open.feishu.cn/document/client-docs/bot-v3/bot-overview)
 
@@ -113,15 +113,11 @@ Telegram 可用长轮询，飞书支持应用通过 WebSocket 长连接接收事
 6. **记忆纠正：** 用户要求忘记某件事后，检索、待发联系和导出数据均不再包含它。
 7. **隐私：** 未绑定用户无法读取记忆；测试日志和诊断包不含 API 密钥。
 
-## 8. 仓库、发布与传播
+## 8. 仓库与发布准备
 
 建议采用 Apache-2.0，正式落地前完成依赖与素材许可核对；该许可允许复制、修改和分发，并包含专利授权条款。[OSI 许可文本](https://opensource.org/license/apache-2.0)
 
-仓库在公开前具备：双语 README、五分钟 TUI 快速上手、真实终端演示录屏、架构图、角色设定示例、配置与隐私说明、LICENSE、NOTICE、CONTRIBUTING、CODE_OF_CONDUCT、SECURITY、问题模板、版本记录、迁移说明、持续集成和可下载的 macOS/Linux 构建。GitHub 的社区建设指南也建议明确贡献方式、社区规范与许可。[GitHub 文档](https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions)
-
-**README 首屏故事：** “你合上电脑，她的世界暂停了。再次打开时，她记得你昨天提到的面试；她会先判断现在是否适合说话。”随后给出 30～60 秒终端演示、安装命令和一句话说明 AI 身份。
-
-**传播素材顺序：** 时间断层演示 → 事件改期与主动跟进 → 可复演的联系决策 → 中英文安装与模型切换。第一波以真实终端录屏为主，第二波发布技术文章，说明如何设计一个会保持沉默的主动智能体。传播效果以安装完成率、实际使用反馈、贡献者人数和留存衡量；GitHub stars 作为传播信号，不替代产品验证。
+仓库应具备：双语 README、可复制的快速上手、架构图、配置与隐私说明、LICENSE、CONTRIBUTING、CODE_OF_CONDUCT、SECURITY、问题模板、版本记录、迁移说明、持续集成和可下载的 macOS/Linux 构建。GitHub 的社区建设指南也建议明确贡献方式、社区规范与许可。[GitHub 文档](https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions)
 
 ## 9. 实施顺序
 

@@ -4,7 +4,7 @@
 
 Alivyn is a self-hosted project for one continuous AI individual. It is designed to remember shared experiences, maintain a consistent personality, notice the passage of time, and decide when a message is welcome. Users bring their own model provider and choose how Alivyn can contact them.
 
-> **Status: local preview.** The current repository can create one AI identity, configure a DeepSeek or custom compatible model, keep a continuous local TUI conversation, remember and revise an explicitly mentioned interview, and replay contact-policy scenarios. Autonomous background contact and messaging bots are still being built. Follow the [roadmap](docs/roadmap.md) for the implementation sequence.
+> **Status: local preview.** The current repository can create one AI identity, configure a DeepSeek or custom compatible model, keep a continuous local TUI conversation, remember and revise an explicitly mentioned interview, and run a persistent contact loop with a local test outbox. Real messaging channels are still being built. Follow the [roadmap](docs/roadmap.md) for the implementation sequence.
 
 [简体中文](README.zh-CN.md) · [Vision](docs/vision.md) · [v0.1 specification](docs/spec-v0.1.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md) · [Prototype checks](docs/prototype-validation.md)
 
@@ -48,6 +48,18 @@ go run ./cmd/alivyn replay scenarios/pause-stops-outbound.json
 ```
 
 The interview replay extracts its dates from the same user-message parser used by the TUI and plain chat. Replay still does not send messages, and the extractor currently covers only a narrow set of interview phrases.
+
+## Run the local contact loop
+
+After setup, Alivyn stores a follow-up intent when you mention a supported future interview. Run the contact loop in a separate terminal or under a process supervisor:
+
+```sh
+go run ./cmd/alivyn contact status
+go run ./cmd/alivyn contact policy 22:00 08:00 2
+go run ./cmd/alivyn serve
+```
+
+`serve once` processes one tick and exits. Use `contact pause` and `contact resume` to control all outbound attempts. `contact intents` shows pending and completed intentions; `contact audit` explains sent, skipped, canceled, and failed decisions; `contact outbox` shows test deliveries. Each test delivery also joins the continuous local conversation. The outbox is local SQLite data: **no chat message is sent yet**. The policy is checked again immediately before each delivery, and an intent is written at most once to the test outbox, even after a restart. A sleeping laptop cannot run the loop until it wakes; a continuously available server can keep it running.
 
 ## How it is being built
 

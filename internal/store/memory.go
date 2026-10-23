@@ -85,6 +85,12 @@ func (h *History) AddUserMessage(ctx context.Context, text string, at time.Time,
 	if err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE runtime_state SET last_active_ns = MAX(COALESCE(last_active_ns, 0), ?) WHERE id = 1`, at.UnixNano()); err != nil {
+		return err
+	}
+	if err := cancelPendingTopicTx(ctx, tx, "time_gap", at, "user already active"); err != nil {
+		return err
+	}
 	if recognized {
 		messageID, err := result.LastInsertId()
 		if err != nil {
@@ -103,12 +109,24 @@ func (h *History) AddUserMessage(ctx context.Context, text string, at time.Time,
 		if change.Action == memory.Upsert {
 			happens = change.HappensAt.UTC().Format(time.RFC3339Nano)
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO memory_revisions
+		revisionResult, err := tx.ExecContext(ctx, `INSERT INTO memory_revisions
   (topic, action, happens_at, precision, provenance, source_message_id, source_at, supersedes_id)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, change.Topic, string(change.Action), happens, change.Precision, change.Provenance,
 			messageID, at.UTC().Format(time.RFC3339Nano), supersedes)
 		if err != nil {
 			return err
+		}
+		if err := cancelPendingTopicTx(ctx, tx, change.Topic, at, "superseded intent"); err != nil {
+			return err
+		}
+		if change.Action == memory.Upsert {
+			revisionID, err := revisionResult.LastInsertId()
+			if err != nil {
+				return err
+			}
+			if err := createMemoryIntentTx(ctx, tx, change.Topic, revisionID, change.HappensAt, at); err != nil {
+				return err
+			}
 		}
 		if change.Action == memory.Forget && change.Topic == "interview" {
 			// Redact each source utterance and its immediate assistant replies,
@@ -140,6 +158,17 @@ WHERE id >= ? AND id < COALESCE((SELECT MIN(id) FROM messages WHERE role = 'user
 			// Also remove other transcript lines that explicitly name the topic.
 			if _, err := tx.ExecContext(ctx, `UPDATE messages SET content = '[forgotten memory]'
 WHERE content LIKE '%面试%' OR lower(content) LIKE '%interview%'`); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE memory_revisions SET happens_at = NULL, precision = NULL WHERE topic = ?", change.Topic); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE contact_outbox SET topic = 'forgotten', body = '[forgotten memory]' WHERE topic = ?", change.Topic); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE contact_intents
+SET topic = 'forgotten', source_revision_id = NULL, due_ns = ?, expires_ns = ?, reason = 'forgotten memory', updated_ns = ?
+WHERE topic = ?`, at.UnixNano(), at.UnixNano(), at.UnixNano(), change.Topic); err != nil {
 				return err
 			}
 		}

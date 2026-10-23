@@ -1,6 +1,6 @@
 # Alivyn · 意续：开发与发布计划
 
-日期：2026-10-23。状态：名称与产品方向已确认；本地预览已能初始化、持续对话、提取和纠正有限的面试记忆，并复演联系策略。后台与渠道接入仍待实现。代码仓库为 `AsCat/alivyn`。基于[目标备忘](./vision.md)、[v0.1 规格](./spec-v0.1.md)和[设计 RFC](./architecture.md)。时间估算按一名主要开发者计算，渠道审核和体验反馈可能影响节奏。
+日期：2026-10-23。状态：名称与产品方向已确认；本地预览已能初始化、持续对话、提取和纠正有限的面试记忆，复演联系策略，并运行写入本地测试投递箱的持久循环。真实渠道接入仍待实现。代码仓库为 `AsCat/alivyn`。基于[目标备忘](./vision.md)、[v0.1 规格](./spec-v0.1.md)和[设计 RFC](./architecture.md)。时间估算按一名主要开发者计算，渠道审核和体验反馈可能影响节奏。
 
 ## 成功标准
 
@@ -24,14 +24,14 @@
 
 ## 当前执行状态
 
-阶段 0 的仓库骨架、双语 README、Apache-2.0 许可、贡献与安全文件、三条场景、Go/TUI/SQLite/兼容模型接口技术验证和 CI 已建立；[Telegram 与飞书接入路径](./channel-spike.md)已根据官方文档初筛。阶段 1 已完成最小的 `init`、DeepSeek/自定义接口配置、`model check`、SQLite 持续对话和共享历史的 TUI，以及三条结构化时间线的确定性策略复演。模型真实账号连接、自然语言事件提取、后台进程、实际聊天渠道联通及正式依赖许可公告仍待完成。[品牌初筛](./brand-availability.md)和[直接依赖许可记录](./dependencies.md)分别记录已核查范围。当前预览尚不能自主联系用户。
+阶段 0 的仓库骨架、双语 README、Apache-2.0 许可、贡献与安全文件、三条场景、Go/TUI/SQLite/兼容模型接口技术验证和 CI 已建立；[Telegram 与飞书接入路径](./channel-spike.md)已根据官方文档初筛。阶段 1 已完成 `init`、DeepSeek/自定义接口配置、`model check`、SQLite 持续对话和共享历史的 TUI、面试记忆提取、确定性策略复演，以及写入本地测试投递箱的持久联系循环。模型真实账号连接、系统服务安装、实际聊天渠道联通及正式依赖许可公告仍待完成。[直接依赖许可记录](./dependencies.md)记录了已核查范围。当前预览尚不能通过真实渠道自主联系用户。
 
 ## 第一阶段工作顺序
 
 1. **统一入口与边界。** 将现有备忘、规格和 RFC 搬进独立的 `alivyn` 仓库；确定首版只交付一个持续个体、TUI/CLI、BYOK 模型、长期记忆、主动联系、Telegram 与飞书。语音来电和专门的可视化生命空间排到第二阶段。
-2. **先写演示时间线与验收。** 把“面试改期”“休眠恢复”“暂停后无消息”写成可由模拟时钟重放的场景。它们是产品演示，也是最重要的行为回归验证。
+2. **先写行为时间线与验收。** 把“面试改期”“休眠恢复”“暂停后无消息”写成可由模拟时钟重放的场景，作为行为回归验证。
 3. **用最小原型验证技术。** 验证 Go + Bubble Tea + SQLite 在 macOS/Linux 的构建、TUI 与后台进程连接、DeepSeek 与自定义接口、Telegram 和飞书实际配置路径。若某项接入不能顺畅完成，应在此时调整实现，不改变用户体验目标。
-4. **同步搭好开源门面。** 英文 README 为主入口并提供中文版本；先放清晰定位、30～60 秒演示脚本、安装路线、当前能力与路线图。随代码逐步补齐 `LICENSE`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、问题模板和版本记录。GitHub 的[社区标准清单](https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/about-community-profiles-for-public-repositories)可以用来检查这些基础文件。
+4. **同步维护项目文档与治理。** 英文 README 为主入口并提供中文版本；写清安装路线、当前能力与路线图。随代码维护 `LICENSE`、`CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、问题模板和版本记录。GitHub 的[社区标准清单](https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/about-community-profiles-for-public-repositories)可用于检查基础文件。
 
 ## 首版范围控制
 
@@ -39,18 +39,7 @@
 - **第二阶段：** 专门的可视化生命空间、进入内部状态的仪式化体验、模拟来电与语音、更多渠道和更丰富的感知。
 - **暂不许诺：** 模型具备真实意识或情感；macOS 合盖时本机仍可运行；聊天工具能在用户尚未授权或未建立会话时主动发起私聊。
 
-## 发布与传播
-
-公开预览的核心材料是一段真实终端录屏，直接展示**记住、改期、主动联系、选择沉默**。README 首屏提供英文与中文一句话定位、可复制的安装命令、演示、真实限制和架构图。随后发布一篇技术文章，解释主动联系的“形成意图 → 安排 → 发送前复核 → 允许沉默”机制；附可复演场景，让开发者能检验项目宣称的行为。
-
-首批邀请少量中文和英文体验者各自独立安装，记录配置完成率、第一次主动联系是否成功、消息被标为“有用/打扰”的比例、重复联系次数和记忆纠正结果。GitHub stars 记录传播效果，但发布判断以安装体验和真实互动为主。
-
-**传播节奏：** 公布前两周收集真实安装反馈并修正向导；公布前一周准备 60 秒终端演示、双语短文、架构说明和可复演场景；发布当天同步开放同一版本的中英文文档与安装包；随后分别向中英文开发者社区分享真实使用故事，发布后首周集中回应安装问题并把可独立完成的扩展点标为 `good first issue`。GitHub 会在项目贡献页面展示该标签的问题，便于新贡献者找到入口。[GitHub 标签文档](https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/managing-labels)
-
-面向英文开发者的 **Show HN** 只在陌生人可以直接安装、运行时发布；其[官方指南](https://news.ycombinator.com/showhn.html)要求项目可供他人实际试用。**Product Hunt** 可以作为随后的一轮展示，提前准备截图/视频和作者说明；其[官方发布指南](https://www.producthunt.com/launch/preparing-for-launch)提供素材清单。两处均以真实体验和作者答疑为主，不把发布平台当成产品本身。
-
 ## 尚待落实的外部事项
 
-- 完成 `Alivyn` / `意续` 的软件相关商标核查，并预留域名、仓库组织名和包名；当前仅完成[公开记录初筛](./brand-availability.md)。
 - 已采用[Apache-2.0](../LICENSE)；发布二进制前补齐[完整依赖公告](./dependencies.md)及任何新增素材许可。
 - 完成 Telegram Bot、飞书应用的真实配置与权限试验；飞书若给个人用户带来明显接入门槛，应尽早调整国内渠道实施顺序，同时保持中英文用户均可完成首版体验。

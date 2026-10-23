@@ -69,7 +69,51 @@ CREATE TABLE IF NOT EXISTS memory_revisions (
   source_message_id INTEGER REFERENCES messages(id),
   source_at TEXT NOT NULL,
   supersedes_id INTEGER REFERENCES memory_revisions(id)
-);`); err != nil {
+);
+CREATE TABLE IF NOT EXISTS contact_settings (
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  paused INTEGER NOT NULL DEFAULT 0 CHECK(paused IN (0,1)),
+  quiet_start TEXT NOT NULL DEFAULT '22:00',
+  quiet_end TEXT NOT NULL DEFAULT '08:00',
+  daily_limit INTEGER NOT NULL DEFAULT 2
+);
+INSERT OR IGNORE INTO contact_settings(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS contact_intents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  topic TEXT NOT NULL,
+  source_revision_id INTEGER UNIQUE REFERENCES memory_revisions(id),
+  due_ns INTEGER NOT NULL,
+  expires_ns INTEGER NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','sent','expired','canceled','failed')),
+  reason TEXT NOT NULL DEFAULT '',
+  idempotency_key TEXT NOT NULL UNIQUE,
+  created_ns INTEGER NOT NULL,
+  updated_ns INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS contact_intents_due ON contact_intents(state, due_ns);
+CREATE TABLE IF NOT EXISTS contact_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  intent_id INTEGER NOT NULL REFERENCES contact_intents(id),
+  outcome TEXT NOT NULL CHECK(outcome IN ('sent','skipped','canceled','failed')),
+  reason TEXT NOT NULL,
+  at_ns INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS contact_outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  intent_id INTEGER NOT NULL UNIQUE REFERENCES contact_intents(id),
+  message_id INTEGER NOT NULL UNIQUE REFERENCES messages(id),
+  idempotency_key TEXT NOT NULL UNIQUE,
+  topic TEXT NOT NULL,
+  body TEXT NOT NULL,
+  sent_ns INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS runtime_state (
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  last_active_ns INTEGER,
+  last_gap_created_ns INTEGER
+);
+INSERT OR IGNORE INTO runtime_state(id) VALUES(1);
+`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)
 	}

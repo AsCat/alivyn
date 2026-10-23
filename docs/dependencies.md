@@ -1,6 +1,6 @@
 # Dependency licenses
 
-Alivyn's source code is licensed under [Apache-2.0](../LICENSE). This file records the direct dependencies currently used by the foundation prototype, based on their packaged license files.
+Alivyn's source code is licensed under [Apache-2.0](../LICENSE). This file records the direct dependencies currently used by the local preview, based on their packaged license files.
 
 | Direct dependency | Version | License | Use |
 | --- | --- | --- | --- |

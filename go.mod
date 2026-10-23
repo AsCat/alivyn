@@ -1,4 +1,4 @@
-module alivyn
+module github.com/AsCat/alivyn
 
 go 1.26.0
 

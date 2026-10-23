@@ -19,7 +19,7 @@
 - 中文短句：**意有所向，故事未完。**
 - 英文类别词：**persistent, proactive AI presence**。
 - 中文类别词：**持续存在的主动型智能体**。
-- 本地仓库目录及预期命令：`alivyn`、`alivyn init`、`alivyn run`。尚未预留外部账号或域名；[品牌初筛](./brand-availability.md)记录了现有占用。
+- 本地仓库目录及命令前缀：`alivyn`。计划使用个人 GitHub 仓库 `AsCat/alivyn`；[品牌初筛](./brand-availability.md)记录了其他账号和域名占用。
 
 README 开头草案：
 

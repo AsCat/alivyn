@@ -9,7 +9,7 @@ This repository is a foundation prototype. The [v0.1 specification](docs/spec-v0
 ## Local workflow
 
 1. Install Go 1.26 or allow automatic toolchain download.
-2. Run `go test ./...` and `go vet ./...`.
+2. Run `go test ./...` and `go vet ./...`. For TUI changes, also run `bash scripts/tui-smoke.sh` in a local terminal.
 3. Format Go changes with `gofmt`.
 4. For changes to contact policy, memory, or scheduling, include a replayable scenario that shows the external behavior and protects the user's contact preferences.
 

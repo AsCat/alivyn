@@ -4,7 +4,7 @@
 
 Alivyn 是可自托管的开源项目。它围绕同一个持续存在的 AI 个体设计：记得共同经历，保持稳定的性格，感知时间流逝，并判断什么时候适合主动联系。用户自己配置模型，也决定联系渠道和打扰边界。
 
-> **当前状态：本地预览。** 现已能创建一个 AI 个体、配置 DeepSeek 或自定义兼容模型、保存连续的本地文字对话，并复演主动联系决策。后台自主联系与聊天工具接入仍在开发。实施顺序见[开发路线](docs/roadmap.md)。
+> **当前状态：本地预览。** 现已能创建一个 AI 个体、配置 DeepSeek 或自定义兼容模型、在持续的本地 TUI 中对话，并复演主动联系决策。后台自主联系与聊天工具接入仍在开发。实施顺序见[开发路线](docs/roadmap.md)。
 
 [English](README.md) · [目标](docs/vision.md) · [v0.1 规格](docs/spec-v0.1.md) · [架构](docs/architecture.md) · [路线](docs/roadmap.md) · [原型验证](docs/prototype-validation.md)
 
@@ -29,12 +29,12 @@ read -rs ALIVYN_API_KEY
 printf '\n'
 export ALIVYN_API_KEY
 go run ./cmd/alivyn model check
-go run ./cmd/alivyn chat
+go run ./cmd/alivyn
 ```
 
 选择 `deepseek` 会使用当前的 `deepseek-flash` 预设；选择 `custom` 可填写兼容接口地址和模型 ID。预设依据 [DeepSeek 当前模型文档](https://api-docs.deepseek.com/quick_start/pricing/)。远程自定义接口必须使用 HTTPS；明文 HTTP 仅允许连接本机模型服务。密钥每次从 `ALIVYN_API_KEY` 读取，不写入配置和数据库。在 macOS 上，本地数据保存在用户配置目录；可通过 `ALIVYN_HOME` 指定其他位置。模型提供方会收到生成回复所需的对话上下文。
 
-`chat` 目前是简单的终端文字对话，持续 TUI 尚在开发；`history` 可查看保存的消息。`doctor` 检查 SQLite，`demo` 是 Bubble Tea 界面验证。这些命令不会启动后台智能体。
+默认命令进入同一段持续对话的 TUI：Enter 发送、PgUp/PgDn 查看历史、Esc 退出。`chat` 是纯文字终端备用入口，两者共用同一份本地历史。`history` 可打印保存的消息，`doctor` 检查 SQLite，`demo` 保留为界面验证。这些命令不会启动后台智能体。
 
 无需模型密钥或聊天账号即可复演联系决策：
 

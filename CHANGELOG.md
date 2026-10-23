@@ -4,3 +4,4 @@
 
 - Established the Alivyn · 意续 project foundation and initial replay scenarios.
 - Added local identity setup, configurable model access, persistent conversation, and deterministic scenario replay.
+- Added a continuous TUI conversation that shares saved history with the plain terminal fallback.

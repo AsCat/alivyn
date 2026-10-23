@@ -22,8 +22,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		usage()
-		return nil
+		return runTUI()
 	}
 	if args[0] != "model" && args[0] != "replay" && len(args) != 1 {
 		return fmt.Errorf("unexpected arguments for %q", args[0])
@@ -42,6 +41,10 @@ func run(args []string) error {
 		return initialize(os.Stdin, os.Stdout)
 	case "chat":
 		return chat(context.Background(), os.Stdin, os.Stdout)
+	case "tui":
+		return runTUI()
+	case "help":
+		usage()
 	case "history":
 		return showHistory(context.Background(), os.Stdout)
 	case "model":
@@ -76,7 +79,7 @@ func run(args []string) error {
 
 func usage() {
 	fmt.Println("Alivyn · 意续 — persistent conversation preview")
-	fmt.Println("Usage: alivyn <init|chat|history|model check|replay|doctor|demo|version>")
+	fmt.Println("Usage: alivyn [tui|init|chat|history|model check|replay|doctor|demo|version|help]")
 }
 
 type demoModel struct{}

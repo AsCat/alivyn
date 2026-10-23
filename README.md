@@ -4,7 +4,7 @@
 
 Alivyn is a self-hosted project for one continuous AI individual. It is designed to remember shared experiences, maintain a consistent personality, notice the passage of time, and decide when a message is welcome. Users bring their own model provider and choose how Alivyn can contact them.
 
-> **Status: local preview.** The current repository can create one AI identity, configure a DeepSeek or custom compatible model, keep a continuous local text conversation, and replay contact-policy scenarios. Autonomous background contact and messaging bots are still being built. Follow the [roadmap](docs/roadmap.md) for the implementation sequence.
+> **Status: local preview.** The current repository can create one AI identity, configure a DeepSeek or custom compatible model, keep a continuous local TUI conversation, and replay contact-policy scenarios. Autonomous background contact and messaging bots are still being built. Follow the [roadmap](docs/roadmap.md) for the implementation sequence.
 
 [简体中文](README.zh-CN.md) · [Vision](docs/vision.md) · [v0.1 specification](docs/spec-v0.1.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md) · [Prototype checks](docs/prototype-validation.md)
 
@@ -29,12 +29,12 @@ read -rs ALIVYN_API_KEY
 printf '\n'
 export ALIVYN_API_KEY
 go run ./cmd/alivyn model check
-go run ./cmd/alivyn chat
+go run ./cmd/alivyn
 ```
 
 Choose `deepseek` to use the current `deepseek-flash` preset, or `custom` to enter an OpenAI-compatible base URL and model ID. The preset follows [DeepSeek's current model guide](https://api-docs.deepseek.com/quick_start/pricing/). Remote custom endpoints must use HTTPS; plain HTTP is allowed only for a model server on the same machine. The key is read from `ALIVYN_API_KEY` on each run and is never written to the config or database. On macOS, local data is under the user config directory; set `ALIVYN_HOME` to choose another location. Your provider receives the conversation context needed to answer.
 
-`chat` is a simple terminal conversation while the persistent TUI is in development. `history` shows stored messages. `doctor` checks SQLite, and `demo` shows a Bubble Tea rendering probe. Neither command starts the background agent runtime.
+The default command opens one continuous TUI conversation. Press Enter to send, PgUp/PgDn to read history, and Esc to leave. `chat` remains a plain terminal fallback; both interfaces use the same local history. `history` prints stored messages, `doctor` checks SQLite, and `demo` remains a rendering probe. None of these commands starts the background agent runtime.
 
 Replay a contact-decision story without a model key or channel account:
 

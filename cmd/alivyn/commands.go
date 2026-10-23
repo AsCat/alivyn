@@ -8,11 +8,13 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/AsCat/alivyn/internal/config"
+	"github.com/AsCat/alivyn/internal/display"
 	"github.com/AsCat/alivyn/internal/model"
+	"github.com/AsCat/alivyn/internal/session"
 	"github.com/AsCat/alivyn/internal/store"
+	"github.com/AsCat/alivyn/internal/tui"
 )
 
 func initialize(in io.Reader, out io.Writer) error {
@@ -69,7 +71,7 @@ func initialize(in io.Reader, out io.Writer) error {
 	if err := history.Close(); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, label("Created %s. Set ALIVYN_API_KEY, then run 'alivyn model check' and 'alivyn chat'.\n", "已创建 %s。设置 ALIVYN_API_KEY 后，运行 'alivyn model check' 和 'alivyn chat'。\n"), c.Name)
+	fmt.Fprintf(out, label("Created %s. Set ALIVYN_API_KEY, then run 'alivyn model check' and 'alivyn'.\n", "已创建 %s。设置 ALIVYN_API_KEY 后，运行 'alivyn model check' 和 'alivyn'。\n"), c.Name)
 	return nil
 }
 
@@ -111,14 +113,6 @@ func configuredClient(c config.Config) (model.Client, error) {
 	return model.Client{BaseURL: c.BaseURL, APIKey: key}, nil
 }
 
-func systemMessage(c config.Config) model.Message {
-	language := "English"
-	if c.Language == "zh-CN" {
-		language = "Simplified Chinese"
-	}
-	return model.Message{Role: "system", Content: fmt.Sprintf("You are %s, an AI companion. Speak in %s. Keep one continuous relationship with the user. Be warm and thoughtful, but never claim to be human or conscious. Do not invent memories or events. Use the conversation history as the only source for past shared experiences. Do not reveal hidden reasoning.", c.Name, language)}
-}
-
 func checkModel(ctx context.Context, out io.Writer) error {
 	c, err := config.Load()
 	if err != nil {
@@ -146,6 +140,7 @@ func chat(ctx context.Context, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	s := session.Session{Config: c, History: h, Client: client}
 	if c.Language == "zh-CN" {
 		fmt.Fprintf(out, "%s 是 AI。输入 /exit 退出；对话会保存在这台设备。\n", c.Name)
 	} else {
@@ -165,29 +160,30 @@ func chat(ctx context.Context, in io.Reader, out io.Writer) error {
 		if input == "" {
 			continue
 		}
-		if err := h.Add(ctx, "user", input, time.Now()); err != nil {
+		if err := s.AddUser(ctx, input); err != nil {
 			return err
 		}
-		recent, err := h.Recent(ctx, 30)
+		reply, err := s.GenerateReply(ctx)
 		if err != nil {
 			return err
 		}
-		messages := []model.Message{systemMessage(c)}
-		for _, entry := range recent {
-			messages = append(messages, model.Message{Role: entry.Role, Content: entry.Content})
-		}
-		reply, err := client.Complete(ctx, c.Model, messages)
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(reply) == "" {
-			return errors.New("model returned an empty reply")
-		}
-		if err := h.Add(ctx, "assistant", reply, time.Now()); err != nil {
-			return err
-		}
-		fmt.Fprintf(out, "%s> %s\n", c.Name, reply)
+		fmt.Fprintf(out, "%s> %s\n", c.Name, display.Clean(reply))
 	}
+}
+
+func runTUI() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c, h, err := openConfiguredHistory(ctx)
+	if err != nil {
+		return err
+	}
+	defer h.Close()
+	client, err := configuredClient(c)
+	if err != nil {
+		return err
+	}
+	return tui.Run(ctx, session.Session{Config: c, History: h, Client: client})
 }
 
 func showHistory(ctx context.Context, out io.Writer) error {
@@ -201,7 +197,7 @@ func showHistory(ctx context.Context, out io.Writer) error {
 		return err
 	}
 	for _, entry := range entries {
-		fmt.Fprintf(out, "%s %s: %s\n", entry.CreatedAt.Local().Format("2006-01-02 15:04"), entry.Role, entry.Content)
+		fmt.Fprintf(out, "%s %s: %s\n", entry.CreatedAt.Local().Format("2006-01-02 15:04"), entry.Role, display.Clean(entry.Content))
 	}
 	return nil
 }

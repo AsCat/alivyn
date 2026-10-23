@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 )
 
 const DefaultDeepSeekURL = "https://api.deepseek.com"
@@ -46,7 +47,7 @@ func (c Config) Validate() error {
 	if c.SchemaVersion != 1 {
 		return errors.New("unsupported config schema")
 	}
-	if strings.TrimSpace(c.Name) == "" || strings.ContainsAny(c.Name, "\r\n") {
+	if strings.TrimSpace(c.Name) == "" || strings.IndexFunc(c.Name, unicode.IsControl) >= 0 {
 		return errors.New("name must be nonempty and single-line")
 	}
 	if c.Language != "en" && c.Language != "zh-CN" {
@@ -66,7 +67,7 @@ func (c Config) Validate() error {
 			return errors.New("plain HTTP is only allowed for loopback model servers")
 		}
 	}
-	if strings.TrimSpace(c.Model) == "" || strings.ContainsAny(c.Model, "\r\n") {
+	if strings.TrimSpace(c.Model) == "" || strings.IndexFunc(c.Model, unicode.IsControl) >= 0 {
 		return errors.New("model must be nonempty and single-line")
 	}
 	return nil

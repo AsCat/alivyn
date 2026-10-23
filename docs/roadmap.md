@@ -24,7 +24,7 @@
 
 ## 当前执行状态
 
-阶段 0 的仓库骨架、双语 README、Apache-2.0 许可、贡献与安全文件、三条场景、Go/TUI/SQLite/兼容模型接口技术验证和 CI 已建立；[Telegram 与飞书接入路径](./channel-spike.md)已根据官方文档初筛。阶段 1 已完成最小的 `init`、DeepSeek/自定义接口配置、`model check`、SQLite 持续文字对话，以及三条结构化时间线的确定性策略复演。模型真实账号连接、自然语言事件提取、持久 TUI、后台进程、实际聊天渠道联通及正式依赖许可公告仍待完成。[品牌初筛](./brand-availability.md)和[直接依赖许可记录](./dependencies.md)分别记录已核查范围。当前预览尚不能自主联系用户。
+阶段 0 的仓库骨架、双语 README、Apache-2.0 许可、贡献与安全文件、三条场景、Go/TUI/SQLite/兼容模型接口技术验证和 CI 已建立；[Telegram 与飞书接入路径](./channel-spike.md)已根据官方文档初筛。阶段 1 已完成最小的 `init`、DeepSeek/自定义接口配置、`model check`、SQLite 持续对话和共享历史的 TUI，以及三条结构化时间线的确定性策略复演。模型真实账号连接、自然语言事件提取、后台进程、实际聊天渠道联通及正式依赖许可公告仍待完成。[品牌初筛](./brand-availability.md)和[直接依赖许可记录](./dependencies.md)分别记录已核查范围。当前预览尚不能自主联系用户。
 
 ## 第一阶段工作顺序
 

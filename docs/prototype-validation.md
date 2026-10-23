@@ -8,6 +8,8 @@ Recorded on 2026-10-23. These are local preview checks, not a stable product rel
 | `go vet ./...` | Passed | No current Go static-analysis findings. |
 | `go run ./cmd/alivyn version` | Passed on macOS arm64 | CLI starts under Go 1.26. |
 | `go run ./cmd/alivyn doctor` | Passed on macOS arm64 | Pure-Go SQLite can create, insert, and read a temporary database. |
+| `go run ./cmd/alivyn tui` | Passed in a local macOS terminal | The continuous conversation renders and exits with Esc. Unit tests cover saved history after reopening and visible model errors. |
+| `bash scripts/tui-smoke.sh` | Passed on macOS arm64 | Starts the actual TUI under a pseudo terminal and verifies the AI identity header; the same check runs in macOS and Ubuntu CI. |
 | `go run ./cmd/alivyn demo` | Passed in a local terminal | Bubble Tea v2 can render a basic interface and quit with `q`. |
 | `CGO_ENABLED=0` cross-builds | Passed for macOS amd64, Linux amd64, and Linux arm64 | The prototype compiles without CGo for these targets; execution was verified only on macOS arm64. |
 | `CGO_ENABLED=0 go build` | Passed on macOS arm64; binary approximately 11 MB | The prototype can be packaged as one executable. |

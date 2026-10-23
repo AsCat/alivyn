@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -57,6 +58,13 @@ func (c Config) Validate() error {
 	u, err := url.Parse(c.BaseURL)
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return errors.New("base URL must be an absolute HTTP(S) URL without credentials, query, or fragment")
+	}
+	if u.Scheme == "http" {
+		host := u.Hostname()
+		ip := net.ParseIP(host)
+		if !strings.EqualFold(host, "localhost") && (ip == nil || !ip.IsLoopback()) {
+			return errors.New("plain HTTP is only allowed for loopback model servers")
+		}
 	}
 	if strings.TrimSpace(c.Model) == "" || strings.ContainsAny(c.Model, "\r\n") {
 		return errors.New("model must be nonempty and single-line")

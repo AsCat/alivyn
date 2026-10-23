@@ -32,7 +32,7 @@ go run ./cmd/alivyn model check
 go run ./cmd/alivyn chat
 ```
 
-Choose `deepseek` to use the current `deepseek-flash` preset, or `custom` to enter an OpenAI-compatible base URL and model ID. The preset follows [DeepSeek's current model guide](https://api-docs.deepseek.com/quick_start/pricing/). The key is read from `ALIVYN_API_KEY` on each run and is never written to the config or database. On macOS, local data is under the user config directory; set `ALIVYN_HOME` to choose another location. Your provider receives the conversation context needed to answer.
+Choose `deepseek` to use the current `deepseek-flash` preset, or `custom` to enter an OpenAI-compatible base URL and model ID. The preset follows [DeepSeek's current model guide](https://api-docs.deepseek.com/quick_start/pricing/). Remote custom endpoints must use HTTPS; plain HTTP is allowed only for a model server on the same machine. The key is read from `ALIVYN_API_KEY` on each run and is never written to the config or database. On macOS, local data is under the user config directory; set `ALIVYN_HOME` to choose another location. Your provider receives the conversation context needed to answer.
 
 `chat` is a simple terminal conversation while the persistent TUI is in development. `history` shows stored messages. `doctor` checks SQLite, and `demo` shows a Bubble Tea rendering probe. Neither command starts the background agent runtime.
 

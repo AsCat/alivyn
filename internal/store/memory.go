@@ -75,31 +75,38 @@ func (h *History) AddUserMessage(ctx context.Context, text string, at time.Time,
 	if strings.TrimSpace(text) == "" {
 		return errors.New("message cannot be empty")
 	}
-	change, recognized := memory.Extract(text, at, zone)
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if _, err := addUserMessageTx(ctx, tx, text, at, zone); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time, zone *time.Location) (int64, error) {
+	change, recognized := memory.Extract(text, at, zone)
 	result, err := tx.ExecContext(ctx, "INSERT INTO messages(role, content, created_at) VALUES('user', ?, ?)", text, at.UTC().Format(time.RFC3339Nano))
 	if err != nil {
-		return err
+		return 0, err
+	}
+	messageID, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE runtime_state SET last_active_ns = MAX(COALESCE(last_active_ns, 0), ?) WHERE id = 1`, at.UnixNano()); err != nil {
-		return err
+		return 0, err
 	}
 	if err := cancelPendingTopicTx(ctx, tx, "time_gap", at, "user already active"); err != nil {
-		return err
+		return 0, err
 	}
 	if recognized {
-		messageID, err := result.LastInsertId()
-		if err != nil {
-			return err
-		}
 		var previous sql.NullInt64
 		err = tx.QueryRowContext(ctx, "SELECT id FROM memory_revisions WHERE topic = ? ORDER BY id DESC LIMIT 1", change.Topic).Scan(&previous)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
+			return 0, err
 		}
 		var supersedes any
 		if previous.Valid {
@@ -114,18 +121,18 @@ func (h *History) AddUserMessage(ctx context.Context, text string, at time.Time,
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, change.Topic, string(change.Action), happens, change.Precision, change.Provenance,
 			messageID, at.UTC().Format(time.RFC3339Nano), supersedes)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if err := cancelPendingTopicTx(ctx, tx, change.Topic, at, "superseded intent"); err != nil {
-			return err
+			return 0, err
 		}
 		if change.Action == memory.Upsert {
 			revisionID, err := revisionResult.LastInsertId()
 			if err != nil {
-				return err
+				return 0, err
 			}
 			if err := createMemoryIntentTx(ctx, tx, change.Topic, revisionID, change.HappensAt, at); err != nil {
-				return err
+				return 0, err
 			}
 		}
 		if change.Action == memory.Forget && change.Topic == "interview" {
@@ -133,47 +140,50 @@ func (h *History) AddUserMessage(ctx context.Context, text string, at time.Time,
 			// including replies that repeated a date without naming the topic.
 			rows, err := tx.QueryContext(ctx, "SELECT source_message_id FROM memory_revisions WHERE topic = ?", change.Topic)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			var sources []int64
 			for rows.Next() {
 				var sourceID int64
 				if err := rows.Scan(&sourceID); err != nil {
 					rows.Close()
-					return err
+					return 0, err
 				}
 				sources = append(sources, sourceID)
 			}
 			if err := rows.Err(); err != nil {
 				rows.Close()
-				return err
+				return 0, err
 			}
 			rows.Close()
 			for _, sourceID := range sources {
 				if _, err := tx.ExecContext(ctx, `UPDATE messages SET content = '[forgotten memory]'
 WHERE id >= ? AND id < COALESCE((SELECT MIN(id) FROM messages WHERE role = 'user' AND id > ?), 9223372036854775807)`, sourceID, sourceID); err != nil {
-					return err
+					return 0, err
 				}
 			}
 			// Also remove other transcript lines that explicitly name the topic.
 			if _, err := tx.ExecContext(ctx, `UPDATE messages SET content = '[forgotten memory]'
 WHERE content LIKE '%面试%' OR lower(content) LIKE '%interview%'`); err != nil {
-				return err
+				return 0, err
 			}
 			if _, err := tx.ExecContext(ctx, "UPDATE memory_revisions SET happens_at = NULL, precision = NULL WHERE topic = ?", change.Topic); err != nil {
-				return err
+				return 0, err
 			}
 			if _, err := tx.ExecContext(ctx, "UPDATE contact_outbox SET topic = 'forgotten', body = '[forgotten memory]' WHERE topic = ?", change.Topic); err != nil {
-				return err
+				return 0, err
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE feishu_inbox SET reply = '[forgotten memory]' WHERE reply LIKE '%面试%' OR lower(reply) LIKE '%interview%'"); err != nil {
+				return 0, err
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE contact_intents
 SET topic = 'forgotten', source_revision_id = NULL, due_ns = ?, expires_ns = ?, reason = 'forgotten memory', updated_ns = ?
 WHERE topic = ?`, at.UnixNano(), at.UnixNano(), at.UnixNano(), change.Topic); err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
-	return tx.Commit()
+	return messageID, nil
 }
 
 // ActiveFacts returns the newest non-canceled revision for each topic. This is

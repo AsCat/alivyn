@@ -38,6 +38,19 @@ func (s Session) AddUser(ctx context.Context, text string) error {
 // GenerateReply uses the latest persisted history and saves the model's reply.
 // Failed model calls leave the user's message in history for a later retry.
 func (s Session) GenerateReply(ctx context.Context) (string, error) {
+	reply, err := s.ComposeReply(ctx)
+	if err != nil {
+		return "", err
+	}
+	if err := s.History.Add(ctx, "assistant", reply, time.Now()); err != nil {
+		return "", fmt.Errorf("save model reply: %w", err)
+	}
+	return reply, nil
+}
+
+// ComposeReply builds a reply without persisting it. Channel workers can use
+// this to commit a delivery record and the assistant message atomically.
+func (s Session) ComposeReply(ctx context.Context) (string, error) {
 	recent, err := s.History.RecentForModel(ctx, 30)
 	if err != nil {
 		return "", err
@@ -69,9 +82,6 @@ func (s Session) GenerateReply(ctx context.Context) (string, error) {
 	}
 	if strings.TrimSpace(reply) == "" {
 		return "", errors.New("model returned an empty reply")
-	}
-	if err := s.History.Add(ctx, "assistant", reply, time.Now()); err != nil {
-		return "", fmt.Errorf("save model reply: %w", err)
 	}
 	return reply, nil
 }

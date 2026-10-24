@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a development-preview shared Feishu bot relay, one-command QR pairing entry point, private text reply worker, and optional personal-bot QR registration; real phone delivery still awaits an operated project bot and account trial.
 - Added a disposable, time-advanced demo of corrected memory, proactive contact, wake-up greeting, and duplicate suppression.
 - Added private local model-key import with environment overrides and verified a live DeepSeek connection on macOS.
 - Established the Alivyn · 意续 project foundation and initial replay scenarios.

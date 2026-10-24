@@ -24,7 +24,7 @@ func run(args []string) error {
 	if len(args) == 0 {
 		return runTUI()
 	}
-	if args[0] != "model" && args[0] != "replay" && args[0] != "memory" && args[0] != "contact" && args[0] != "serve" && args[0] != "demo" && len(args) != 1 {
+	if args[0] != "model" && args[0] != "replay" && args[0] != "memory" && args[0] != "contact" && args[0] != "channel" && args[0] != "relay" && args[0] != "serve" && args[0] != "demo" && len(args) != 1 {
 		return fmt.Errorf("unexpected arguments for %q", args[0])
 	}
 
@@ -51,6 +51,10 @@ func run(args []string) error {
 		return runMemory(context.Background(), args[1:], os.Stdout)
 	case "contact":
 		return runContact(context.Background(), args[1:], os.Stdout)
+	case "channel":
+		return runChannel(context.Background(), args[1:], os.Stdout)
+	case "relay":
+		return runRelay(args[1:], os.Stdout)
 	case "serve":
 		if len(args) > 2 || (len(args) == 2 && args[1] != "once") {
 			return fmt.Errorf("usage: alivyn serve [once]")
@@ -101,7 +105,7 @@ func run(args []string) error {
 
 func usage() {
 	fmt.Println("Alivyn · 意续 — persistent conversation preview")
-	fmt.Println("Usage: alivyn [tui|init|chat|history|memory ...|contact status|contact pause|contact resume|contact policy <start> <end> <daily-limit>|contact intents|contact audit|contact outbox|serve [once]|model check|model key import|replay|doctor|demo [en|zh-CN|tui]|version|help]")
+	fmt.Println("Usage: alivyn [tui|init|chat|history|memory ...|contact ...|channel feishu connect [relay-url]|channel feishu pair [relay-url]|channel feishu run|channel feishu status|channel feishu add|relay serve|serve [once]|model check|model key import|replay|doctor|demo [en|zh-CN|tui]|version|help]")
 }
 
 type demoModel struct{}

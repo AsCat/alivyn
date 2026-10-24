@@ -113,6 +113,16 @@ CREATE TABLE IF NOT EXISTS runtime_state (
   last_gap_created_ns INTEGER
 );
 INSERT OR IGNORE INTO runtime_state(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS feishu_inbox (
+  event_id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  user_message_id INTEGER NOT NULL REFERENCES messages(id),
+  reply TEXT,
+  state TEXT NOT NULL CHECK(state IN ('pending','ready','sent')),
+  received_ns INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS feishu_inbox_work ON feishu_inbox(state, received_ns);
 `); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)

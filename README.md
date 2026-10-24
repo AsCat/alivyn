@@ -4,7 +4,7 @@
 
 Alivyn is a self-hosted project for one continuous AI individual. It is designed to remember shared experiences, maintain a consistent personality, notice the passage of time, and decide when a message is welcome. Users bring their own model provider and choose how Alivyn can contact them.
 
-> **Status: local preview.** The current repository can create one AI identity, configure a DeepSeek or custom compatible model, keep a continuous local TUI conversation, remember and revise an explicitly mentioned interview, and run a persistent contact loop with a local test outbox. Real messaging channels are still being built. Follow the [roadmap](docs/roadmap.md) for the implementation sequence.
+> **Status: local preview.** The repository can create one AI identity, configure a DeepSeek or custom compatible model, keep a continuous local TUI conversation, remember and revise an explicitly mentioned interview, and run a persistent contact loop with a local test outbox. Shared Feishu bot pairing and private text replies are implemented but the project bot is not live and the phone path is not yet verified. Follow the [roadmap](docs/roadmap.md) for the implementation sequence.
 
 [简体中文](README.zh-CN.md) · [Vision](docs/vision.md) · [v0.1 specification](docs/spec-v0.1.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md) · [Prototype checks](docs/prototype-validation.md)
 
@@ -67,6 +67,12 @@ go run ./cmd/alivyn serve
 ```
 
 `serve once` processes one tick and exits. Use `contact pause` and `contact resume` to control all outbound attempts. `contact intents` shows pending and completed intentions; `contact audit` explains sent, skipped, canceled, and failed decisions; `contact outbox` shows test deliveries. Each test delivery also joins the continuous local conversation. The outbox is local SQLite data: **no chat message is sent yet**. The policy is checked again immediately before each delivery, and an intent is written at most once to the test outbox, even after a restart. A sleeping laptop cannot run the loop until it wakes; a continuously available server can keep it running.
+
+## Feishu scan to connect (development preview)
+
+The intended default is one user command, `alivyn channel feishu connect`: scan the **project shared bot** QR code and send the one-time pairing code in a private chat. The command keeps running after pairing to reply to messages. Users do not create a Feishu app, request permissions, or enter an App ID or secret. Codes expire after ten minutes; sending a new code from the same Feishu account transfers the connection to a new local Alivyn instance. The project has not yet published a shared bot or default relay URL, so the no-argument command currently reports that the service is unavailable. Developers can use `alivyn channel feishu connect <relay HTTPS URL>` with a self-hosted relay. See the [channel spike](docs/channel-spike.md) for operator setup.
+
+Private messages pass through the shared relay to the local runtime, then to the user's model provider. The relay retains account bindings and token hashes, while message bodies live only in a short-lived memory queue. **Messages may be lost after five minutes offline or when the queue fills, and a crash after a successful send may cause a duplicate reply.** Local history and model credentials remain on the user's machine. This channel currently supports private text replies; proactive delivery still goes only to the local test outbox. `alivyn channel feishu add` is an optional automated personal-bot setup, not a required user step, and has not yet been verified with a real account.
 
 ## How it is being built
 

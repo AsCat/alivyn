@@ -31,3 +31,10 @@ func TestTimezoneValidation(t *testing.T) {
 		t.Fatal("invalid timezone was accepted")
 	}
 }
+
+func TestDeepSeekEnvironmentKeyCannotUseCustomEndpoint(t *testing.T) {
+	c := Config{SchemaVersion: 1, Name: "Ari", Language: "en", Provider: "deepseek", BaseURL: "https://models.example/v1", Model: DefaultDeepSeekModel}
+	if err := c.Validate(); err == nil {
+		t.Fatal("DeepSeek provider accepted an unrelated endpoint")
+	}
+}

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -77,7 +76,7 @@ func initialize(in io.Reader, out io.Writer) error {
 	if err := history.Close(); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, label("Created %s. Set ALIVYN_API_KEY, then run 'alivyn model check' and 'alivyn'.\n", "已创建 %s。设置 ALIVYN_API_KEY 后，运行 'alivyn model check' 和 'alivyn'。\n"), c.Name)
+	fmt.Fprintf(out, label("Created %s. Import a model key with 'alivyn model key import', then run 'alivyn model check' and 'alivyn'.\n", "已创建 %s。用 'alivyn model key import' 导入模型密钥，然后运行 'alivyn model check' 和 'alivyn'。\n"), c.Name)
 	return nil
 }
 
@@ -112,11 +111,27 @@ func openConfiguredHistory(ctx context.Context) (config.Config, *store.History, 
 }
 
 func configuredClient(c config.Config) (model.Client, error) {
-	key := os.Getenv("ALIVYN_API_KEY")
-	if key == "" {
-		return model.Client{}, errors.New("ALIVYN_API_KEY is not set")
+	key, err := config.APIKey(c)
+	if err != nil {
+		return model.Client{}, err
 	}
 	return model.Client{BaseURL: c.BaseURL, APIKey: key}, nil
+}
+
+func importModelKey(in io.Reader, out io.Writer) error {
+	c, err := config.Load()
+	if err != nil {
+		return err
+	}
+	key, err := io.ReadAll(io.LimitReader(in, 8193))
+	if err != nil {
+		return err
+	}
+	if err := config.SaveAPIKey(c, string(key)); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "Model key saved in the local private config directory (0600).")
+	return nil
 }
 
 func checkModel(ctx context.Context, out io.Writer) error {

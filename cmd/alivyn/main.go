@@ -24,7 +24,7 @@ func run(args []string) error {
 	if len(args) == 0 {
 		return runTUI()
 	}
-	if args[0] != "model" && args[0] != "replay" && args[0] != "memory" && args[0] != "contact" && args[0] != "serve" && len(args) != 1 {
+	if args[0] != "model" && args[0] != "replay" && args[0] != "memory" && args[0] != "contact" && args[0] != "serve" && args[0] != "demo" && len(args) != 1 {
 		return fmt.Errorf("unexpected arguments for %q", args[0])
 	}
 
@@ -57,10 +57,13 @@ func run(args []string) error {
 		}
 		return runServe(len(args) == 2, os.Stdout)
 	case "model":
-		if len(args) != 2 || args[1] != "check" {
-			return fmt.Errorf("usage: alivyn model check")
+		if len(args) == 2 && args[1] == "check" {
+			return checkModel(context.Background(), os.Stdout)
 		}
-		return checkModel(context.Background(), os.Stdout)
+		if len(args) == 3 && args[1] == "key" && args[2] == "import" {
+			return importModelKey(os.Stdin, os.Stdout)
+		}
+		return fmt.Errorf("usage: alivyn model check|key import")
 	case "replay":
 		if len(args) != 2 {
 			return fmt.Errorf("usage: alivyn replay <scenario.json>")
@@ -77,9 +80,19 @@ func run(args []string) error {
 			fmt.Printf("%s deliveries=%d topic=%s reason=%s\n", decision.At, decision.DeliveryCount, decision.Topic, decision.Reason)
 		}
 	case "demo":
-		if _, err := tea.NewProgram(demoModel{}).Run(); err != nil {
-			return fmt.Errorf("terminal demo failed: %w", err)
+		if len(args) == 1 {
+			return runDemo(context.Background(), os.Stdout, "zh-CN")
 		}
+		if len(args) == 2 && (args[1] == "en" || args[1] == "zh-CN") {
+			return runDemo(context.Background(), os.Stdout, args[1])
+		}
+		if len(args) == 2 && args[1] == "tui" {
+			if _, err := tea.NewProgram(demoModel{}).Run(); err != nil {
+				return fmt.Errorf("terminal demo failed: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("usage: alivyn demo [en|zh-CN|tui]")
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
@@ -88,7 +101,7 @@ func run(args []string) error {
 
 func usage() {
 	fmt.Println("Alivyn · 意续 — persistent conversation preview")
-	fmt.Println("Usage: alivyn [tui|init|chat|history|memory ...|contact status|contact pause|contact resume|contact policy <start> <end> <daily-limit>|contact intents|contact audit|contact outbox|serve [once]|model check|replay|doctor|demo|version|help]")
+	fmt.Println("Usage: alivyn [tui|init|chat|history|memory ...|contact status|contact pause|contact resume|contact policy <start> <end> <daily-limit>|contact intents|contact audit|contact outbox|serve [once]|model check|model key import|replay|doctor|demo [en|zh-CN|tui]|version|help]")
 }
 
 type demoModel struct{}

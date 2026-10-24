@@ -18,7 +18,13 @@ Alivyn 是可自托管的开源项目。它围绕同一个持续存在的 AI 个
 
 ## 试运行本地预览
 
-需要 Go 1.26，或允许 Go 自动下载相应工具链。`init` 在本地保存个体和模型设置，不会询问或保存密钥。
+需要 Go 1.26，或允许 Go 自动下载相应工具链。先用 `demo` 看一段可快进的真实本地运行流程；它使用临时数据库，无需模型密钥，也不会修改你的个体和对话。
+
+```sh
+go run ./cmd/alivyn demo
+```
+
+`init` 在本地保存个体和模型设置；模型密钥单独保存在用户私有配置目录，文件权限为 `0600`。
 
 ```sh
 git clone https://github.com/AsCat/alivyn.git
@@ -27,15 +33,16 @@ go run ./cmd/alivyn init
 printf '模型密钥: '
 read -rs ALIVYN_API_KEY
 printf '\n'
-export ALIVYN_API_KEY
+printf '%s' "$ALIVYN_API_KEY" | go run ./cmd/alivyn model key import
+unset ALIVYN_API_KEY
 go run ./cmd/alivyn model check
 go run ./cmd/alivyn
 ```
 
-选择 `deepseek` 会使用当前的 `deepseek-flash` 预设；选择 `custom` 可填写兼容接口地址和模型 ID。预设依据 [DeepSeek 当前模型文档](https://api-docs.deepseek.com/quick_start/pricing/)。远程自定义接口必须使用 HTTPS；明文 HTTP 仅允许连接本机模型服务。密钥每次从 `ALIVYN_API_KEY` 读取，不写入配置和数据库。在 macOS 上，本地数据保存在用户配置目录；可通过 `ALIVYN_HOME` 指定其他位置。模型提供方会收到生成回复所需的对话上下文。
+选择 `deepseek` 会使用当前的 `deepseek-flash` 预设；选择 `custom` 可填写兼容接口地址和模型 ID。预设依据 [DeepSeek 当前模型文档](https://api-docs.deepseek.com/quick_start/pricing/)。远程自定义接口必须使用 HTTPS；明文 HTTP 仅允许连接本机模型服务。密钥优先从 `ALIVYN_API_KEY` 读取；DeepSeek 配置还支持 `DEEPSEEK_API_KEY`；否则读取本机私有的 `model.key`。密钥不写入 `config.json` 或数据库，也不会提交到仓库。在 macOS 上，本地数据保存在用户配置目录；可通过 `ALIVYN_HOME` 指定其他位置。模型提供方会收到生成回复所需的对话上下文。
 初始化时可填写用户所在的 IANA 时区，例如 `Asia/Shanghai`；在其他时区的服务器运行时尤其需要设置。旧版配置没有这个字段时，继续使用运行机器的本地时区。
 
-默认命令进入同一段持续对话的 TUI：Enter 发送、PgUp/PgDn 查看历史、Esc 退出。`chat` 是纯文字终端备用入口，两者共用同一份本地历史。`history` 可打印保存的消息，`doctor` 检查 SQLite，`demo` 保留为界面验证。这些命令不会启动后台智能体。
+默认命令进入同一段持续对话的 TUI：Enter 发送、PgUp/PgDn 查看历史、Esc 退出。`chat` 是纯文字终端备用入口，两者共用同一份本地历史。`history` 可打印保存的消息，`doctor` 检查 SQLite；`demo tui` 可检查终端渲染。`demo` 会用临时数据库演示改期记忆、周三沉默、周五问候、休眠后恢复和防止重复打招呼。这些命令不会启动后台智能体。
 
 当前记忆提取器识别明确的面试表述，例如“周三下午有面试”“面试改到周五了”“面试取消了”。它记录来源消息、时间和事实来源；仅说日期或上午、下午时，不会把推定时刻当作精确预约。未识别的说法不会产生记忆。用 `go run ./cmd/alivyn memory list` 查看当前事实，或用 `go run ./cmd/alivyn memory export` 导出 JSON。`go run ./cmd/alivyn memory forget interview` 会删除当前面试事实，并遮盖本地对话历史中与面试有关的文字。这里导出的是当前提取记忆，不是完整账号数据。
 

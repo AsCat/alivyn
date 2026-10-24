@@ -18,7 +18,13 @@ Alivyn is AI. Its personality, mood, and continuity are product models and exper
 
 ## Try the local preview
 
-Requires Go 1.26 or Go's automatic toolchain download. `init` stores your individual and model settings locally; it never asks for or stores an API key.
+Requires Go 1.26 or Go's automatic toolchain download. Start with a time-advanced story using the real local runtime and a disposable database. It needs no model key and does not change your identity or conversation:
+
+```sh
+go run ./cmd/alivyn demo en
+```
+
+`init` stores your individual and model settings locally. The model key is stored separately in a private user config file with `0600` permissions.
 
 ```sh
 git clone https://github.com/AsCat/alivyn.git
@@ -27,15 +33,16 @@ go run ./cmd/alivyn init
 printf 'API key: '
 read -rs ALIVYN_API_KEY
 printf '\n'
-export ALIVYN_API_KEY
+printf '%s' "$ALIVYN_API_KEY" | go run ./cmd/alivyn model key import
+unset ALIVYN_API_KEY
 go run ./cmd/alivyn model check
 go run ./cmd/alivyn
 ```
 
-Choose `deepseek` to use the current `deepseek-flash` preset, or `custom` to enter an OpenAI-compatible base URL and model ID. The preset follows [DeepSeek's current model guide](https://api-docs.deepseek.com/quick_start/pricing/). Remote custom endpoints must use HTTPS; plain HTTP is allowed only for a model server on the same machine. The key is read from `ALIVYN_API_KEY` on each run and is never written to the config or database. On macOS, local data is under the user config directory; set `ALIVYN_HOME` to choose another location. Your provider receives the conversation context needed to answer.
+Choose `deepseek` to use the current `deepseek-flash` preset, or `custom` to enter an OpenAI-compatible base URL and model ID. The preset follows [DeepSeek's current model guide](https://api-docs.deepseek.com/quick_start/pricing/). Remote custom endpoints must use HTTPS; plain HTTP is allowed only for a model server on the same machine. `ALIVYN_API_KEY` takes precedence; DeepSeek also accepts `DEEPSEEK_API_KEY`; otherwise Alivyn reads the local private `model.key` file. The key is never written to `config.json` or the database. On macOS, local data is under the user config directory; set `ALIVYN_HOME` to choose another location. Your provider receives the conversation context needed to answer.
 At setup, enter the user's IANA timezone (for example `Asia/Shanghai`) when the process may run on a server in another timezone. Existing local configs without this field continue to use the machine's local timezone.
 
-The default command opens one continuous TUI conversation. Press Enter to send, PgUp/PgDn to read history, and Esc to leave. `chat` remains a plain terminal fallback; both interfaces use the same local history. `history` prints stored messages, `doctor` checks SQLite, and `demo` remains a rendering probe. None of these commands starts the background agent runtime.
+The default command opens one continuous TUI conversation. Press Enter to send, PgUp/PgDn to read history, and Esc to leave. `chat` remains a plain terminal fallback; both interfaces use the same local history. `history` prints stored messages, `doctor` checks SQLite, and `demo tui` checks terminal rendering. `demo en` uses a disposable database to show a revised memory, a quiet Wednesday, a Friday follow-up, a wake greeting, and duplicate suppression. Plain `demo` shows the same story in Chinese. None of these commands starts the background agent runtime.
 
 The current memory extractor recognizes explicit interview statements such as “interview on Wednesday afternoon”, “interview moved to Friday”, and “cancel the interview”. It records the source message, time, and whether the fact was user-stated or model-inferred. It treats a day or part of a day as approximate, not an exact appointment. Unrecognized wording creates no memory. Inspect active facts with `go run ./cmd/alivyn memory list` or export them as JSON with `go run ./cmd/alivyn memory export`. `go run ./cmd/alivyn memory forget interview` removes the active fact and redacts interview-related text from local conversation history. This export contains active derived memory only; it is not a full account export.
 

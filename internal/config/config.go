@@ -59,6 +59,9 @@ func (c Config) Validate() error {
 	if c.Provider != "deepseek" && c.Provider != "custom" {
 		return errors.New("provider must be deepseek or custom")
 	}
+	if c.Provider == "deepseek" && strings.TrimRight(c.BaseURL, "/") != DefaultDeepSeekURL {
+		return errors.New("DeepSeek provider must use its official endpoint; use custom for other endpoints")
+	}
 	u, err := url.Parse(c.BaseURL)
 	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return errors.New("base URL must be an absolute HTTP(S) URL without credentials, query, or fragment")

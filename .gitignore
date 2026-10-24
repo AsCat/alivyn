@@ -7,4 +7,5 @@
 .env
 .env.*
 !.env.example
+model.key
 .DS_Store

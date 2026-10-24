@@ -108,6 +108,9 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			return 0, err
 		}
 	}
+	if err := advanceRelationshipTx(ctx, tx, text, personalRecognized && !personal.Forget, at, zone); err != nil {
+		return 0, err
+	}
 	if recognized {
 		var previous sql.NullInt64
 		err = tx.QueryRowContext(ctx, "SELECT id FROM memory_revisions WHERE topic = ? ORDER BY id DESC LIMIT 1", change.Topic).Scan(&previous)

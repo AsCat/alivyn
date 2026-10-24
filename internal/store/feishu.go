@@ -9,11 +9,12 @@ import (
 )
 
 type FeishuInboxItem struct {
-	EventID   string
-	ChatID    string
-	MessageID string
-	Reply     string
-	State     string
+	EventID    string
+	ChatID     string
+	MessageID  string
+	Reply      string
+	State      string
+	ReceivedAt time.Time
 }
 
 // EnqueueFeishu stores a Feishu event and its conversation entry in one
@@ -49,11 +50,15 @@ VALUES (?, ?, ?, ?, 'pending', ?)`, eventID, chatID, messageID, userMessageID, a
 
 func (h *History) NextFeishu(ctx context.Context) (FeishuInboxItem, bool, error) {
 	var item FeishuInboxItem
-	err := h.db.QueryRowContext(ctx, `SELECT event_id, chat_id, message_id, COALESCE(reply,''), state
+	var receivedNS int64
+	err := h.db.QueryRowContext(ctx, `SELECT event_id, chat_id, message_id, COALESCE(reply,''), state, received_ns
 FROM feishu_inbox WHERE state IN ('pending','ready') ORDER BY received_ns, rowid LIMIT 1`).
-		Scan(&item.EventID, &item.ChatID, &item.MessageID, &item.Reply, &item.State)
+		Scan(&item.EventID, &item.ChatID, &item.MessageID, &item.Reply, &item.State, &receivedNS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return FeishuInboxItem{}, false, nil
+	}
+	if err == nil {
+		item.ReceivedAt = time.Unix(0, receivedNS)
 	}
 	return item, err == nil, err
 }

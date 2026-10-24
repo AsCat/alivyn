@@ -58,6 +58,16 @@ func TestPersonaStyleUpgradePreservesModelSettings(t *testing.T) {
 	if err := SaveStyle("invalid"); err == nil {
 		t.Fatal("invalid persona style accepted")
 	}
+	if err := SaveBackground("慢热，先观察对方"); err != nil {
+		t.Fatal(err)
+	}
+	updated, err = Load()
+	if err != nil || updated.Background != "慢热，先观察对方" || updated.Model != original.Model {
+		t.Fatalf("background update altered config: %+v %v", updated, err)
+	}
+	if err := SaveBackground("\nunsafe"); err == nil {
+		t.Fatal("multiline background accepted")
+	}
 	unchanged, err := Load()
 	if err != nil || unchanged.Style != "natural" {
 		t.Fatalf("invalid update changed config: %+v %v", unchanged, err)

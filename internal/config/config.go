@@ -22,6 +22,7 @@ type Config struct {
 	Name          string `json:"name"`
 	Language      string `json:"language"`
 	Style         string `json:"style,omitempty"`
+	Background    string `json:"background,omitempty"`
 	Provider      string `json:"provider"`
 	BaseURL       string `json:"base_url"`
 	Model         string `json:"model"`
@@ -60,6 +61,9 @@ func (c Config) Validate() error {
 	if c.Style != "" && c.Style != "natural" && c.Style != "romantic" && c.Style != "companion" {
 		return errors.New("style must be natural, romantic, or companion")
 	}
+	if len([]rune(c.Background)) > 500 || strings.IndexFunc(c.Background, unicode.IsControl) >= 0 {
+		return errors.New("background must be single-line and at most 500 characters")
+	}
 	if c.Provider != "deepseek" && c.Provider != "custom" {
 		return errors.New("provider must be deepseek or custom")
 	}
@@ -93,6 +97,16 @@ func (c Config) EffectiveStyle() string {
 	return c.Style
 }
 
+func (c Config) EffectiveBackground() string {
+	if strings.TrimSpace(c.Background) != "" {
+		return strings.TrimSpace(c.Background)
+	}
+	if c.Language == "zh-CN" {
+		return "慢热。对陌生人礼貌但有所保留，不会刚认识就亲昵；熟悉后会表达好奇，偶尔开玩笑。讨厌空话，重视兑现承诺。"
+	}
+	return "Slow to trust. Polite but reserved with strangers; curious and occasionally playful as familiarity grows. Dislikes empty promises."
+}
+
 // SaveStyle replaces only the public persona setting, preserving existing
 // identity and model configuration. The old file remains intact on failure.
 func SaveStyle(style string) error {
@@ -101,6 +115,19 @@ func SaveStyle(style string) error {
 		return err
 	}
 	c.Style = style
+	return saveExisting(c)
+}
+
+func SaveBackground(background string) error {
+	c, err := Load()
+	if err != nil {
+		return err
+	}
+	c.Background = background
+	return saveExisting(c)
+}
+
+func saveExisting(c Config) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}

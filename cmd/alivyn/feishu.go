@@ -296,6 +296,9 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 		}
 		item.Reply = reply
 	}
+	if err := waitForReplyPace(ctx, item.ReceivedAt, item.EventID, item.Reply); err != nil {
+		return err
+	}
 	if _, err := sender.Send(ctx, &types.SendInput{ChatID: item.ChatID, Text: display.Clean(item.Reply), ReplyMessageID: item.MessageID}); err != nil {
 		return err
 	}

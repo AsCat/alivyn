@@ -40,7 +40,7 @@ func TestFeishuReplyReusesGeneratedTextAfterSendFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer h.Close()
-	if _, err := h.EnqueueFeishu(ctx, "e1", "chat", "message", "hi", time.Now(), time.UTC); err != nil {
+	if _, err := h.EnqueueFeishu(ctx, "e1", "chat", "message", "How was our last conversation?", time.Now().Add(-time.Minute), time.UTC); err != nil {
 		t.Fatal(err)
 	}
 	completer := &fakeCompleter{}

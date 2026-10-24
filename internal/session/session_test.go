@@ -18,6 +18,18 @@ func (c *capturingClient) Complete(_ context.Context, _ string, messages []model
 	return "好的", nil
 }
 
+type scriptedClient struct {
+	replies []string
+	calls   [][]model.Message
+}
+
+func (c *scriptedClient) Complete(_ context.Context, _ string, messages []model.Message) (string, error) {
+	c.calls = append(c.calls, append([]model.Message(nil), messages...))
+	reply := c.replies[0]
+	c.replies = c.replies[1:]
+	return reply, nil
+}
+
 func TestReplyUsesCurrentMemoryAndRespectsForget(t *testing.T) {
 	ctx := context.Background()
 	zone, err := time.LoadLocation("Asia/Shanghai")
@@ -135,7 +147,7 @@ func TestProactiveCompositionUsesTheSameIdentityAndReason(t *testing.T) {
 	}
 }
 
-func TestBareGreetingGetsSpecificContext(t *testing.T) {
+func TestBareGreetingAvoidsCannedModelReplyAndNoticesRepetition(t *testing.T) {
 	if !bareGreeting("你好！") || !bareGreeting("Hello.") || bareGreeting("你好，我有事想说") {
 		t.Fatal("greeting classification changed")
 	}
@@ -150,11 +162,65 @@ func TestBareGreetingGetsSpecificContext(t *testing.T) {
 	}
 	client := &capturingClient{}
 	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock"}, History: h, Client: client}
-	if _, err := s.ComposeReply(ctx); err != nil {
+	first, err := s.ComposeReply(ctx)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := client.messages[len(client.messages)-1].Content; !strings.Contains(got, "Do not ask a question") {
-		t.Fatalf("greeting had no focused behavior instruction: %s", got)
+	if first != "你好，你是？" || len(client.messages) != 0 {
+		t.Fatalf("bare greeting was sent through a generic model prompt: %q %+v", first, client.messages)
+	}
+	if err := h.Add(ctx, "assistant", first, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.AddUserMessage(ctx, "你好", time.Now(), time.Local); err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.ComposeReply(ctx)
+	if err != nil || second != "你好，怎么称呼你？" || len(client.messages) != 0 {
+		t.Fatalf("repeated greeting lost relationship context: %q %+v %v", second, client.messages, err)
+	}
+}
+
+func TestGenericEmpathyGetsAConcreteRewrite(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if err := h.AddUserMessage(ctx, "今天方案被否了。", time.Now(), time.Local); err != nil {
+		t.Fatal(err)
+	}
+	client := &scriptedClient{replies: []string{"心里肯定不太好受。有时候是方向不合适，你觉得呢？", "谁否的？他给理由了吗？"}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock"}, History: h, Client: client}
+	reply, err := s.ComposeReply(ctx)
+	if err != nil || reply != "谁否的？他给理由了吗？" || len(client.calls) != 2 {
+		t.Fatalf("generic draft was not rewritten: %q %d %v", reply, len(client.calls), err)
+	}
+	if !strings.Contains(flatten(client.calls[1]), "模板感") {
+		t.Fatal("second model call had no concrete voice critique")
+	}
+}
+
+func TestCustomBackgroundShapesFirstContactInsteadOfFixedGreeting(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if err := h.AddUserMessage(ctx, "你好", time.Now(), time.Local); err != nil {
+		t.Fatal(err)
+	}
+	client := &scriptedClient{replies: []string{"你好，认识一下？"}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Background: "开朗但不会自来熟，碰到陌生人会先好奇对方是谁。"}, History: h, Client: client}
+	reply, err := s.ComposeReply(ctx)
+	if err != nil || reply != "你好，认识一下？" || len(client.calls) != 1 {
+		t.Fatalf("custom background was bypassed: %q %v", reply, err)
+	}
+	joined := flatten(client.calls[0])
+	if !strings.Contains(joined, "开朗但不会自来熟") || !strings.Contains(joined, "关系阶段：陌生") {
+		t.Fatalf("first-contact prompt omitted character or stage: %s", joined)
 	}
 }
 

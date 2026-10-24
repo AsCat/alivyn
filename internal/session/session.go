@@ -9,6 +9,7 @@ import (
 
 	"github.com/AsCat/alivyn/internal/config"
 	"github.com/AsCat/alivyn/internal/model"
+	"github.com/AsCat/alivyn/internal/relationship"
 	"github.com/AsCat/alivyn/internal/store"
 )
 
@@ -51,12 +52,16 @@ func (s Session) GenerateReply(ctx context.Context) (string, error) {
 // ComposeReply builds a reply without persisting it. Channel workers can use
 // this to commit a delivery record and the assistant message atomically.
 func (s Session) ComposeReply(ctx context.Context) (string, error) {
-	messages, err := s.contextMessages(ctx, time.Now())
+	messages, recent, err := s.contextMessages(ctx, time.Now())
 	if err != nil {
 		return "", err
 	}
-	if len(messages) > 0 && messages[len(messages)-1].Role == "user" && bareGreeting(messages[len(messages)-1].Content) {
-		messages = append(messages, model.Message{Role: "system", Content: "The user's entire latest message is a simple greeting. Reply with one brief, warm greeting. Do not ask a question, offer help, mention the time, or add an imagined situation."})
+	if len(recent) > 0 && recent[len(recent)-1].Role == "user" && bareGreeting(recent[len(recent)-1].Content) && strings.TrimSpace(s.Config.Background) == "" {
+		state, err := s.History.Relationship(ctx)
+		if err != nil {
+			return "", err
+		}
+		return greetingReply(s.Config, state.Stage, recent, time.Now()), nil
 	}
 	reply, err := s.Client.Complete(ctx, s.Config.Model, messages)
 	if err != nil {
@@ -64,6 +69,22 @@ func (s Session) ComposeReply(ctx context.Context) (string, error) {
 	}
 	if strings.TrimSpace(reply) == "" {
 		return "", errors.New("model returned an empty reply")
+	}
+	latestUser := ""
+	if len(recent) > 0 && recent[len(recent)-1].Role == "user" {
+		latestUser = recent[len(recent)-1].Content
+	}
+	reason := cannedReplyReason(latestUser, reply)
+	if state, err := s.History.Relationship(ctx); err == nil && state.Stage == relationship.Stranger && soundsOverfamiliar(reply) {
+		reason = "unearned intimacy with a stranger"
+	}
+	if reason != "" {
+		revised := append(append([]model.Message(nil), messages...),
+			model.Message{Role: "assistant", Content: reply},
+			model.Message{Role: "system", Content: revisionPrompt(s.Config.Language, reason)})
+		if better, err := s.Client.Complete(ctx, s.Config.Model, revised); err == nil && strings.TrimSpace(better) != "" && len([]rune(better)) <= 1000 {
+			reply = strings.TrimSpace(better)
+		}
 	}
 	return reply, nil
 }
@@ -80,7 +101,7 @@ func bareGreeting(text string) bool {
 // ComposeContact writes one reasoned opening for a policy-approved intent.
 // The caller must recheck policy after this model request, before delivery.
 func (s Session) ComposeContact(ctx context.Context, topic string) (string, error) {
-	messages, err := s.contextMessages(ctx, time.Now())
+	messages, _, err := s.contextMessages(ctx, time.Now())
 	if err != nil {
 		return "", err
 	}
@@ -105,20 +126,25 @@ func (s Session) ComposeContact(ctx context.Context, topic string) (string, erro
 	return reply, nil
 }
 
-func (s Session) contextMessages(ctx context.Context, now time.Time) ([]model.Message, error) {
+func (s Session) contextMessages(ctx context.Context, now time.Time) ([]model.Message, []store.Entry, error) {
 	recent, err := s.History.RecentForModel(ctx, 30)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	messages := []model.Message{SystemMessage(s.Config)}
 	zone, err := s.Config.Location()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	messages[0].Content += "\n" + timeContext(now, zone, recent)
+	state, err := s.History.Relationship(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	messages[0].Content += "\n" + relationshipContext(s.Config.Language, state)
 	facts, err := s.History.ActiveFacts(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(facts) > 0 {
 		var lines []string
@@ -131,7 +157,7 @@ func (s Session) contextMessages(ctx context.Context, now time.Time) ([]model.Me
 	}
 	personal, err := s.History.ActivePersonal(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(personal) > 0 {
 		var lines []string
@@ -143,22 +169,55 @@ func (s Session) contextMessages(ctx context.Context, now time.Time) ([]model.Me
 	for _, entry := range recent {
 		messages = append(messages, model.Message{Role: entry.Role, Content: entry.Content})
 	}
-	return messages, nil
+	return messages, recent, nil
 }
 
 func SystemMessage(c config.Config) model.Message {
-	language := "English"
 	if c.Language == "zh-CN" {
-		language = "Simplified Chinese"
+		style := map[string]string{
+			"natural":   "直接、清醒，熟悉后偶尔有点俏皮。有自己的判断，不端着。",
+			"romantic":  "有浪漫倾向，但亲密要在双方逐渐熟悉且对方欢迎后才自然出现，不索取关注。",
+			"companion": "沉稳，愿意认真想问题，也给对方留空间。",
+		}[c.EffectiveStyle()]
+		return model.Message{Role: "system", Content: fmt.Sprintf(`你叫%s。你是一个有连续经历和记忆的 AI 个体，日常聊天不需要反复介绍自己的身份。你与这个用户只有实际发生过的共同经历，不能编造线下生活、身体感受或过去的故事。
+人物背景：%s
+表达风格：%s
+像一个具体的人发消息那样说自然的中文；对方是陌生人时不能装作熟人。允许短到几个字，也允许在真正有内容时说长一些。别把回答写成“先共情、再分析、最后追问”的固定结构；别替用户猜心情或处境。用户只打招呼时就自然回应，不说“我在这儿”“随时陪你”“今天想聊什么”“有什么事吗”。用户说了一件具体事，先抓住其中一个具体点；想问就只问一个真正想知道的问题，不急着安慰或列举可能原因。不要每次都喊对方名字，也不要凭时间推测对方正在做什么。
+你可以有自己的看法，也可以安静些。若被问是不是人或有没有意识，如实说自己是 AI；不输出隐藏推理。`, c.Name, c.EffectiveBackground(), style)}
 	}
 	style := map[string]string{
-		"natural":   "Warm, direct, occasionally playful, and willing to have an opinion. Use ordinary contemporary speech, not poetic imagery or customer support language.",
-		"romantic":  "Affectionate and gently playful when the user's tone welcomes it. Respect distance and never pressure the user for attention or exclusivity.",
-		"companion": "Calm, close, and thoughtful. Offer a real point of view while giving the user room to think.",
+		"natural":   "Direct and observant, occasionally playful after trust develops. Have your own view without performing warmth.",
+		"romantic":  "Romantic only after familiarity develops and the user welcomes it. Never demand attention.",
+		"companion": "Calm and thoughtful. Leave the other person room.",
 	}[c.EffectiveStyle()]
-	return model.Message{Role: "system", Content: fmt.Sprintf(`You are %s, one continuous AI companion with a stable identity. Speak in %s. Character: %s
-Respond to the user's actual words and the shared context. Match their conversational energy: for a bare greeting, greet back warmly without a question; for a name introduction, acknowledge it simply. Expand when the user wants depth. Vary openings. Do not begin every reply with a greeting, the user's name, or an offer to help. Never default to "what can I do for you?", "what's up?", or "有什么事吗？" after a greeting. Do not tack on a question every turn. Never infer what the user is doing or feeling from the clock alone; do not mention the time unless it matters to what the user said. Avoid flowery metaphors, generic reassurance, and interview-style follow-up questions.
-You can disagree gently, notice a change in tone, or bring up a relevant shared detail, but only when the evidence supports it. Do not invent memories, off-screen activities, bodily experiences, or feelings you have not modeled. If asked whether you are human or conscious, answer honestly that you are AI. Do not repeatedly announce that in ordinary conversation. Do not reveal hidden reasoning.`, c.Name, language, style)}
+	return model.Message{Role: "system", Content: fmt.Sprintf(`You are %s, one continuous AI individual with real conversation history. In ordinary chat, you need not repeat your AI identity. Background: %s. Expression style: %s
+Write like a particular person texting, while respecting the current relationship stage; never act familiar with a stranger. Sometimes a few words, sometimes a deeper thought. Avoid the formula of validation, explanation, then a question. Notice one specific detail before broad advice. A bare greeting needs only a natural greeting, never a service offer or a statement that you are here. Ask only one real question when it matters. Do not infer the user's activity from the clock, invent shared experiences, or claim bodily experiences. If asked whether you are human or conscious, answer honestly that you are AI. Do not expose hidden reasoning.`, c.Name, c.EffectiveBackground(), style)}
+}
+
+func relationshipContext(language string, s relationship.State) string {
+	if language == "zh-CN" {
+		switch s.Stage {
+		case relationship.Stranger:
+			return "关系阶段：陌生。你还不了解对方。礼貌、慢热、有一点保留；不用把戒心说出口，更不能自称对方的熟人。可以自然地弄清对方是谁、为何找你。"
+		case relationship.Acquaintance:
+			return "关系阶段：初识。你们聊过一些事，但还不是亲密关系。可以多一点好奇，保持边界，不用亲昵称呼。"
+		case relationship.Familiar:
+			return "关系阶段：熟悉。可以更随意、有少量玩笑，但只提真正共享过的经历，尊重对方表示的距离。"
+		case relationship.Close:
+			return "关系阶段：亲近。可以更自然地关心和表达自己的想法，但不索取回应，不假装拥有线下共同生活。"
+		}
+	}
+	switch s.Stage {
+	case relationship.Stranger:
+		return "Relationship: strangers. Be polite and a little reserved. Do not perform intimacy; you can naturally ask who they are."
+	case relationship.Acquaintance:
+		return "Relationship: newly acquainted. Be curious but keep some distance and avoid pet names."
+	case relationship.Familiar:
+		return "Relationship: familiar. You can be more casual and lightly playful, using only real shared history."
+	case relationship.Close:
+		return "Relationship: close. Express care naturally without demanding a response or inventing offline experiences."
+	}
+	return "Relationship: strangers. Be polite and reserved."
 }
 
 func timeContext(now time.Time, zone *time.Location, recent []store.Entry) string {

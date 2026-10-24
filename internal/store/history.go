@@ -141,9 +141,22 @@ CREATE TABLE IF NOT EXISTS personal_memory (
   source_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS personal_memory_key ON personal_memory(memory_key, id);
+CREATE TABLE IF NOT EXISTS relationship_state (
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  stage TEXT NOT NULL,
+  meaningful_turns INTEGER NOT NULL,
+  shared_days INTEGER NOT NULL,
+  disclosures INTEGER NOT NULL,
+  last_shared_day TEXT NOT NULL,
+  reserved INTEGER NOT NULL CHECK(reserved IN (0,1))
+);
 `); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)
+	}
+	if err := h.ensureRelationship(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("initialize relationship: %w", err)
 	}
 	return h, nil
 }

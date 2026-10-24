@@ -6,7 +6,7 @@ Alivyn is a self-hosted project for one continuous AI individual. It is designed
 
 > **Status: local preview.** A project bot has passed a real phone test for QR pairing, private text replies, and proactive delivery. The relay currently runs only on the operator's Mac; no public HTTPS relay or default onboarding URL is available yet. External-account access has not been verified. Follow the [roadmap](docs/roadmap.md) for the implementation sequence.
 
-[简体中文](README.zh-CN.md) · [Vision](docs/vision.md) · [v0.1 specification](docs/spec-v0.1.md) · [Architecture](docs/architecture.md) · [Roadmap](docs/roadmap.md) · [Prototype checks](docs/prototype-validation.md)
+[简体中文](README.zh-CN.md) · [Vision](docs/vision.md) · [v0.1 specification](docs/spec-v0.1.md) · [Architecture](docs/architecture.md) · [Character model](docs/character-model.md) · [Roadmap](docs/roadmap.md) · [Prototype checks](docs/prototype-validation.md)
 
 ## The experience we are building
 
@@ -44,7 +44,7 @@ At setup, enter the user's IANA timezone (for example `Asia/Shanghai`) when the 
 
 The default command opens one continuous TUI conversation. Press Enter to send, PgUp/PgDn to read history, and Esc to leave. `chat` remains a plain terminal fallback; both interfaces use the same local history. `history` prints stored messages, `doctor` checks SQLite, and `demo tui` checks terminal rendering. `demo en` uses a disposable database to show a revised memory, a quiet Wednesday, a Friday follow-up, a wake greeting, and duplicate suppression. Plain `demo` shows the same story in Chinese. None of these commands starts the background agent runtime.
 
-The default voice is **natural**: warm, direct, and concise. `alivyn persona show` displays the current style; `alivyn persona set natural|romantic|companion` changes it. Restart a running channel after a change. Alivyn uses the configured local time as context but avoids guessing what the user is doing from the clock.
+The default voice is **natural**: direct and concise, with warmth earned through conversation. Alivyn begins as a stranger, becomes acquainted through actual exchanges, and grows more familiar across days of conversation. Repeated greetings alone do not move that relationship forward; a request for more distance takes priority. `alivyn persona show` displays the style and character background. Use `alivyn persona set natural|romantic|companion` to change the style, or `alivyn persona background set '...'` to write a short character background. A custom background also shapes the first greeting. Restart a running channel after a persona change. In Feishu, replies have a small, bounded variation in arrival time, measured from the incoming message; slow model calls do not add an extra pause. Alivyn uses local time as context but does not guess what the user is doing from the clock.
 
 The current memory extractor recognizes explicit interview statements and short personal disclosures such as “My name is Ari” and “I like coffee.” Personal facts keep their source, survive a long conversation, and can be corrected by a later statement. “Forget my name” or “Forget that I like coffee” removes the corresponding active fact and redacts its source messages. Interview memories retain their existing correction and `memory forget interview` behavior. `memory list` shows active facts; `memory export` returns JSON with `events` and `personal` arrays. The export contains active derived memory only, not a full account export. Longer or ambiguous statements are not automatically promoted to durable personal memory.
 

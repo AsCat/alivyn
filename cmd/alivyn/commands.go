@@ -254,16 +254,30 @@ func runMemory(ctx context.Context, args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
+		personal, err := h.ActivePersonal(ctx)
+		if err != nil {
+			return err
+		}
 		if args[0] == "export" {
 			if facts == nil {
 				facts = []store.Fact{}
 			}
-			return json.NewEncoder(out).Encode(facts)
+			if personal == nil {
+				personal = []store.PersonalFact{}
+			}
+			return json.NewEncoder(out).Encode(struct {
+				Events   []store.Fact         `json:"events"`
+				Personal []store.PersonalFact `json:"personal"`
+			}{Events: facts, Personal: personal})
 		}
 		for _, fact := range facts {
 			fmt.Fprintf(out, "%s %s (%s; %s; source #%d at %s)\n", fact.Topic,
 				fact.HappensAt.In(zone).Format("2006-01-02 15:04"), fact.Precision,
 				fact.Provenance, fact.SourceMessageID, fact.SourceAt.In(zone).Format(time.RFC3339))
+		}
+		for _, fact := range personal {
+			fmt.Fprintf(out, "personal %s (source #%d at %s)\n", display.Clean(fact.Value),
+				fact.SourceMessageID, fact.SourceAt.In(zone).Format(time.RFC3339))
 		}
 		return nil
 	default:

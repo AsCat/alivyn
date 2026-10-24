@@ -11,7 +11,9 @@ import (
 type ChannelContact struct {
 	IntentID int64
 	Key      string
+	Topic    string
 	Body     string
+	FirstTry bool
 }
 
 // NextChannelContact reevaluates policy immediately before recording an attempt.
@@ -128,7 +130,51 @@ func (h *History) prepareChannelContact(ctx context.Context, id int64, at time.T
 	if err := tx.Commit(); err != nil {
 		return ChannelContact{}, false, err
 	}
-	return ChannelContact{IntentID: id, Key: item.IdempotencyKey, Body: body}, true, nil
+	return ChannelContact{IntentID: id, Key: item.IdempotencyKey, Topic: item.Topic, Body: body, FirstTry: !first.Valid}, true, nil
+}
+
+// FinalizeChannelContact persists the first generated body and checks the
+// contact policy again after model generation, immediately before send.
+func (h *History) FinalizeChannelContact(ctx context.Context, id int64, body string, at time.Time, zone *time.Location) (bool, error) {
+	if body == "" || zone == nil {
+		return false, errors.New("contact body and timezone are required")
+	}
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var item ContactIntent
+	var due, expires int64
+	err = tx.QueryRowContext(ctx, `SELECT id, topic, source_revision_id, due_ns, expires_ns, state, reason, idempotency_key
+FROM contact_intents WHERE id = ?`, id).Scan(&item.ID, &item.Topic, &item.SourceRevision,
+		&due, &expires, &item.State, &item.Reason, &item.IdempotencyKey)
+	if errors.Is(err, sql.ErrNoRows) || item.State != "pending" && err == nil {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	item.Due, item.Expires = time.Unix(0, due), time.Unix(0, expires)
+	var state string
+	err = tx.QueryRowContext(ctx, "SELECT state FROM contact_delivery WHERE intent_id = ?", id).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) || state != "pending" && err == nil {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	decision, err := evaluateIntentTxExcluding(ctx, tx, item, at, zone, id)
+	if err != nil {
+		return false, err
+	}
+	if !decision.Ready {
+		return false, nil
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE contact_delivery SET body = ? WHERE intent_id = ? AND state = 'pending'", body, id); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 // MarkChannelContactSent records a confirmed API response in local history.

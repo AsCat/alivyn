@@ -75,6 +75,89 @@ func TestReplyUsesCurrentMemoryAndRespectsForget(t *testing.T) {
 	}
 }
 
+func TestReplyRecallsPersonalFactBeyondRecentTranscript(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 24, 10, 0, 0, 0, time.UTC)
+	if err := h.AddUserMessage(ctx, "我不喜欢咖啡", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 31; i++ {
+		if err := h.Add(ctx, "assistant", "普通聊天", at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := h.AddUserMessage(ctx, "你记得我喜欢咖啡吗？", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &capturingClient{}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock"}, History: h, Client: client}
+	if _, err := s.ComposeReply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	joined := flatten(client.messages)
+	if !strings.Contains(joined, "我不喜欢咖啡") || !strings.Contains(joined, "user message #") {
+		t.Fatalf("personal fact was not retrieved: %s", joined)
+	}
+	if err := h.AddUserMessage(ctx, "忘记我不喜欢咖啡", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ComposeReply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(flatten(client.messages), "我不喜欢咖啡") {
+		t.Fatal("forgotten preference reached model")
+	}
+}
+
+func TestProactiveCompositionUsesTheSameIdentityAndReason(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	client := &capturingClient{}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock"}, History: h, Client: client}
+	if _, err := s.ComposeContact(ctx, "time_gap"); err != nil {
+		t.Fatal(err)
+	}
+	joined := flatten(client.messages)
+	if !strings.Contains(joined, "意续") || !strings.Contains(joined, "resumed after a long gap") {
+		t.Fatalf("proactive message lacked identity or reason: %s", joined)
+	}
+	if _, err := s.ComposeContact(ctx, "unknown"); err == nil {
+		t.Fatal("unknown contact reason accepted")
+	}
+}
+
+func TestBareGreetingGetsSpecificContext(t *testing.T) {
+	if !bareGreeting("你好！") || !bareGreeting("Hello.") || bareGreeting("你好，我有事想说") {
+		t.Fatal("greeting classification changed")
+	}
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if err := h.AddUserMessage(ctx, "你好", time.Now(), time.Local); err != nil {
+		t.Fatal(err)
+	}
+	client := &capturingClient{}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock"}, History: h, Client: client}
+	if _, err := s.ComposeReply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := client.messages[len(client.messages)-1].Content; !strings.Contains(got, "Do not ask a question") {
+		t.Fatalf("greeting had no focused behavior instruction: %s", got)
+	}
+}
+
 func flatten(messages []model.Message) string {
 	var contents []string
 	for _, message := range messages {

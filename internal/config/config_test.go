@@ -38,3 +38,28 @@ func TestDeepSeekEnvironmentKeyCannotUseCustomEndpoint(t *testing.T) {
 		t.Fatal("DeepSeek provider accepted an unrelated endpoint")
 	}
 }
+
+func TestPersonaStyleUpgradePreservesModelSettings(t *testing.T) {
+	t.Setenv("ALIVYN_HOME", t.TempDir())
+	original := Config{SchemaVersion: 1, Name: "意续", Language: "zh-CN", Provider: "deepseek", BaseURL: DefaultDeepSeekURL, Model: DefaultDeepSeekModel, Timezone: "Asia/Shanghai"}
+	if err := SaveNew(original); err != nil {
+		t.Fatal(err)
+	}
+	if err := SaveStyle("natural"); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Style != "natural" || updated.Provider != original.Provider || updated.BaseURL != original.BaseURL || updated.Model != original.Model || updated.Name != original.Name {
+		t.Fatalf("persona update altered identity or model: %+v", updated)
+	}
+	if err := SaveStyle("invalid"); err == nil {
+		t.Fatal("invalid persona style accepted")
+	}
+	unchanged, err := Load()
+	if err != nil || unchanged.Style != "natural" {
+		t.Fatalf("invalid update changed config: %+v %v", unchanged, err)
+	}
+}

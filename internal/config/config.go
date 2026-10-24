@@ -21,6 +21,7 @@ type Config struct {
 	SchemaVersion int    `json:"schema_version"`
 	Name          string `json:"name"`
 	Language      string `json:"language"`
+	Style         string `json:"style,omitempty"`
 	Provider      string `json:"provider"`
 	BaseURL       string `json:"base_url"`
 	Model         string `json:"model"`
@@ -56,6 +57,9 @@ func (c Config) Validate() error {
 	if c.Language != "en" && c.Language != "zh-CN" {
 		return errors.New("language must be en or zh-CN")
 	}
+	if c.Style != "" && c.Style != "natural" && c.Style != "romantic" && c.Style != "companion" {
+		return errors.New("style must be natural, romantic, or companion")
+	}
 	if c.Provider != "deepseek" && c.Provider != "custom" {
 		return errors.New("provider must be deepseek or custom")
 	}
@@ -80,6 +84,51 @@ func (c Config) Validate() error {
 		return fmt.Errorf("invalid timezone: %w", err)
 	}
 	return nil
+}
+
+func (c Config) EffectiveStyle() string {
+	if c.Style == "" {
+		return "natural"
+	}
+	return c.Style
+}
+
+// SaveStyle replaces only the public persona setting, preserving existing
+// identity and model configuration. The old file remains intact on failure.
+func SaveStyle(style string) error {
+	c, err := Load()
+	if err != nil {
+		return err
+	}
+	c.Style = style
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	path, err := Path()
+	if err != nil {
+		return err
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".config-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(file.Name())
+	if err := file.Chmod(0600); err != nil {
+		file.Close()
+		return err
+	}
+	if err := json.NewEncoder(file).Encode(c); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(file.Name(), path)
 }
 
 // Location accepts old configs without a timezone and keeps their local-time behavior.

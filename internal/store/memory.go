@@ -88,6 +88,7 @@ func (h *History) AddUserMessage(ctx context.Context, text string, at time.Time,
 
 func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time, zone *time.Location) (int64, error) {
 	change, recognized := memory.Extract(text, at, zone)
+	personal, personalRecognized := memory.ExtractPersonal(text)
 	result, err := tx.ExecContext(ctx, "INSERT INTO messages(role, content, created_at) VALUES('user', ?, ?)", text, at.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return 0, err
@@ -101,6 +102,11 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 	}
 	if err := cancelPendingTopicTx(ctx, tx, "time_gap", at, "user already active"); err != nil {
 		return 0, err
+	}
+	if personalRecognized {
+		if err := recordPersonalTx(ctx, tx, personal, messageID, at); err != nil {
+			return 0, err
+		}
 	}
 	if recognized {
 		var previous sql.NullInt64
@@ -262,6 +268,33 @@ func (h *History) RecentForModel(ctx context.Context, limit int) ([]Entry, error
 		}
 	}
 	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	personalRows, err := h.db.QueryContext(ctx, `SELECT source_message_id, action,
+  id = (SELECT MAX(n.id) FROM personal_memory n WHERE n.memory_key = p.memory_key)
+  FROM personal_memory p`)
+	if err != nil {
+		return nil, err
+	}
+	defer personalRows.Close()
+	for personalRows.Next() {
+		var id int64
+		var action string
+		var latest bool
+		if err := personalRows.Scan(&id, &action, &latest); err != nil {
+			return nil, err
+		}
+		if !latest || action == "forget" {
+			stale[id] = true
+		}
+		if latest && action == "forget" {
+			forgetRequest[id] = true
+		}
+	}
+	if err := personalRows.Err(); err != nil {
 		return nil, err
 	}
 	filtered := make([]Entry, 0, len(entries))

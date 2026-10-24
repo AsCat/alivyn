@@ -123,7 +123,7 @@ func TestMemoryCommandsExportAndForget(t *testing.T) {
 	if err := runMemory(ctx, []string{"export"}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(out.String()) != "[]" {
+	if strings.TrimSpace(out.String()) != `{"events":[],"personal":[]}` {
 		t.Fatalf("forgotten memory remained in export: %s", out.String())
 	}
 }

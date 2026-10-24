@@ -228,7 +228,7 @@ func runSelfFeishu(out io.Writer) error {
 	})
 	s := session.Session{Config: c, History: h, Client: client}
 	go workFeishu(ctx, h, s, ch, out)
-	go workChannelContact(ctx, h, zone, c.Language, func() bool {
+	go workChannelContact(ctx, h, s, zone, c.Language, func() bool {
 		connectionMu.Lock()
 		defer connectionMu.Unlock()
 		return connection.ChatID != ""

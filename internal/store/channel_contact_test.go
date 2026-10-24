@@ -56,7 +56,7 @@ func TestChannelContactPolicyRetryAndRestart(t *testing.T) {
 		t.Fatalf("immediate restart retried: %t %v", ready, err)
 	}
 	retry, ready, err := h.NextChannelContact(ctx, at.Add(3*time.Minute), zone, "zh-CN")
-	if err != nil || !ready || retry != first {
+	if err != nil || !ready || !first.FirstTry || retry.FirstTry || retry.IntentID != first.IntentID || retry.Key != first.Key || retry.Topic != first.Topic || retry.Body != first.Body {
 		t.Fatalf("retry changed message or key: %+v %+v %t %v", first, retry, ready, err)
 	}
 	if err := h.MarkChannelContactSent(ctx, first.IntentID, at.Add(3*time.Minute)); err != nil {
@@ -90,6 +90,39 @@ func TestChannelContactStopsAfterDeduplicationWindow(t *testing.T) {
 	intents, err := h.ContactIntents(ctx, 10)
 	if err != nil || len(intents) != 1 || intents[0].State != "failed" {
 		t.Fatalf("uncertain intent: %+v %v", intents, err)
+	}
+}
+
+func TestGeneratedContactIsPersistedAndPauseWinsBeforeSend(t *testing.T) {
+	ctx := context.Background()
+	at, zone := contactTestClock(t)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedChannelIntent(t, h, at, "generated")
+	first, ready, err := h.NextChannelContact(ctx, at, zone, "zh-CN")
+	if err != nil || !ready || !first.FirstTry {
+		t.Fatalf("first attempt: %+v %t %v", first, ready, err)
+	}
+	if err := h.SetPaused(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	allowed, err := h.FinalizeChannelContact(ctx, first.IntentID, "有一阵没说话了。", at.Add(time.Second), zone)
+	if err != nil || allowed {
+		t.Fatalf("pause did not stop generated contact: %t %v", allowed, err)
+	}
+	if err := h.SetPaused(ctx, false); err != nil {
+		t.Fatal(err)
+	}
+	allowed, err = h.FinalizeChannelContact(ctx, first.IntentID, "有一阵没说话了。", at.Add(2*time.Second), zone)
+	if err != nil || !allowed {
+		t.Fatalf("generated contact not finalized: %t %v", allowed, err)
+	}
+	retry, ready, err := h.NextChannelContact(ctx, at.Add(time.Minute), zone, "zh-CN")
+	if err != nil || !ready || retry.FirstTry || retry.Body != "有一阵没说话了。" || retry.Key != first.Key {
+		t.Fatalf("retry lost durable body: %+v %t %v", retry, ready, err)
 	}
 }
 

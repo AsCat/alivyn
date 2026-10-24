@@ -128,7 +128,7 @@ func runSharedFeishu(out io.Writer) error {
 	}
 	s := session.Session{Config: c, History: h, Client: modelClient}
 	go workFeishu(ctx, h, s, sharedSender{client: client}, out)
-	go workChannelContact(ctx, h, zone, c.Language, func() bool { return true }, client.SendProactive, out)
+	go workChannelContact(ctx, h, s, zone, c.Language, func() bool { return true }, client.SendProactive, out)
 	fmt.Fprintln(out, "Shared Feishu bot connected. / 共享飞书机器人已连接。")
 	for ctx.Err() == nil {
 		messages, err := client.Poll(ctx)

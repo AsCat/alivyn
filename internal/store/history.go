@@ -132,6 +132,15 @@ CREATE TABLE IF NOT EXISTS feishu_inbox (
   received_ns INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS feishu_inbox_work ON feishu_inbox(state, received_ns);
+CREATE TABLE IF NOT EXISTS personal_memory (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  memory_key TEXT NOT NULL,
+  action TEXT NOT NULL CHECK(action IN ('upsert','forget')),
+  value TEXT NOT NULL,
+  source_message_id INTEGER NOT NULL REFERENCES messages(id),
+  source_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS personal_memory_key ON personal_memory(memory_key, id);
 `); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)

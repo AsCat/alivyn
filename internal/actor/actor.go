@@ -249,11 +249,31 @@ func Check(ctx context.Context, client Completer, modelID string, frame Frame, d
 	if questions > 1 {
 		return Review{Pass: false, Issue: "The reply asked more than one question."}, nil
 	}
+	selectedIDs := map[string]bool{}
+	for _, id := range decision.EvidenceIDs {
+		selectedIDs[id] = true
+	}
+	reviewFrame := frame
+	reviewFrame.Evidence = nil
+	hasSelectedWorld := false
+	for _, item := range frame.Evidence {
+		if selectedIDs[item.ID] {
+			reviewFrame.Evidence = append(reviewFrame.Evidence, item)
+			if item.Provenance == "simulated_world" {
+				hasSelectedWorld = true
+			}
+		}
+	}
+	if !hasSelectedWorld {
+		reviewFrame.WorldState = nil
+		reviewFrame.WorldGoal = ""
+		reviewFrame.Canon = ""
+	}
 	data, err := json.Marshal(struct {
 		Frame    Frame    `json:"frame"`
 		Decision Decision `json:"decision"`
 		Reply    string   `json:"reply"`
-	}{frame, decision, reply})
+	}{reviewFrame, decision, reply})
 	if err != nil {
 		return Review{}, err
 	}
@@ -288,14 +308,20 @@ func Check(ctx context.Context, client Completer, modelID string, frame Frame, d
 		}
 	}
 	seen := map[string]bool{}
+	var uniqueWorldIDs []string
 	for _, id := range review.UsedWorldIDs {
-		if !selected[id] || seen[id] {
-			return Review{}, fmt.Errorf("review cited unselected or duplicate world evidence %q", id)
+		if !selected[id] {
+			return Review{Pass: false, Issue: "The reply was attributed to an unselected world event."}, nil
+		}
+		if seen[id] {
+			continue
 		}
 		seen[id] = true
+		uniqueWorldIDs = append(uniqueWorldIDs, id)
 	}
 	if decision.TruthBoundary && len(review.UsedWorldIDs) > 0 {
-		return Review{}, errors.New("reality-boundary reply used fictional world events")
+		return Review{Pass: false, Issue: "The reply mixed a reality-boundary answer with fictional world events."}, nil
 	}
+	review.UsedWorldIDs = uniqueWorldIDs
 	return review, nil
 }

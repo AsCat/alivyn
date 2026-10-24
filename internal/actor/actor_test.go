@@ -21,6 +21,13 @@ func (c *captureCompleter) Complete(_ context.Context, _ string, messages []mode
 	return "你好。", nil
 }
 
+type captureReviewCompleter struct{ messages []model.Message }
+
+func (c *captureReviewCompleter) Complete(_ context.Context, _ string, messages []model.Message) (string, error) {
+	c.messages = messages
+	return `{"pass":true,"issue":"","used_world_ids":[]}`, nil
+}
+
 func TestRealizationOnlyReceivesRelevantWorldContext(t *testing.T) {
 	frame := Frame{
 		Name: "意续", Language: "zh-CN", Reality: "AI character; world is fictional", Canon: "internal world biography", Abilities: "internal competence notes",
@@ -119,18 +126,41 @@ func TestReviewAllowsOneNaturalQuestionButRejectsStacking(t *testing.T) {
 func TestReviewOnlyAcceptsSelectedWorldUse(t *testing.T) {
 	frame := Frame{Latest: Evidence{ID: "chat:1", Text: "你好"}, Evidence: []Evidence{{ID: "worldv2:1", Provenance: "simulated_world", Text: "一盒录音"}}}
 	decision := Decision{Act: "acknowledge", Focus: "greet", EvidenceIDs: []string{"chat:1"}, Brevity: "short"}
-	_, err := Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":"","used_world_ids":["worldv2:1"]}`}, "mock", frame, decision, "你好。")
-	if err == nil {
-		t.Fatal("review counted a world event the decision did not select")
+	review, err := Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":"","used_world_ids":["worldv2:1"]}`}, "mock", frame, decision, "你好。")
+	if err != nil || review.Pass {
+		t.Fatalf("unselected world citation was not a recoverable review failure: %+v err=%v", review, err)
 	}
 	decision.EvidenceIDs = append(decision.EvidenceIDs, "worldv2:1")
-	review, err := Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":"","used_world_ids":[]}`}, "mock", frame, decision, "你好。")
+	review, err = Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":"","used_world_ids":[]}`}, "mock", frame, decision, "你好。")
 	if err != nil || !review.Pass || len(review.UsedWorldIDs) != 0 {
 		t.Fatalf("greeting incorrectly used private world context: %+v err=%v", review, err)
 	}
 	decision.TruthBoundary = true
-	_, err = Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":"","used_world_ids":["worldv2:1"]}`}, "mock", frame, decision, "汐湾是虚构的。")
-	if err == nil {
-		t.Fatal("reality-boundary answer used a fictional daily event")
+	review, err = Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":"","used_world_ids":["worldv2:1"]}`}, "mock", frame, decision, "汐湾是虚构的。")
+	if err != nil || review.Pass {
+		t.Fatalf("reality-boundary world use was not a review failure: %+v err=%v", review, err)
+	}
+}
+
+func TestReviewReceivesOnlySelectedEvidence(t *testing.T) {
+	frame := Frame{
+		Latest:    Evidence{ID: "chat:9", Provenance: "observed_chat", Text: "你好"},
+		WorldGoal: "private world goal", Canon: "private world canon",
+		Evidence: []Evidence{
+			{ID: "chat:7", Provenance: "observed_chat", Text: "在吗"},
+			{ID: "worldv2:1", Provenance: "simulated_world", Text: "unselected recording event"},
+		},
+	}
+	client := &captureReviewCompleter{}
+	decision := Decision{Act: "acknowledge", Focus: "greet", EvidenceIDs: []string{"chat:9", "chat:7"}, Brevity: "short"}
+	if _, err := Check(context.Background(), client, "mock", frame, decision, "嗨。"); err != nil {
+		t.Fatal(err)
+	}
+	private := client.messages[1].Content
+	if strings.Contains(private, "unselected recording event") || strings.Contains(private, "private world goal") || strings.Contains(private, "private world canon") {
+		t.Fatalf("review saw context that could not ground this reply: %s", private)
+	}
+	if !strings.Contains(private, "在吗") {
+		t.Fatalf("review lost selected chat evidence: %s", private)
 	}
 }

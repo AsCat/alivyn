@@ -373,5 +373,5 @@ func (r *Relay) SendProactive(ctx context.Context, id, text, key string) error {
 		return errors.New("relay sender does not support idempotent delivery")
 	}
 	sum := sha256.Sum256([]byte(id + ":" + key))
-	return sender.SendIdempotent(ctx, chatID, text, hex.EncodeToString(sum[:]))
+	return sender.SendIdempotent(ctx, chatID, text, hex.EncodeToString(sum[:16]))
 }

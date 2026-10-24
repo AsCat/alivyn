@@ -123,7 +123,7 @@ func TestSharedPairingRoutesOnlyToBoundAgent(t *testing.T) {
 	defer sender.mu.Unlock()
 	if len(sender.sent) != 4 || sender.sent[0].chatID != "oc_a" || sender.sent[1].chatID != "oc_b" ||
 		sender.sent[2].chatID != "oc_a" || sender.sent[3].chatID != "oc_b" ||
-		sender.sent[2].key == "" || sender.sent[2].key == sender.sent[3].key {
+		len(sender.sent[2].key) != 32 || sender.sent[2].key == sender.sent[3].key {
 		t.Fatalf("outbound messages crossed users: %+v", sender.sent)
 	}
 	if _, err := (sharedclient.Client{BaseURL: server.URL, Token: "wrong-token-that-is-long-enough-to-check"}).Status(ctx); err == nil {

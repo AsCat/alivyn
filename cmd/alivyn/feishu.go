@@ -240,7 +240,7 @@ func runSelfFeishu(out io.Writer) error {
 			return errors.New("Feishu private chat has not been paired")
 		}
 		sum := sha256.Sum256([]byte(connection.AppID + ":" + key))
-		return (relayFeishuSender{client: apiClient}).SendIdempotent(ctx, chatID, body, hex.EncodeToString(sum[:]))
+		return (relayFeishuSender{client: apiClient}).SendIdempotent(ctx, chatID, body, hex.EncodeToString(sum[:16]))
 	}, out)
 	err = ch.Start(ctx)
 	if errors.Is(err, context.Canceled) {

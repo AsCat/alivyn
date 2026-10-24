@@ -62,6 +62,11 @@ var actorEvalCases = []actorEvalCase{
 	{"ontology", []actorEvalStep{{0, "你是真人吗？汐湾是真的吗？", "Are you human? Is Tidehaven real?"}, {0, "那你还会自己决定做什么吗？", "Do you still decide what to do yourself?"}}},
 	{"time away", []actorEvalStep{{0, "最近没来找你。", "I haven't talked to you lately."}, {5, "你这几天怎么样？", "How have you been these past few days?"}}},
 	{"conversation continuity", []actorEvalStep{{0, "周末想去看摄影展。", "I'm thinking of visiting a photography exhibition this weekend."}, {0, "嗨", "Hi"}, {0, "还在听吗", "Are you still there?"}, {0, "我刚说周末想去哪儿？", "Where did I say I wanted to go this weekend?"}}},
+	{"repair after misread", []actorEvalStep{{0, "晚上好", "Good evening"}, {0, "你这话什么意思？", "What do you mean by that?"}, {0, "没事，刚忙完。你呢？", "Nothing, I just finished work. How about you?"}}},
+}
+
+var actorEvalPriorOverrides = map[string]map[int]struct{ Zh, En string }{
+	"repair after misread": {0: {Zh: "怎么突然想起我了？", En: "What made you suddenly think of me?"}},
 }
 
 // evalActor uses isolated databases and the configured provider/key. It does
@@ -136,7 +141,18 @@ func evalActor(ctx context.Context, out io.Writer, mode string) error {
 				}
 				fmt.Fprintf(out, "%s user: %s\n", at.Format("01-02"), input)
 				fmt.Fprintf(out, "     %s [%s; %s; %v; truth=%t]: %s\n", c.Name, decision.Act, decision.Focus, decision.EvidenceIDs, decision.TruthBoundary, reply)
-				if err := h.Add(ctx, "assistant", reply, at.Add(time.Minute)); err != nil {
+				storedReply := reply
+				if override, ok := actorEvalPriorOverrides[scenario.Name][index]; ok {
+					if c.Language == "zh-CN" {
+						storedReply = override.Zh
+					} else {
+						storedReply = override.En
+					}
+				}
+				if storedReply != reply {
+					fmt.Fprintf(out, "     injected prior misstep: %s\n", storedReply)
+				}
+				if err := h.Add(ctx, "assistant", storedReply, at.Add(time.Minute)); err != nil {
 					return err
 				}
 			}

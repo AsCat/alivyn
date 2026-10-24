@@ -94,6 +94,15 @@ func TestDecisionRejectsInventedEvidence(t *testing.T) {
 	}
 }
 
+func TestDecisionAllowsConversationalRepair(t *testing.T) {
+	frame := Frame{Latest: Evidence{ID: "chat:3"}, Evidence: []Evidence{{ID: "chat:1"}}}
+	raw := `{"act":"repair","focus":"own a mistaken assumption","evidence_ids":["chat:1","chat:3"],"brevity":"short"}`
+	decision, err := ParseDecision(raw, frame)
+	if err != nil || decision.Act != "repair" {
+		t.Fatalf("repair could not be planned: %+v %v", decision, err)
+	}
+}
+
 func TestReviewAllowsOneNaturalQuestionButRejectsStacking(t *testing.T) {
 	frame := Frame{Latest: Evidence{ID: "chat:1"}}
 	decision := Decision{Act: "acknowledge", Focus: "greet", EvidenceIDs: []string{"chat:1"}, Brevity: "short"}

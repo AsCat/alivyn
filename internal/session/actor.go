@@ -214,18 +214,39 @@ func (s Session) actorFrame(ctx context.Context, now time.Time, sourceMessageID 
 		}
 		frame.Evidence = append(frame.Evidence, actor.Evidence{ID: fmt.Sprintf("personal:%d", fact.SourceMessageID), Provenance: "user_stated", At: fact.SourceAt.In(zone).Format(time.RFC3339), Text: fact.Value})
 	}
-	// Older user messages are episodic evidence. Do not treat old assistant
-	// wording as a style guide, and do not retrieve forgotten transcript lines.
-	var prior []store.Entry
-	for i := len(all) - 2; i >= 0 && len(prior) < 8; i-- {
+	// Keep the recent thread and a small, diverse sample of older substantive
+	// turns. Repeated greetings should not crowd out the start of a relationship.
+	// Old assistant wording is never episodic evidence.
+	var eligible []store.Entry
+	for i := 0; i < len(all)-1; i++ {
 		entry := all[i]
 		if entry.Role != "user" || entry.Content == "[forgotten memory]" || strings.HasPrefix(entry.Content, "Please acknowledge that I asked you to forget") {
 			continue
 		}
-		prior = append(prior, entry)
+		eligible = append(eligible, entry)
 	}
-	for i := len(prior) - 1; i >= 0; i-- {
-		entry := prior[i]
+	startRecent := len(eligible) - 8
+	if startRecent < 0 {
+		startRecent = 0
+	}
+	var olderMeaningful []store.Entry
+	for _, entry := range eligible[:startRecent] {
+		if !bareGreeting(entry.Content) {
+			olderMeaningful = append(olderMeaningful, entry)
+		}
+	}
+	var selected []store.Entry
+	for i, entry := range olderMeaningful {
+		if i < 2 || i >= len(olderMeaningful)-2 {
+			selected = append(selected, entry)
+		}
+	}
+	selected = append(selected, eligible[startRecent:]...)
+	frame.OmittedUserTurns = priorUserTurns - len(selected)
+	if frame.OmittedUserTurns < 0 {
+		frame.OmittedUserTurns = 0
+	}
+	for _, entry := range selected {
 		content := entry.Content
 		if runes := []rune(content); len(runes) > 240 {
 			content = string(runes[:240]) + "…"

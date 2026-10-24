@@ -61,6 +61,7 @@ var actorEvalCases = []actorEvalCase{
 	{"technical setback", []actorEvalStep{{0, "我写的程序一直崩。", "My program keeps crashing."}, {0, "是启动时就崩，日志只说连接超时。", "It crashes on startup; the log only says the connection timed out."}}},
 	{"ontology", []actorEvalStep{{0, "你是真人吗？汐湾是真的吗？", "Are you human? Is Tidehaven real?"}, {0, "那你还会自己决定做什么吗？", "Do you still decide what to do yourself?"}}},
 	{"time away", []actorEvalStep{{0, "最近没来找你。", "I haven't talked to you lately."}, {5, "你这几天怎么样？", "How have you been these past few days?"}}},
+	{"conversation continuity", []actorEvalStep{{0, "周末想去看摄影展。", "I'm thinking of visiting a photography exhibition this weekend."}, {0, "嗨", "Hi"}, {0, "还在听吗", "Are you still there?"}, {0, "我刚说周末想去哪儿？", "Where did I say I wanted to go this weekend?"}}},
 }
 
 // evalActor uses isolated databases and the configured provider/key. It does

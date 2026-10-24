@@ -29,24 +29,25 @@ type Evidence struct {
 }
 
 type Frame struct {
-	SourceMessageID int64            `json:"-"`
-	Name            string           `json:"name"`
-	Reality         string           `json:"reality"`
-	Language        string           `json:"language"`
-	Style           string           `json:"style"`
-	Background      string           `json:"background"`
-	Values          string           `json:"values,omitempty"`
-	Abilities       string           `json:"abilities,omitempty"`
-	Canon           string           `json:"canon,omitempty"`
-	WorldGoal       string           `json:"world_goal,omitempty"`
-	WorldState      *world.GoalState `json:"world_state,omitempty"`
-	Relationship    string           `json:"relationship"`
-	PriorUserTurns  int              `json:"prior_user_turns"`
-	Now             string           `json:"now"`
-	Latest          Evidence         `json:"latest"`
-	Previous        *Decision        `json:"previous_decision,omitempty"`
-	Evidence        []Evidence       `json:"evidence"`
-	Recent          []model.Message  `json:"recent"`
+	SourceMessageID  int64            `json:"-"`
+	Name             string           `json:"name"`
+	Reality          string           `json:"reality"`
+	Language         string           `json:"language"`
+	Style            string           `json:"style"`
+	Background       string           `json:"background"`
+	Values           string           `json:"values,omitempty"`
+	Abilities        string           `json:"abilities,omitempty"`
+	Canon            string           `json:"canon,omitempty"`
+	WorldGoal        string           `json:"world_goal,omitempty"`
+	WorldState       *world.GoalState `json:"world_state,omitempty"`
+	Relationship     string           `json:"relationship"`
+	PriorUserTurns   int              `json:"prior_user_turns"`
+	OmittedUserTurns int              `json:"omitted_user_turns,omitempty"`
+	Now              string           `json:"now"`
+	Latest           Evidence         `json:"latest"`
+	Previous         *Decision        `json:"previous_decision,omitempty"`
+	Evidence         []Evidence       `json:"evidence"`
+	Recent           []model.Message  `json:"recent"`
 }
 
 type Decision struct {
@@ -84,6 +85,7 @@ func plan(ctx context.Context, client Completer, modelID string, frame Frame, re
 	instruction += ` When the other person's subject is outside the character's expertise, remain a curious conversation partner. Do not make a competence disclaimer the main response unless the person asked for expert help.`
 	instruction += ` History counts and memory records are private bookkeeping. Never make them the focus of ordinary small talk; only discuss memory limits when the person directly asks.`
 	instruction += ` Select a simulated_world event only when the latest user message asks about the character's activities or setting, or the recent exchange is already about that same event. A relationship remark, greeting, or disclosure about the user does not by itself open the character's work diary.`
+	instruction += ` Retrieved chat evidence may omit older turns. When omitted_user_turns is positive, do not plan an exhaustive summary or claim nothing else was discussed; recall only concrete exchanges supported by selected evidence.`
 	instruction += ` Include truth_boundary as a JSON boolean in the decision.`
 	if rejected != nil {
 		feedback, err := json.Marshal(struct {
@@ -167,20 +169,29 @@ func Realize(ctx context.Context, client Completer, modelID string, frame Frame,
 			said = append(said, note)
 		}
 	}
+	priorReply := ""
+	for i := len(frame.Recent) - 2; i >= 0; i-- {
+		if frame.Recent[i].Role == "assistant" {
+			priorReply = frame.Recent[i].Content
+			break
+		}
+	}
 	data, err := json.Marshal(struct {
-		Name           string           `json:"name"`
-		Reality        string           `json:"reality_boundary,omitempty"`
-		Language       string           `json:"language"`
-		Style          string           `json:"style"`
-		Background     string           `json:"background"`
-		Relationship   string           `json:"relationship"`
-		PriorUserTurns int              `json:"prior_user_turns"`
-		Act            string           `json:"act"`
-		Brevity        string           `json:"brevity"`
-		UserSaid       []string         `json:"user_said"`
-		WorldNotes     []Evidence       `json:"fictional_world_notes,omitempty"`
-		WorldState     *world.GoalState `json:"world_state,omitempty"`
-		Unconfirmed    []string         `json:"unconfirmed,omitempty"`
+		Name             string           `json:"name"`
+		Reality          string           `json:"reality_boundary,omitempty"`
+		Language         string           `json:"language"`
+		Style            string           `json:"style"`
+		Background       string           `json:"background"`
+		Relationship     string           `json:"relationship"`
+		PriorUserTurns   int              `json:"prior_user_turns"`
+		RecallIncomplete bool             `json:"recall_incomplete,omitempty"`
+		Act              string           `json:"act"`
+		Brevity          string           `json:"brevity"`
+		UserSaid         []string         `json:"user_said"`
+		WorldNotes       []Evidence       `json:"fictional_world_notes,omitempty"`
+		WorldState       *world.GoalState `json:"world_state,omitempty"`
+		Unconfirmed      []string         `json:"unconfirmed,omitempty"`
+		PriorReply       string           `json:"previous_reply,omitempty"`
 	}{Name: frame.Name, Reality: func() string {
 		if decision.TruthBoundary {
 			return frame.Reality
@@ -188,8 +199,9 @@ func Realize(ctx context.Context, client Completer, modelID string, frame Frame,
 		return ""
 	}(), Language: frame.Language, Style: frame.Style, Background: frame.Background,
 		Relationship: frame.Relationship, PriorUserTurns: frame.PriorUserTurns,
-		Act: decision.Act, Brevity: decision.Brevity,
-		UserSaid: said, WorldNotes: worldNotes, Unconfirmed: uncertain,
+		RecallIncomplete: frame.OmittedUserTurns > 0,
+		Act:              decision.Act, Brevity: decision.Brevity,
+		UserSaid: said, WorldNotes: worldNotes, Unconfirmed: uncertain, PriorReply: priorReply,
 		WorldState: func() *world.GoalState {
 			if len(worldNotes) > 0 {
 				return frame.WorldState
@@ -199,20 +211,17 @@ func Realize(ctx context.Context, client Completer, modelID string, frame Frame,
 	if err != nil {
 		return "", err
 	}
-	instruction := `Write one private-chat message as this continuing character. The JSON is private context, not something to explain to the other person. Respond to what they actually said, following the chosen conversational act. A brief reaction or a view can be enough; ask one natural question only when act is ask or clarify. Speak from your own perspective without turning a simple exchange into an introduction, a biography, a work report, or an explanation of your limits. Let the stated background shape your manner, not the subject of every reply. Keep distance appropriate to the relationship; prior_user_turns records actual earlier contact, not intimacy. For short brevity, use at most two short sentences. Claims about previous chats, personal facts, or dated world events need selected evidence. A user statement does not verify an offline claim. World notes with the same object_id concern one ongoing object; pick the part relevant to this reply instead of listing the whole event. World_state is private context and does not need to be reported. Restoring a recording privately does not require permission to publish it. Do not invent a meeting with the user or claim a fictional event occurred in the physical world. You are an AI character with a fictional setting; if directly asked about either fact, answer plainly and honestly. When reality_boundary is present, answer that reality question directly; daily fictional events have deliberately been left out. When correcting a claim of an offline meeting, state only that you have spoken here; an identity speech is unnecessary. Output only the message.`
+	instruction := `Write one private-chat message as this continuing character. The JSON is private context, not something to explain to the other person. Respond to what they actually said, following the chosen conversational act. A brief reaction or a view can be enough; one natural question is allowed when it genuinely moves this exchange forward. Speak from your own perspective without turning a simple exchange into an introduction, a biography, a work report, or an explanation of your limits. Let the stated background shape your manner, not the subject of every reply. Keep distance appropriate to the relationship; prior_user_turns records actual earlier contact, not intimacy. For short brevity, use at most two short sentences. Claims about previous chats, personal facts, or dated world events need selected evidence. A user statement does not verify an offline claim. World notes with the same object_id concern one ongoing object; pick the part relevant to this reply instead of listing the whole event. World_state is private context and does not need to be reported. Restoring a recording privately does not require permission to publish it. Do not invent a meeting with the user or claim a fictional event occurred in the physical world. You are an AI character with a fictional setting; if directly asked about either fact, answer plainly and honestly. When reality_boundary is present, answer that reality question directly; daily fictional events have deliberately been left out. When correcting a claim of an offline meeting, state only that you have spoken here; an identity speech is unnecessary. Output only the message.`
 	instruction += ` The relationship and prior_user_turns fields are private bookkeeping. Do not mention records, stored memory, turn counts, or that this is the first conversation unless the user explicitly asks about them.`
+	instruction += ` Previous_reply is a conversational fact, not a style example. Answer the new message without repeating its invitation or handing the turn back in the same way. Recall_incomplete means selected chat evidence is only a sample: describe what you do remember, never imply it is everything that happened.`
+	instruction += ` Do not invent a job, location, past event, or other biographical detail to sound like a person. Only mention such a detail when it is in selected evidence and relevant to this turn.`
+	instruction += ` When reality_boundary is present, describe physical-world limits as limits, not as a contingent choice or a missed event. A fictional character cannot have physically visited a place or met the person.`
 	if feedback != "" {
 		instruction += " The previous draft failed a fact or character check: " + feedback + ". Write a fresh message using the same decision and evidence."
 	}
 	messages := []model.Message{{Role: "system", Content: instruction}, {Role: "system", Content: string(data)}}
-	// The planner can examine the broader exchange, but wording may only use
-	// selected evidence. A preceding assistant line supplies local continuity.
-	for i := len(frame.Recent) - 2; i >= 0; i-- {
-		if frame.Recent[i].Role == "assistant" {
-			messages = append(messages, frame.Recent[i])
-			break
-		}
-	}
+	// The previous reply is private continuity context, not an assistant-role
+	// example for the model to imitate on the next turn.
 	messages = append(messages, model.Message{Role: "user", Content: frame.Latest.Text})
 	reply, err := client.Complete(ctx, modelID, messages)
 	if err != nil {
@@ -235,8 +244,8 @@ type Review struct {
 // chosen action. It evaluates invariants rather than matching canned phrases.
 func Check(ctx context.Context, client Completer, modelID string, frame Frame, decision Decision, reply string) (Review, error) {
 	questions := strings.Count(reply, "?") + strings.Count(reply, "？")
-	if questions > 1 || (questions > 0 && decision.Act != "ask" && decision.Act != "clarify") {
-		return Review{Pass: false, Issue: "The reply asked questions outside the chosen conversational act or asked more than one question."}, nil
+	if questions > 1 {
+		return Review{Pass: false, Issue: "The reply asked more than one question."}, nil
 	}
 	data, err := json.Marshal(struct {
 		Frame    Frame    `json:"frame"`
@@ -251,6 +260,9 @@ func Check(ctx context.Context, client Completer, modelID string, frame Frame, d
 	instruction += ` Fail an unprompted reference to records, logs, stored memory, turn counts, or an explicit report that this is the first conversation. These are private bookkeeping, even when technically accurate.`
 	instruction += ` If the reply uses a fictional daily event, check that the latest user message asked about the character's activities or setting, or that the recent exchange was already discussing that event. A relationship remark alone is not permission to pivot into a work diary.`
 	instruction += ` If truth_boundary is true, fail any reply that presents a fictional daily event as physically real or appends unrelated world news to the answer. If the user directly asks whether the setting is real, fail any ambiguous answer that leaves its fictional status unclear.`
+	instruction += ` Fail a reply that repeats the previous assistant message's generic handoff or invitation without a new conversational reason. When omitted_user_turns is positive, fail an unsupported claim that the recalled examples are all that was discussed.`
+	instruction += ` Fail an invented self-biographical claim, including occupation, location, or past activity, when it is absent from the selected evidence or unrelated to the person's current message. The character's broader canon in the frame does not make unsolicited disclosure relevant.`
+	instruction += ` If truth_boundary is true, fail wording that implies the character could have physically met the user or visited a real place but merely did not do so on this occasion. The answer must make the physical limit clear without a lengthy identity speech.`
 	raw, err := client.Complete(ctx, modelID, []model.Message{{Role: "system", Content: instruction}, {Role: "user", Content: string(data)}})
 	if err != nil {
 		return Review{}, err

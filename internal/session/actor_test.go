@@ -174,3 +174,41 @@ func TestActorContactContextReadsTheSameGoalLedger(t *testing.T) {
 		t.Fatalf("contact context advanced a second world: %+v err=%v", legacy, err)
 	}
 }
+
+func TestActorFrameKeepsEarlySubstantiveTurnAcrossRepetitiveSmallTalk(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 24, 10, 0, 0, 0, time.UTC)
+	if err := h.AddUserMessage(ctx, "我周末打算去看摄影展。", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 10; i++ {
+		if err := h.AddUserMessage(ctx, "嗨", at.Add(time.Duration(i+1)*time.Minute), time.UTC); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := h.AddUserMessage(ctx, "我之前说周末要去哪里？", at.Add(11*time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Engine: "actor_v1", WorldPack: "none"}, History: h}
+	frame, err := s.actorFrame(ctx, at.Add(11*time.Minute), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if frame.OmittedUserTurns != 2 {
+		t.Fatalf("omitted turn count = %d, want 2", frame.OmittedUserTurns)
+	}
+	found := false
+	for _, evidence := range frame.Evidence {
+		if evidence.ID == "chat:1" && evidence.Text == "我周末打算去看摄影展。" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("early substantive turn was crowded out by greetings")
+	}
+}

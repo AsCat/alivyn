@@ -56,6 +56,32 @@ func TestRealizationOnlyReceivesRelevantWorldContext(t *testing.T) {
 	}
 }
 
+func TestRealizationTreatsPreviousReplyAsContinuityNotExample(t *testing.T) {
+	frame := Frame{
+		Name: "意续", Language: "zh-CN", PriorUserTurns: 12, OmittedUserTurns: 3,
+		Latest:   Evidence{ID: "chat:13", Provenance: "observed_chat", Text: "我上次说要去哪里？"},
+		Evidence: []Evidence{{ID: "chat:1", Provenance: "observed_chat", Text: "我周末要去看摄影展。"}},
+		Recent: []model.Message{
+			{Role: "user", Content: "在听吗"},
+			{Role: "assistant", Content: "在，想说什么就说。"},
+			{Role: "user", Content: "我上次说要去哪里？"},
+		},
+	}
+	client := &captureCompleter{}
+	_, err := Realize(context.Background(), client, "mock", frame,
+		Decision{Act: "answer", Focus: "remembered outing", EvidenceIDs: []string{"chat:1"}, Brevity: "short"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.messages) != 3 || client.messages[2].Role != "user" {
+		t.Fatalf("previous assistant turn became a style example: %+v", client.messages)
+	}
+	private := client.messages[1].Content
+	if !strings.Contains(private, `"recall_incomplete":true`) || !strings.Contains(private, `"previous_reply":"在，想说什么就说。"`) {
+		t.Fatalf("continuity or recall limit missing from private context: %s", private)
+	}
+}
+
 func TestDecisionRejectsInventedEvidence(t *testing.T) {
 	frame := Frame{Latest: Evidence{ID: "chat:7"}, Evidence: []Evidence{{ID: "world:2"}}}
 	good := `{"act":"share","focus":"recording repair","evidence_ids":["world:2"],"brevity":"short"}`
@@ -68,16 +94,16 @@ func TestDecisionRejectsInventedEvidence(t *testing.T) {
 	}
 }
 
-func TestReviewEnforcesChosenActWithoutPhraseBlacklist(t *testing.T) {
+func TestReviewAllowsOneNaturalQuestionButRejectsStacking(t *testing.T) {
 	frame := Frame{Latest: Evidence{ID: "chat:1"}}
 	decision := Decision{Act: "acknowledge", Focus: "greet", EvidenceIDs: []string{"chat:1"}, Brevity: "short"}
-	review, err := Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":""}`}, "mock", frame, decision, "你是谁？")
+	review, err := Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":""}`}, "mock", frame, decision, "你是谁？你从哪里来？")
 	if err != nil || review.Pass {
-		t.Fatalf("question escaped chosen act: %+v %v", review, err)
+		t.Fatalf("stacked questions passed: %+v %v", review, err)
 	}
-	review, err = Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":""}`}, "mock", frame, decision, "嗨。")
+	review, err = Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":""}`}, "mock", frame, decision, "嗨，怎么称呼？")
 	if err != nil || !review.Pass {
-		t.Fatalf("brief greeting was rejected: %+v %v", review, err)
+		t.Fatalf("one natural question was rejected: %+v %v", review, err)
 	}
 }
 

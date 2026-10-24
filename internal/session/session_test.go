@@ -157,7 +157,8 @@ func TestBareGreetingAvoidsCannedModelReplyAndNoticesRepetition(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer h.Close()
-	if err := h.AddUserMessage(ctx, "你好", time.Now(), time.Local); err != nil {
+	firstAt := time.Now().Add(-26 * time.Hour)
+	if err := h.AddUserMessage(ctx, "你好", firstAt, time.Local); err != nil {
 		t.Fatal(err)
 	}
 	client := &capturingClient{}
@@ -169,15 +170,25 @@ func TestBareGreetingAvoidsCannedModelReplyAndNoticesRepetition(t *testing.T) {
 	if first != "你好，你是？" || len(client.messages) != 0 {
 		t.Fatalf("bare greeting was sent through a generic model prompt: %q %+v", first, client.messages)
 	}
-	if err := h.Add(ctx, "assistant", first, time.Now()); err != nil {
+	if err := h.Add(ctx, "assistant", first, firstAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.AddUserMessage(ctx, "你好", firstAt.Add(time.Hour), time.Local); err != nil {
+		t.Fatal(err)
+	}
+	second, err := s.ComposeReply(ctx)
+	if err != nil || second != "你好。" || len(client.messages) != 0 {
+		t.Fatalf("repeated greeting lost relationship context: %q %+v %v", second, client.messages, err)
+	}
+	if err := h.Add(ctx, "assistant", second, firstAt.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.AddUserMessage(ctx, "你好", time.Now(), time.Local); err != nil {
 		t.Fatal(err)
 	}
-	second, err := s.ComposeReply(ctx)
-	if err != nil || second != "你好，怎么称呼你？" || len(client.messages) != 0 {
-		t.Fatalf("repeated greeting lost relationship context: %q %+v %v", second, client.messages, err)
+	third, err := s.ComposeReply(ctx)
+	if err != nil || third == "你好，你是？" {
+		t.Fatalf("greeting forgot an earlier introduction after a day: %q %v", third, err)
 	}
 }
 

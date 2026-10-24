@@ -11,11 +11,15 @@ import (
 
 // A greeting has almost no semantic content. A tiny, context-aware response
 // avoids asking the model to invent an occasion or a service-style question.
-func greetingReply(c config.Config, stage relationship.Stage, recent []store.Entry, now time.Time) string {
+func greetingReply(c config.Config, state relationship.State, recent []store.Entry, now time.Time) string {
 	previousGreetings := 0
 	previousAssistant := ""
+	askedIdentity := false
 	for i := len(recent) - 2; i >= 0; i-- {
 		entry := recent[i]
+		if entry.Role == "assistant" && (strings.Contains(entry.Content, "你是？") || strings.Contains(entry.Content, "怎么称呼你") || strings.Contains(entry.Content, "What should I call you") || strings.Contains(entry.Content, "Have we met")) {
+			askedIdentity = true
+		}
 		if entry.CreatedAt.After(now) || now.Sub(entry.CreatedAt) > 24*time.Hour {
 			continue
 		}
@@ -27,17 +31,17 @@ func greetingReply(c config.Config, stage relationship.Stage, recent []store.Ent
 		}
 	}
 	if c.Language == "zh-CN" {
-		if stage == relationship.Stranger {
-			if previousGreetings == 0 {
-				return "你好，你是？"
-			}
-			if strings.Contains(previousAssistant, "怎么称呼") {
+		if state.Stage == relationship.Stranger {
+			if askedIdentity {
 				return "你好。"
+			}
+			if previousGreetings == 0 && state.MeaningfulTurns == 0 {
+				return "你好，你是？"
 			}
 			return "你好，怎么称呼你？"
 		}
 		if previousGreetings == 0 {
-			if stage == relationship.Close {
+			if state.Stage == relationship.Close {
 				return "你来啦。"
 			}
 			return "嗨。"
@@ -47,8 +51,11 @@ func greetingReply(c config.Config, stage relationship.Stage, recent []store.Ent
 		}
 		return "欸，你又来啦。"
 	}
-	if stage == relationship.Stranger {
-		if previousGreetings == 0 {
+	if state.Stage == relationship.Stranger {
+		if askedIdentity {
+			return "Hi."
+		}
+		if previousGreetings == 0 && state.MeaningfulTurns == 0 {
 			return "Hi. Have we met?"
 		}
 		return "Hi. What should I call you?"

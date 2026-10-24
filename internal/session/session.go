@@ -61,7 +61,7 @@ func (s Session) ComposeReply(ctx context.Context) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return greetingReply(s.Config, state.Stage, recent, time.Now()), nil
+		return greetingReply(s.Config, state, recent, time.Now()), nil
 	}
 	reply, err := s.Client.Complete(ctx, s.Config.Model, messages)
 	if err != nil {

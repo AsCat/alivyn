@@ -20,7 +20,10 @@ func TestFamiliarityNeedsConversationAndRespectsDistance(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		s, _ = Advance(s, "那本书结尾我挺喜欢。", false, day.AddDate(0, 0, 1), time.UTC)
 	}
-	if s.Stage != Familiar || s.SharedDays != 2 {
+	for i := 0; i < 4; i++ {
+		s, _ = Advance(s, "今天又想起里面一句话。", false, day.AddDate(0, 0, 2), time.UTC)
+	}
+	if s.Stage != Familiar || s.SharedDays != 3 {
 		t.Fatalf("shared conversation did not change stage: %+v", s)
 	}
 	s, _ = Advance(s, "别跟我这么熟，保持距离", false, day, time.UTC)

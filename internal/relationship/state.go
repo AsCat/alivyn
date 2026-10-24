@@ -67,10 +67,10 @@ func stageFor(s State) Stage {
 	if s.MeaningfulTurns >= 2 || s.Disclosures >= 1 {
 		stage = Acquaintance
 	}
-	if s.MeaningfulTurns >= 8 && s.SharedDays >= 2 {
+	if s.MeaningfulTurns >= 12 && s.SharedDays >= 3 {
 		stage = Familiar
 	}
-	if s.MeaningfulTurns >= 20 && s.SharedDays >= 4 && s.Disclosures >= 2 {
+	if s.MeaningfulTurns >= 40 && s.SharedDays >= 14 && s.Disclosures >= 2 {
 		stage = Close
 	}
 	if s.Reserved && (stage == Familiar || stage == Close) {

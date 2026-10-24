@@ -85,12 +85,19 @@ func (r *Relay) Handler() http.Handler {
 		req.Body = http.MaxBytesReader(w, req.Body, 16384)
 		var input struct {
 			Text string `json:"text"`
+			Key  string `json:"key"`
 		}
 		if err := json.NewDecoder(req.Body).Decode(&input); err != nil {
 			http.Error(w, "invalid message", http.StatusBadRequest)
 			return
 		}
-		if err := r.Send(req.Context(), id, input.Text); err != nil {
+		var err error
+		if input.Key != "" {
+			err = r.SendProactive(req.Context(), id, input.Text, input.Key)
+		} else {
+			err = r.Send(req.Context(), id, input.Text)
+		}
+		if err != nil {
 			http.Error(w, "message could not be delivered", http.StatusBadGateway)
 			return
 		}

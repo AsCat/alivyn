@@ -110,3 +110,13 @@ func (c Client) Send(ctx context.Context, text string) error {
 		Text string `json:"text"`
 	}{text}, nil)
 }
+
+func (c Client) SendProactive(ctx context.Context, text, key string) error {
+	if strings.TrimSpace(text) == "" || strings.TrimSpace(key) == "" {
+		return errors.New("empty proactive message or key")
+	}
+	return c.do(ctx, http.MethodPost, "/v1/send", struct {
+		Text string `json:"text"`
+		Key  string `json:"key"`
+	}{text, key}, nil)
+}

@@ -11,7 +11,7 @@ import (
 	"github.com/AsCat/alivyn/internal/sharedrelay"
 )
 
-type sentMessage struct{ chatID, text string }
+type sentMessage struct{ chatID, text, key string }
 type fakeSender struct {
 	mu   sync.Mutex
 	sent []sentMessage
@@ -20,7 +20,14 @@ type fakeSender struct {
 func (f *fakeSender) Send(_ context.Context, chatID, text string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.sent = append(f.sent, sentMessage{chatID, text})
+	f.sent = append(f.sent, sentMessage{chatID: chatID, text: text})
+	return nil
+}
+
+func (f *fakeSender) SendIdempotent(_ context.Context, chatID, text, key string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sent = append(f.sent, sentMessage{chatID: chatID, text: text, key: key})
 	return nil
 }
 
@@ -106,9 +113,17 @@ func TestSharedPairingRoutesOnlyToBoundAgent(t *testing.T) {
 	if err := clientB.Send(ctx, "reply B"); err != nil {
 		t.Fatal(err)
 	}
+	if err := clientA.SendProactive(ctx, "follow-up A", "same-intent"); err != nil {
+		t.Fatal(err)
+	}
+	if err := clientB.SendProactive(ctx, "follow-up B", "same-intent"); err != nil {
+		t.Fatal(err)
+	}
 	sender.mu.Lock()
 	defer sender.mu.Unlock()
-	if len(sender.sent) != 2 || sender.sent[0].chatID != "oc_a" || sender.sent[1].chatID != "oc_b" {
+	if len(sender.sent) != 4 || sender.sent[0].chatID != "oc_a" || sender.sent[1].chatID != "oc_b" ||
+		sender.sent[2].chatID != "oc_a" || sender.sent[3].chatID != "oc_b" ||
+		sender.sent[2].key == "" || sender.sent[2].key == sender.sent[3].key {
 		t.Fatalf("outbound messages crossed users: %+v", sender.sent)
 	}
 	if _, err := (sharedclient.Client{BaseURL: server.URL, Token: "wrong-token-that-is-long-enough-to-check"}).Status(ctx); err == nil {

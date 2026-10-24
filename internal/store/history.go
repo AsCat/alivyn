@@ -107,6 +107,15 @@ CREATE TABLE IF NOT EXISTS contact_outbox (
   body TEXT NOT NULL,
   sent_ns INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS contact_delivery (
+  intent_id INTEGER PRIMARY KEY REFERENCES contact_intents(id),
+  body TEXT NOT NULL,
+  first_attempt_ns INTEGER NOT NULL,
+  last_attempt_ns INTEGER NOT NULL,
+  attempts INTEGER NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('pending','sent','failed')),
+  sent_ns INTEGER
+);
 CREATE TABLE IF NOT EXISTS runtime_state (
   id INTEGER PRIMARY KEY CHECK(id = 1),
   last_active_ns INTEGER,

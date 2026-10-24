@@ -39,7 +39,7 @@ func runContact(ctx context.Context, args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "paused=%t quiet=%s-%s daily_limit=%d timezone=%s transport=local-outbox\n",
+		fmt.Fprintf(out, "paused=%t quiet=%s-%s daily_limit=%d timezone=%s serve_transport=local-outbox feishu_run_transport=feishu\n",
 			p.Paused, p.QuietStart, p.QuietEnd, p.DailyLimit, zone)
 	case "pause", "resume":
 		if len(args) != 1 {

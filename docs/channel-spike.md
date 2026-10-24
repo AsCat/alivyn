@@ -31,6 +31,6 @@ The optional `alivyn channel feishu add` now uses the official Go SDK's [one-cli
 1. Create a Feishu bot under a project-controlled account; test external sharing, its QR code, first-use confirmation, and private-message events with a separate personal account.
 2. Deploy the relay behind HTTPS and complete the existing pairing and routing flow with two real accounts and two local runtimes; check bot permission review, queue expiry and re-pairing.
 3. Create a fresh personal Feishu organization; test the optional QR app-registration path end to end.
-4. Connect the existing proactive contact policy to a channel delivery adapter with durable idempotency, then verify real proactive contact on a phone, including pause, quiet hours and restart behavior.
+4. Verify the implemented proactive delivery on a real phone, including pause, quiet hours, correction, and restart behavior. Feishu's send-message `uuid` only deduplicates within one hour; attempts older than 55 minutes are recorded as uncertain failures rather than retried.
 
 No bot tokens or application secrets belong in this repository or its issue tracker.

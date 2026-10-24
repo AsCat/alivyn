@@ -26,6 +26,10 @@ type Sender interface {
 	Send(context.Context, string, string) error
 }
 
+type IdempotentSender interface {
+	SendIdempotent(context.Context, string, string, string) error
+}
+
 type Message struct {
 	EventID   string `json:"event_id"`
 	ChatID    string `json:"chat_id"`
@@ -354,4 +358,20 @@ func (r *Relay) Send(ctx context.Context, id, text string) error {
 		return errors.New("agent is not paired")
 	}
 	return r.sender.Send(ctx, chatID, text)
+}
+
+func (r *Relay) SendProactive(ctx context.Context, id, text, key string) error {
+	if strings.TrimSpace(text) == "" || len(text) > 8192 || strings.TrimSpace(key) == "" || len(key) > 128 {
+		return errors.New("invalid proactive message")
+	}
+	var chatID string
+	if err := r.db.QueryRowContext(ctx, "SELECT chat_id FROM agents WHERE id = ? AND open_id IS NOT NULL", id).Scan(&chatID); err != nil {
+		return errors.New("agent is not paired")
+	}
+	sender, ok := r.sender.(IdempotentSender)
+	if !ok {
+		return errors.New("relay sender does not support idempotent delivery")
+	}
+	sum := sha256.Sum256([]byte(id + ":" + key))
+	return sender.SendIdempotent(ctx, chatID, text, hex.EncodeToString(sum[:]))
 }

@@ -173,7 +173,14 @@ WHERE content LIKE '%面试%' OR lower(content) LIKE '%interview%'`); err != nil
 			if _, err := tx.ExecContext(ctx, "UPDATE contact_outbox SET topic = 'forgotten', body = '[forgotten memory]' WHERE topic = ?", change.Topic); err != nil {
 				return 0, err
 			}
+			if _, err := tx.ExecContext(ctx, `UPDATE contact_delivery SET body = '[forgotten memory]'
+WHERE intent_id IN (SELECT id FROM contact_intents WHERE topic = ?)`, change.Topic); err != nil {
+				return 0, err
+			}
 			if _, err := tx.ExecContext(ctx, "UPDATE feishu_inbox SET reply = '[forgotten memory]' WHERE reply LIKE '%面试%' OR lower(reply) LIKE '%interview%'"); err != nil {
+				return 0, err
+			}
+			if err := cancelPendingTopicTx(ctx, tx, change.Topic, at, "forgotten memory"); err != nil {
 				return 0, err
 			}
 			if _, err := tx.ExecContext(ctx, `UPDATE contact_intents

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -193,7 +195,8 @@ func runSelfFeishu(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	ch := channel.NewChannel(lark.NewClient(connection.AppID, connection.AppSecret),
+	apiClient := lark.NewClient(connection.AppID, connection.AppSecret)
+	ch := channel.NewChannel(apiClient,
 		larkws.NewClient(connection.AppID, connection.AppSecret))
 	ch.OnReady(func() {
 		fmt.Fprintln(out, "Feishu connected. Send a private text message to your bot. / 飞书已连接，请给机器人发私聊文字。")
@@ -225,6 +228,20 @@ func runSelfFeishu(out io.Writer) error {
 	})
 	s := session.Session{Config: c, History: h, Client: client}
 	go workFeishu(ctx, h, s, ch, out)
+	go workChannelContact(ctx, h, zone, c.Language, func() bool {
+		connectionMu.Lock()
+		defer connectionMu.Unlock()
+		return connection.ChatID != ""
+	}, func(ctx context.Context, body, key string) error {
+		connectionMu.Lock()
+		chatID := connection.ChatID
+		connectionMu.Unlock()
+		if chatID == "" {
+			return errors.New("Feishu private chat has not been paired")
+		}
+		sum := sha256.Sum256([]byte(connection.AppID + ":" + key))
+		return (relayFeishuSender{client: apiClient}).SendIdempotent(ctx, chatID, body, hex.EncodeToString(sum[:]))
+	}, out)
 	err = ch.Start(ctx)
 	if errors.Is(err, context.Canceled) {
 		return nil

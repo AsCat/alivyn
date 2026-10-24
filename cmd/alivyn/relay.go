@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,14 +17,38 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/larksuite/oapi-sdk-go/v3/channel"
 	"github.com/larksuite/oapi-sdk-go/v3/channel/types"
+	im "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
 
-type relayFeishuSender struct{ channel types.Channel }
+type relayFeishuSender struct {
+	channel types.Channel
+	client  *lark.Client
+}
 
 func (s relayFeishuSender) Send(ctx context.Context, chatID, text string) error {
 	_, err := s.channel.Send(ctx, &types.SendInput{ChatID: chatID, Text: text})
 	return err
+}
+
+func (s relayFeishuSender) SendIdempotent(ctx context.Context, chatID, message, key string) error {
+	content, err := json.Marshal(struct {
+		Text string `json:"text"`
+	}{message})
+	if err != nil {
+		return err
+	}
+	req := im.NewCreateMessageReqBuilder().ReceiveIdType("chat_id").Body(
+		im.NewCreateMessageReqBodyBuilder().ReceiveId(chatID).MsgType("text").Content(string(content)).Uuid(key).Build(),
+	).Build()
+	resp, err := s.client.Im.Message.Create(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !resp.Success() {
+		return fmt.Errorf("Feishu send failed: code %d", resp.Code)
+	}
+	return nil
 }
 
 func runRelay(args []string, out io.Writer) error {
@@ -50,8 +75,9 @@ func runRelay(args []string, out io.Writer) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	ch := channel.NewChannel(lark.NewClient(appID, appSecret), larkws.NewClient(appID, appSecret))
-	relay, err := sharedrelay.Open(ctx, dir, botURL, relayFeishuSender{channel: ch})
+	apiClient := lark.NewClient(appID, appSecret)
+	ch := channel.NewChannel(apiClient, larkws.NewClient(appID, appSecret))
+	relay, err := sharedrelay.Open(ctx, dir, botURL, relayFeishuSender{channel: ch, client: apiClient})
 	if err != nil {
 		return err
 	}

@@ -264,7 +264,9 @@ func (h *History) processDue(ctx context.Context, at time.Time, zone *time.Locat
 		return nil, errors.New("contact timezone is required")
 	}
 	rows, err := h.db.QueryContext(ctx, `SELECT id FROM contact_intents
-WHERE state = 'pending' AND due_ns <= ? ORDER BY due_ns, id`, at.UnixNano())
+WHERE state = 'pending' AND due_ns <= ? AND NOT EXISTS
+  (SELECT 1 FROM contact_delivery WHERE contact_delivery.intent_id = contact_intents.id)
+ORDER BY due_ns, id`, at.UnixNano())
 	if err != nil {
 		return nil, err
 	}
@@ -425,6 +427,10 @@ WHERE id = ? AND state = 'pending'`, reason, at.UnixNano(), id)
 }
 
 func evaluateIntentTx(ctx context.Context, tx *sql.Tx, item ContactIntent, at time.Time, zone *time.Location) (contact.Decision, error) {
+	return evaluateIntentTxExcluding(ctx, tx, item, at, zone, 0)
+}
+
+func evaluateIntentTxExcluding(ctx context.Context, tx *sql.Tx, item ContactIntent, at time.Time, zone *time.Location, excludedDeliveryID int64) (contact.Decision, error) {
 	current := true
 	if item.SourceRevision.Valid {
 		var latest int64
@@ -453,6 +459,14 @@ WHERE topic = ? ORDER BY id DESC LIMIT 1`, item.Topic).Scan(&latest, &action, &p
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM contact_outbox WHERE sent_ns >= ? AND sent_ns < ?", start.UnixNano(), end.UnixNano()).Scan(&sentToday); err != nil {
 		return contact.Decision{}, err
 	}
+	var channelToday int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM contact_delivery d
+JOIN contact_intents i ON i.id = d.intent_id
+WHERE ((d.state = 'pending' AND i.state = 'pending') OR (d.state = 'sent' AND d.sent_ns >= ? AND d.sent_ns < ?))
+AND d.intent_id != ?`, start.UnixNano(), end.UnixNano(), excludedDeliveryID).Scan(&channelToday); err != nil {
+		return contact.Decision{}, err
+	}
+	sentToday += channelToday
 	return contact.Evaluate(at, zone, policy, contact.Intent{Due: item.Due, Expires: item.Expires, Current: current}, sentToday), nil
 }
 

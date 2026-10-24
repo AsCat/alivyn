@@ -122,6 +122,9 @@ func (h *History) prepareChannelContact(ctx context.Context, id int64, at time.T
 	if err != nil {
 		return ChannelContact{}, false, err
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE contact_intents SET reason = 'Feishu delivery pending', updated_ns = ? WHERE id = ?`, at.UnixNano(), id); err != nil {
+		return ChannelContact{}, false, err
+	}
 	if err := tx.Commit(); err != nil {
 		return ChannelContact{}, false, err
 	}

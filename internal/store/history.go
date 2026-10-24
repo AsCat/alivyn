@@ -171,6 +171,19 @@ CREATE TABLE IF NOT EXISTS world_events (
   related_to_user INTEGER NOT NULL CHECK(related_to_user IN (0,1)),
   UNIQUE(day, kind)
 );
+CREATE TABLE IF NOT EXISTS actor_decisions (
+  source_message_id INTEGER PRIMARY KEY REFERENCES messages(id),
+  decision_json TEXT NOT NULL,
+  decided_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS relationship_snapshots (
+  source_message_id INTEGER PRIMARY KEY REFERENCES messages(id),
+  state_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS assistant_turns (
+  source_message_id INTEGER PRIMARY KEY REFERENCES messages(id),
+  assistant_message_id INTEGER NOT NULL UNIQUE REFERENCES messages(id)
+);
 `); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)
@@ -196,10 +209,34 @@ func (h *History) Add(ctx context.Context, role, content string, at time.Time) e
 }
 
 func (h *History) Recent(ctx context.Context, limit int) ([]Entry, error) {
+	return h.recent(ctx, limit, 0)
+}
+
+// RecentThrough excludes messages written after the specified user message.
+// This keeps an inbox worker from answering a later queued message first.
+func (h *History) RecentThrough(ctx context.Context, limit int, throughID int64) ([]Entry, error) {
+	if throughID < 1 {
+		return nil, errors.New("history cutoff must be positive")
+	}
+	return h.recent(ctx, limit, throughID)
+}
+
+func (h *History) PriorUserTurns(ctx context.Context, beforeID int64) (int, error) {
+	if beforeID < 1 {
+		return 0, errors.New("history cutoff must be positive")
+	}
+	var count int
+	err := h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages
+WHERE role = 'user' AND id < ? AND content != '[forgotten memory]'`, beforeID).Scan(&count)
+	return count, err
+}
+
+func (h *History) recent(ctx context.Context, limit int, throughID int64) ([]Entry, error) {
 	if limit < 1 || limit > 100 {
 		return nil, errors.New("history limit must be between 1 and 100")
 	}
-	rows, err := h.db.QueryContext(ctx, "SELECT id, role, content, created_at FROM messages ORDER BY id DESC LIMIT ?", limit)
+	query := "SELECT id, role, content, created_at FROM messages WHERE (? = 0 OR id <= ?) ORDER BY id DESC LIMIT ?"
+	rows, err := h.db.QueryContext(ctx, query, throughID, throughID, limit)
 	if err != nil {
 		return nil, err
 	}

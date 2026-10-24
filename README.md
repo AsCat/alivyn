@@ -51,6 +51,8 @@ The default voice is **natural**: direct and concise, with warmth earned through
 
 The current memory extractor recognizes explicit interview statements and short personal disclosures such as “My name is Ari” and “I like coffee.” Personal facts keep their source, survive a long conversation, and can be corrected by a later statement. “Forget my name” or “Forget that I like coffee” removes the corresponding active fact and redacts its source messages. Interview memories retain their existing correction and `memory forget interview` behavior. `memory list` shows active facts; `memory export` returns JSON with `events` and `personal` arrays. The export contains active derived memory only, not a full account export. Longer or ambiguous statements are not automatically promoted to durable personal memory.
 
+An experimental encounter engine follows the [persistent actor architecture](docs/actor-architecture.md): it retrieves sourced episodes, records a short conversational decision, writes the reply in a separate model call, and checks factual and relationship boundaries before delivery. `alivyn actor eval all` runs isolated multi-turn scenarios with the configured model; `alivyn actor status` shows the active engine, and `alivyn actor set actor_v1` enables the experiment after a channel restart (`alivyn actor set legacy` restores the default). Each experimental reply normally uses three model calls and may use five when a rewrite is needed. The goal-driven world engine and full proactive integration are still being built; the default Feishu experience remains on the previous engine while the new one is evaluated.
+
 Replay a contact-decision story without a model key or channel account:
 
 ```sh

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -14,6 +15,29 @@ import (
 // shared. The conversation, rather than the assistant's claims, moves it.
 func (h *History) Relationship(ctx context.Context) (relationship.State, error) {
 	return relationshipFrom(ctx, h.db)
+}
+
+// RelationshipAt reads the stage when a particular user turn arrived. A
+// current request for distance still overrides an older queued reply.
+func (h *History) RelationshipAt(ctx context.Context, sourceMessageID int64) (relationship.State, error) {
+	var raw string
+	err := h.db.QueryRowContext(ctx, "SELECT state_json FROM relationship_snapshots WHERE source_message_id = ?", sourceMessageID).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return h.Relationship(ctx) // Messages recorded before snapshots existed.
+	}
+	if err != nil {
+		return relationship.State{}, err
+	}
+	var state relationship.State
+	if err := json.Unmarshal([]byte(raw), &state); err != nil {
+		return relationship.State{}, err
+	}
+	current, err := h.Relationship(ctx)
+	if err != nil {
+		return relationship.State{}, err
+	}
+	state.Reserved = state.Reserved || current.Reserved
+	return state, nil
 }
 
 type relationshipQuerier interface {
@@ -102,11 +126,19 @@ ON CONFLICT(id) DO UPDATE SET version=excluded.version`); err != nil {
 	return tx.Commit()
 }
 
-func advanceRelationshipTx(ctx context.Context, tx *sql.Tx, text string, disclosure bool, at time.Time, zone *time.Location) error {
+func advanceRelationshipTx(ctx context.Context, tx *sql.Tx, sourceMessageID int64, text string, disclosure bool, at time.Time, zone *time.Location) error {
 	s, err := relationshipFrom(ctx, tx)
 	if err != nil {
 		return err
 	}
 	s, _ = relationship.Advance(s, text, disclosure, at, zone)
-	return saveRelationshipTx(ctx, tx, s)
+	if err := saveRelationshipTx(ctx, tx, s); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, "INSERT INTO relationship_snapshots(source_message_id, state_json) VALUES (?, ?)", sourceMessageID, string(raw))
+	return err
 }

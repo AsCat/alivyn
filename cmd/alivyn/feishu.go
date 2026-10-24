@@ -287,7 +287,7 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 		return err
 	}
 	if item.State == "pending" {
-		reply, err := s.ComposeReply(ctx)
+		reply, err := s.ComposeReplyFor(ctx, item.UserMessageID)
 		if err != nil {
 			return err
 		}

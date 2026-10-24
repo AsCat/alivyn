@@ -80,3 +80,32 @@ func TestRelationshipMigrationRemovesFalseFamiliarityFromRecognitionProbes(t *te
 		t.Fatalf("migration retained false familiarity: %+v %v", s, err)
 	}
 }
+
+func TestRelationshipAtUsesTurnSnapshotAndCurrentDistance(t *testing.T) {
+	ctx := context.Background()
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	for _, line := range []string{"我正在修一段录音", "我想过一会儿再听听", "别跟我这么熟"} {
+		if err := h.AddUserMessage(ctx, line, at, time.UTC); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := h.RelationshipAt(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := h.RelationshipAt(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Stage != relationship.Stranger || second.Stage != relationship.Acquaintance {
+		t.Fatalf("queued messages shared the latest relationship stage: first=%+v second=%+v", first, second)
+	}
+	if !first.Reserved || !second.Reserved {
+		t.Fatal("a later request for distance did not constrain pending replies")
+	}
+}

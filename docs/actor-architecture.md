@@ -1,6 +1,6 @@
 # Persistent actor architecture (RFC 02)
 
-Status: design proposal, not yet implemented. This replaces the approach of tuning a line of dialogue for each social situation. The current seven-day Tidehaven story is a persistence prototype.
+Status: partially implemented as the opt-in `actor_v1` encounter engine. Sourced retrieval, a persisted decision, separate realization, a review pass, and isolated cross-situation evaluation are in place. The goal-driven world loop, unified event ledger, and proactive decision integration remain planned. The current seven-day Tidehaven story is a persistence prototype.
 
 ## Product goal and truth boundary
 

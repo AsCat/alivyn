@@ -53,7 +53,16 @@ func (s Session) GenerateReply(ctx context.Context) (string, error) {
 // ComposeReply builds a reply without persisting it. Channel workers can use
 // this to commit a delivery record and the assistant message atomically.
 func (s Session) ComposeReply(ctx context.Context) (string, error) {
-	messages, recent, err := s.contextMessages(ctx, time.Now())
+	return s.ComposeReplyAt(ctx, time.Now())
+}
+
+// ComposeReplyAt uses the same engine with an injected clock for isolated
+// timeline evaluations. Production callers use ComposeReply.
+func (s Session) ComposeReplyAt(ctx context.Context, now time.Time) (string, error) {
+	if s.Config.EffectiveEngine() == "actor_v1" {
+		return s.composeActorReply(ctx, now, 0)
+	}
+	messages, recent, err := s.contextMessages(ctx, now)
 	if err != nil {
 		return "", err
 	}
@@ -111,6 +120,15 @@ func (s Session) ComposeReply(ctx context.Context) (string, error) {
 		}
 	}
 	return reply, nil
+}
+
+// ComposeReplyFor answers a specific persisted user turn. Channel workers use
+// it when several incoming messages have already been queued.
+func (s Session) ComposeReplyFor(ctx context.Context, userMessageID int64) (string, error) {
+	if s.Config.EffectiveEngine() != "actor_v1" {
+		return s.ComposeReply(ctx)
+	}
+	return s.composeActorReply(ctx, time.Now(), userMessageID)
 }
 
 func bareGreeting(text string) bool {

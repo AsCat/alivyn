@@ -18,6 +18,11 @@ type PersonalFact struct {
 
 func recordPersonalTx(ctx context.Context, tx *sql.Tx, change memory.PersonalChange, sourceID int64, at time.Time) error {
 	if change.Forget {
+		// Decisions can contain paraphrases of a forgotten fact. They are
+		// derived state and can be planned again if a delivery is retried.
+		if _, err := tx.ExecContext(ctx, "DELETE FROM actor_decisions"); err != nil {
+			return err
+		}
 		rows, err := tx.QueryContext(ctx, "SELECT source_message_id FROM personal_memory WHERE memory_key = ? AND action = 'upsert'", change.Key)
 		if err != nil {
 			return err
@@ -42,7 +47,10 @@ func recordPersonalTx(ctx context.Context, tx *sql.Tx, change memory.PersonalCha
 WHERE id >= ? AND id < COALESCE((SELECT MIN(id) FROM messages WHERE role = 'user' AND id > ?), 9223372036854775807)`, id, id); err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, "UPDATE feishu_inbox SET reply = '[forgotten memory]' WHERE user_message_id = ? AND state = 'ready'", id); err != nil {
+			if err := redactLinkedReplyTx(ctx, tx, id); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE feishu_inbox SET reply = NULL, state = 'sent' WHERE user_message_id = ? AND state IN ('pending','ready')", id); err != nil {
 				return err
 			}
 		}

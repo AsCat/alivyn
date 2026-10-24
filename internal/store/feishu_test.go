@@ -54,3 +54,52 @@ func TestFeishuInboxDeduplicatesAndRecovers(t *testing.T) {
 		t.Fatalf("conversation history was not durable: %+v, %v", entries, err)
 	}
 }
+
+func TestQueuedReplyFollowsItsSourceAndForgetRedactsIt(t *testing.T) {
+	ctx := context.Background()
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Now()
+	if _, err := h.EnqueueFeishu(ctx, "e1", "c", "m1", "我叫小明", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.EnqueueFeishu(ctx, "e2", "c", "m2", "你怎么称呼我？", at.Add(time.Second), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SetFeishuReply(ctx, "e1", "你好，小明。", at.Add(2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	transcript, err := h.ActorTranscriptThrough(ctx, 10, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(transcript) != 3 || transcript[0].Content != "我叫小明" || transcript[1].Content != "你好，小明。" || transcript[2].Content != "你怎么称呼我？" {
+		t.Fatalf("queued reply was not placed after its source: %+v", transcript)
+	}
+	if _, err := h.EnqueueFeishu(ctx, "e3", "c", "m3", "等下还有一件事", at.Add(3*time.Second), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	transcript, err = h.ActorTranscriptThrough(ctx, 10, 4)
+	if err != nil || len(transcript) != 4 || transcript[1].Content != "你好，小明。" || transcript[2].Content != "你怎么称呼我？" {
+		t.Fatalf("later transcript lost causal message order: %+v err=%v", transcript, err)
+	}
+	if err := h.AddUserMessage(ctx, "忘记我的名字", at.Add(4*time.Second), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := h.Recent(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Content == "我叫小明" || entry.Content == "你好，小明。" {
+			t.Fatalf("linked reply survived forgetting: %+v", entries)
+		}
+	}
+	item, ok, err := h.NextFeishu(ctx)
+	if err != nil || !ok || item.EventID != "e2" {
+		t.Fatalf("forgotten queued reply still pending for delivery: %+v found=%v err=%v", item, ok, err)
+	}
+}

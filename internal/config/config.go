@@ -24,6 +24,7 @@ type Config struct {
 	Style         string `json:"style,omitempty"`
 	Background    string `json:"background,omitempty"`
 	WorldPack     string `json:"world_pack,omitempty"`
+	Engine        string `json:"engine,omitempty"`
 	Provider      string `json:"provider"`
 	BaseURL       string `json:"base_url"`
 	Model         string `json:"model"`
@@ -68,6 +69,9 @@ func (c Config) Validate() error {
 	if c.WorldPack != "" && c.WorldPack != "tidehaven" && c.WorldPack != "none" {
 		return errors.New("world pack must be tidehaven or none")
 	}
+	if c.Engine != "" && c.Engine != "legacy" && c.Engine != "actor_v1" {
+		return errors.New("engine must be legacy or actor_v1")
+	}
 	if c.Provider != "deepseek" && c.Provider != "custom" {
 		return errors.New("provider must be deepseek or custom")
 	}
@@ -106,6 +110,22 @@ func (c Config) EffectiveWorldPack() string {
 		return "tidehaven"
 	}
 	return c.WorldPack
+}
+
+func (c Config) EffectiveEngine() string {
+	if c.Engine == "" {
+		return "legacy"
+	}
+	return c.Engine
+}
+
+func SaveEngine(engine string) error {
+	c, err := Load()
+	if err != nil {
+		return err
+	}
+	c.Engine = engine
+	return saveExisting(c)
 }
 
 func SaveWorldPack(pack string) error {

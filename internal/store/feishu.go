@@ -9,12 +9,13 @@ import (
 )
 
 type FeishuInboxItem struct {
-	EventID    string
-	ChatID     string
-	MessageID  string
-	Reply      string
-	State      string
-	ReceivedAt time.Time
+	EventID       string
+	ChatID        string
+	MessageID     string
+	UserMessageID int64
+	Reply         string
+	State         string
+	ReceivedAt    time.Time
 }
 
 // EnqueueFeishu stores a Feishu event and its conversation entry in one
@@ -51,9 +52,9 @@ VALUES (?, ?, ?, ?, 'pending', ?)`, eventID, chatID, messageID, userMessageID, a
 func (h *History) NextFeishu(ctx context.Context) (FeishuInboxItem, bool, error) {
 	var item FeishuInboxItem
 	var receivedNS int64
-	err := h.db.QueryRowContext(ctx, `SELECT event_id, chat_id, message_id, COALESCE(reply,''), state, received_ns
+	err := h.db.QueryRowContext(ctx, `SELECT event_id, chat_id, message_id, user_message_id, COALESCE(reply,''), state, received_ns
 FROM feishu_inbox WHERE state IN ('pending','ready') ORDER BY received_ns, rowid LIMIT 1`).
-		Scan(&item.EventID, &item.ChatID, &item.MessageID, &item.Reply, &item.State, &receivedNS)
+		Scan(&item.EventID, &item.ChatID, &item.MessageID, &item.UserMessageID, &item.Reply, &item.State, &receivedNS)
 	if errors.Is(err, sql.ErrNoRows) {
 		return FeishuInboxItem{}, false, nil
 	}
@@ -85,7 +86,17 @@ func (h *History) SetFeishuReply(ctx context.Context, eventID, reply string, at 
 	if rows != 1 {
 		return errors.New("Feishu event is not pending")
 	}
-	if _, err := tx.ExecContext(ctx, "INSERT INTO messages(role, content, created_at) VALUES ('assistant', ?, ?)", reply, at.UTC().Format(time.RFC3339Nano)); err != nil {
+	message, err := tx.ExecContext(ctx, "INSERT INTO messages(role, content, created_at) VALUES ('assistant', ?, ?)", reply, at.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return err
+	}
+	assistantID, err := message.LastInsertId()
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO assistant_turns(source_message_id, assistant_message_id)
+SELECT user_message_id, ? FROM feishu_inbox WHERE event_id = ?`, assistantID, eventID)
+	if err != nil {
 		return err
 	}
 	return tx.Commit()

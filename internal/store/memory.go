@@ -108,7 +108,7 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			return 0, err
 		}
 	}
-	if err := advanceRelationshipTx(ctx, tx, text, personalRecognized && !personal.Forget, at, zone); err != nil {
+	if err := advanceRelationshipTx(ctx, tx, messageID, text, personalRecognized && !personal.Forget, at, zone); err != nil {
 		return 0, err
 	}
 	if recognized {
@@ -145,6 +145,9 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			}
 		}
 		if change.Action == memory.Forget && change.Topic == "interview" {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM actor_decisions"); err != nil {
+				return 0, err
+			}
 			// Redact each source utterance and its immediate assistant replies,
 			// including replies that repeated a date without naming the topic.
 			rows, err := tx.QueryContext(ctx, "SELECT source_message_id FROM memory_revisions WHERE topic = ?", change.Topic)
@@ -168,6 +171,12 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			for _, sourceID := range sources {
 				if _, err := tx.ExecContext(ctx, `UPDATE messages SET content = '[forgotten memory]'
 WHERE id >= ? AND id < COALESCE((SELECT MIN(id) FROM messages WHERE role = 'user' AND id > ?), 9223372036854775807)`, sourceID, sourceID); err != nil {
+					return 0, err
+				}
+				if err := redactLinkedReplyTx(ctx, tx, sourceID); err != nil {
+					return 0, err
+				}
+				if _, err := tx.ExecContext(ctx, "UPDATE feishu_inbox SET reply = NULL, state = 'sent' WHERE user_message_id = ? AND state IN ('pending','ready')", sourceID); err != nil {
 					return 0, err
 				}
 			}
@@ -239,7 +248,18 @@ ORDER BY r.topic`)
 // Superseded transcript entries remain visible to the user; forgotten entries
 // are redacted in the database.
 func (h *History) RecentForModel(ctx context.Context, limit int) ([]Entry, error) {
-	entries, err := h.Recent(ctx, limit)
+	return h.recentForModel(ctx, limit, 0)
+}
+
+func (h *History) RecentForModelThrough(ctx context.Context, limit int, throughID int64) ([]Entry, error) {
+	if throughID < 1 {
+		return nil, errors.New("history cutoff must be positive")
+	}
+	return h.recentForModel(ctx, limit, throughID)
+}
+
+func (h *History) recentForModel(ctx context.Context, limit int, throughID int64) ([]Entry, error) {
+	entries, err := h.recent(ctx, limit, throughID)
 	if err != nil {
 		return nil, err
 	}

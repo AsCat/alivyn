@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -12,6 +13,74 @@ import (
 	"github.com/AsCat/alivyn/internal/store"
 	"github.com/larksuite/oapi-sdk-go/v3/channel/types"
 )
+
+type actorQueueCompleter struct {
+	frames []struct {
+		Latest struct {
+			Text string `json:"text"`
+		} `json:"latest"`
+		Evidence []struct {
+			Text string `json:"text"`
+		} `json:"evidence"`
+	}
+	calls int
+}
+
+func (f *actorQueueCompleter) Complete(_ context.Context, _ string, messages []model.Message) (string, error) {
+	f.calls++
+	switch (f.calls - 1) % 3 {
+	case 0:
+		var frame struct {
+			Latest struct {
+				Text string `json:"text"`
+			} `json:"latest"`
+			Evidence []struct {
+				Text string `json:"text"`
+			} `json:"evidence"`
+		}
+		if err := json.Unmarshal([]byte(messages[1].Content), &frame); err != nil {
+			return "", err
+		}
+		f.frames = append(f.frames, frame)
+		return `{"act":"acknowledge","focus":"the user's current message","evidence_ids":[],"brevity":"short"}`, nil
+	case 1:
+		return "明白。", nil
+	default:
+		return `{"pass":true,"issue":""}`, nil
+	}
+}
+
+func TestFeishuActorAnswersQueuedMessagesInOrder(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Now().Add(-time.Minute)
+	if _, err := h.EnqueueFeishu(ctx, "e1", "chat", "m1", "first private note", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.EnqueueFeishu(ctx, "e2", "chat", "m2", "second private note", at.Add(time.Second), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &actorQueueCompleter{}
+	s := session.Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "actor_v1", WorldPack: "none"}, History: h, Client: client}
+	sender := &flakySender{}
+	for range 2 {
+		if err := processFeishuOnce(ctx, h, s, sender); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(client.frames) != 2 || client.frames[0].Latest.Text != "first private note" || client.frames[1].Latest.Text != "second private note" {
+		t.Fatalf("inbox messages were answered against the wrong turn: %+v", client.frames)
+	}
+	for _, evidence := range client.frames[0].Evidence {
+		if evidence.Text == "second private note" {
+			t.Fatal("future queued message leaked into first reply")
+		}
+	}
+}
 
 type fakeCompleter struct{ calls int }
 

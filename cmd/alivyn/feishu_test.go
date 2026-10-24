@@ -75,3 +75,9 @@ func TestFeishuGateRequiresScanningOwnerPrivateText(t *testing.T) {
 		}
 	}
 }
+
+func TestFeishuWebSocketRegistersEventDispatcher(t *testing.T) {
+	if newFeishuWSClient("app", "secret").EventHandler() == nil {
+		t.Fatal("WebSocket connected without an event dispatcher; Feishu messages would time out")
+	}
+}

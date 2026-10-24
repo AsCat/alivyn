@@ -19,7 +19,6 @@ import (
 	"github.com/larksuite/oapi-sdk-go/v3/channel"
 	"github.com/larksuite/oapi-sdk-go/v3/channel/types"
 	im "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
-	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
 
 type relayFeishuSender struct {
@@ -85,7 +84,7 @@ func runRelay(args []string, out io.Writer) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	apiClient := lark.NewClient(appID, appSecret)
-	ch := channel.NewChannel(apiClient, larkws.NewClient(appID, appSecret))
+	ch := channel.NewChannel(apiClient, newFeishuWSClient(appID, appSecret))
 	relay, err := sharedrelay.Open(ctx, dir, botURL, relayFeishuSender{channel: ch, client: apiClient})
 	if err != nil {
 		return err

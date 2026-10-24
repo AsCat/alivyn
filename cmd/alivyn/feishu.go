@@ -23,6 +23,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/larksuite/oapi-sdk-go/v3/channel"
 	"github.com/larksuite/oapi-sdk-go/v3/channel/types"
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
 	"github.com/larksuite/oapi-sdk-go/v3/scene/registration"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 	"github.com/mdp/qrterminal/v3"
@@ -196,8 +197,7 @@ func runSelfFeishu(out io.Writer) error {
 		return err
 	}
 	apiClient := lark.NewClient(connection.AppID, connection.AppSecret)
-	ch := channel.NewChannel(apiClient,
-		larkws.NewClient(connection.AppID, connection.AppSecret))
+	ch := channel.NewChannel(apiClient, newFeishuWSClient(connection.AppID, connection.AppSecret))
 	ch.OnReady(func() {
 		fmt.Fprintln(out, "Feishu connected. Send a private text message to your bot. / 飞书已连接，请给机器人发私聊文字。")
 	})
@@ -247,6 +247,13 @@ func runSelfFeishu(out io.Writer) error {
 		return nil
 	}
 	return err
+}
+
+func newFeishuWSClient(appID, appSecret string) *larkws.Client {
+	// Channel.OnMessage registers on the dispatcher's event handler. Without
+	// this dispatcher, the socket connects but never acknowledges messages.
+	return larkws.NewClient(appID, appSecret,
+		larkws.WithEventHandler(dispatcher.NewEventDispatcher("", "")))
 }
 
 func workFeishu(ctx context.Context, h *store.History, s session.Session, ch feishuSender, out io.Writer) {

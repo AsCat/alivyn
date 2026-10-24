@@ -22,6 +22,7 @@ Requires Go 1.26 or Go's automatic toolchain download. Start with a time-advance
 
 ```sh
 go run ./cmd/alivyn demo en
+go run ./cmd/alivyn world demo en
 ```
 
 `init` stores your individual and model settings locally. The model key is stored separately in a private user config file with `0600` permissions.
@@ -43,6 +44,8 @@ Choose `deepseek` to use the current `deepseek-flash` preset, or `custom` to ent
 At setup, enter the user's IANA timezone (for example `Asia/Shanghai`) when the process may run on a server in another timezone. Existing local configs without this field continue to use the machine's local timezone.
 
 The default command opens one continuous TUI conversation. Press Enter to send, PgUp/PgDn to read history, and Esc to leave. `chat` remains a plain terminal fallback; both interfaces use the same local history. `history` prints stored messages, `doctor` checks SQLite, and `demo tui` checks terminal rendering. `demo en` uses a disposable database to show a revised memory, a quiet Wednesday, a Friday follow-up, a wake greeting, and duplicate suppression. Plain `demo` shows the same story in Chinese. None of these commands starts the background agent runtime.
+
+`world demo en` fast-forwards seven days in a disposable fictional world. In Tidehaven, Alivyn restores recordings at a sound archive and disagrees with a colleague about permission to publish an interview. One actual user conversation changes the following day's plan. `world show` and `world timeline` display the installed individual's setting and recorded events. The world advances in the configured timezone while the Feishu runtime is running, even without incoming messages. These are simulated character-life events, never offline experiences shared with the user. Tidehaven is enabled by default; `world set none` disables it and `world set tidehaven` enables it again. Restart a running channel after changing the pack. The first pack has authored events and a limited branch; an open-ended world planner remains future work.
 
 The default voice is **natural**: direct and concise, with warmth earned through conversation. Alivyn begins as a stranger, becomes acquainted through actual exchanges, and grows more familiar across days of conversation. Repeated greetings alone do not move that relationship forward; a request for more distance takes priority. `alivyn persona show` displays the style and character background. Use `alivyn persona set natural|romantic|companion` to change the style, or `alivyn persona background set '...'` to write a short character background. A custom background also shapes the first greeting. Restart a running channel after a persona change. In Feishu, replies have a small, bounded variation in arrival time, measured from the incoming message; slow model calls do not add an extra pause. Alivyn uses local time as context but does not guess what the user is doing from the clock.
 

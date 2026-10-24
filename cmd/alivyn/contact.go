@@ -136,6 +136,11 @@ func runServe(once bool, out io.Writer) error {
 	}
 	tick := func() error {
 		now := time.Now()
+		if c.EffectiveWorldPack() == "tidehaven" {
+			if _, err := h.AdvanceWorld(ctx, now, zone); err != nil {
+				return err
+			}
+		}
 		if err := h.ResumeRuntime(ctx, now); err != nil {
 			return err
 		}

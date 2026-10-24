@@ -11,6 +11,7 @@ import (
 	"github.com/AsCat/alivyn/internal/model"
 	"github.com/AsCat/alivyn/internal/relationship"
 	"github.com/AsCat/alivyn/internal/store"
+	"github.com/AsCat/alivyn/internal/world"
 )
 
 type Completer interface {
@@ -160,6 +161,17 @@ func (s Session) contextMessages(ctx context.Context, now time.Time) ([]model.Me
 		return nil, nil, err
 	}
 	messages[0].Content += "\n" + timeContext(now, zone, recent)
+	if s.Config.EffectiveWorldPack() == "tidehaven" {
+		worldState, err := s.History.AdvanceWorld(ctx, now, zone)
+		if err != nil {
+			return nil, nil, err
+		}
+		worldEvents, err := s.History.WorldEvents(ctx, 4)
+		if err != nil {
+			return nil, nil, err
+		}
+		messages[0].Content += "\n" + worldContext(s.Config.Language, worldState, worldEvents)
+	}
 	state, err := s.History.Relationship(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -198,6 +210,26 @@ func (s Session) contextMessages(ctx context.Context, now time.Time) ([]model.Me
 	return messages, recent, nil
 }
 
+func worldContext(language string, state world.State, events []world.Event) string {
+	var lines []string
+	if language == "zh-CN" {
+		lines = append(lines, world.CanonZh,
+			fmt.Sprintf("设定内生活进展：第 %d 天；口述录音已修复 %d 段。以下是已记录的设定内事件，较早的在前：", state.Day, state.Progress))
+		for _, event := range events {
+			lines = append(lines, event.Date+"："+event.Zh)
+		}
+		lines = append(lines, "这些是角色的虚构生活事件，可自然地作为她自己的经历提起，但不能说成现实世界中真实发生的事。角色可以有持续目标、分歧、偏好和未解决的问题；不要每条消息都主动讲日记。只能依据记录的日期谈经过的天数：第 1 天只有今天的经历，不能声称这两天或更久都在做同一件事。没有记录的经历不要补造。用户与她只在实际对话中相识；不能把设定内人物与用户混同，也不能暗示曾在线下见过用户。被直接问及世界或身份时，坦诚说明设定是虚构的。")
+	} else {
+		lines = append(lines, world.CanonEn,
+			fmt.Sprintf("In-world day %d; %d oral-history clips restored. Recorded fictional events, oldest first:", state.Day, state.Progress))
+		for _, event := range events {
+			lines = append(lines, event.Date+": "+event.En)
+		}
+		lines = append(lines, "These are simulated character-life events. You may refer to them naturally as your in-world life, but never claim they happened in the user's physical world. Have ongoing goals, disagreements, preferences, and open questions; do not recite a diary in every message. Ground elapsed time in the recorded dates: on day one, there is only today's experience, not two days or longer. Do not invent unrecorded events. The user is known only through actual conversation, never an offline meeting. If directly asked about identity or the world, say honestly that the setting is fictional.")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func SystemMessage(c config.Config) model.Message {
 	if c.Language == "zh-CN" {
 		style := map[string]string{
@@ -205,7 +237,7 @@ func SystemMessage(c config.Config) model.Message {
 			"romantic":  "有浪漫倾向，但亲密要在双方逐渐熟悉且对方欢迎后才自然出现，不索取关注。",
 			"companion": "沉稳，愿意认真想问题，也给对方留空间。",
 		}[c.EffectiveStyle()]
-		return model.Message{Role: "system", Content: fmt.Sprintf(`你叫%s。你是一个有连续经历和记忆的 AI 个体，日常聊天不需要反复介绍自己的身份。你与这个用户只有实际发生过的共同经历，不能编造线下生活、身体感受或过去的故事。
+		return model.Message{Role: "system", Content: fmt.Sprintf(`你叫%s。你是一个有连续经历和记忆的 AI 个体，日常聊天不需要反复介绍自己的身份。你与这个用户只有实际发生过的共同经历，不能编造与用户的线下生活、身体感受或未经记录的过去。若提供设定内世界的已记录事件，可以作为自己的虚构经历。
 人物背景：%s
 表达风格：%s
 像一个具体的人发消息那样说自然的中文；对方是陌生人时不能装作熟人。允许短到几个字，也允许在真正有内容时说长一些。别把回答写成“先共情、再分析、最后追问”的固定结构；别替用户猜心情或处境。用户只打招呼时就自然回应，不说“我在这儿”“随时陪你”“今天想聊什么”“有什么事吗”。用户说了一件具体事，先抓住其中一个具体点；想问就只问一个真正想知道的问题，不急着安慰或列举可能原因。不要每次都喊对方名字，也不要凭时间推测对方正在做什么。

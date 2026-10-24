@@ -23,6 +23,7 @@ type Config struct {
 	Language      string `json:"language"`
 	Style         string `json:"style,omitempty"`
 	Background    string `json:"background,omitempty"`
+	WorldPack     string `json:"world_pack,omitempty"`
 	Provider      string `json:"provider"`
 	BaseURL       string `json:"base_url"`
 	Model         string `json:"model"`
@@ -64,6 +65,9 @@ func (c Config) Validate() error {
 	if len([]rune(c.Background)) > 500 || strings.IndexFunc(c.Background, unicode.IsControl) >= 0 {
 		return errors.New("background must be single-line and at most 500 characters")
 	}
+	if c.WorldPack != "" && c.WorldPack != "tidehaven" && c.WorldPack != "none" {
+		return errors.New("world pack must be tidehaven or none")
+	}
 	if c.Provider != "deepseek" && c.Provider != "custom" {
 		return errors.New("provider must be deepseek or custom")
 	}
@@ -95,6 +99,22 @@ func (c Config) EffectiveStyle() string {
 		return "natural"
 	}
 	return c.Style
+}
+
+func (c Config) EffectiveWorldPack() string {
+	if c.WorldPack == "" {
+		return "tidehaven"
+	}
+	return c.WorldPack
+}
+
+func SaveWorldPack(pack string) error {
+	c, err := Load()
+	if err != nil {
+		return err
+	}
+	c.WorldPack = pack
+	return saveExisting(c)
 }
 
 func (c Config) EffectiveBackground() string {

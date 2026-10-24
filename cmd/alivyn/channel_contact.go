@@ -23,6 +23,11 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 	for ctx.Err() == nil {
 		now := time.Now()
 		if now.Sub(lastHeartbeat) >= time.Minute {
+			if s.Config.EffectiveWorldPack() == "tidehaven" {
+				if _, err := h.AdvanceWorld(ctx, now, zone); err != nil {
+					fmt.Fprintf(out, "World clock failed: %v\n", err)
+				}
+			}
 			if err := h.Heartbeat(ctx, now); err != nil {
 				fmt.Fprintf(out, "Contact heartbeat failed: %v\n", err)
 			}

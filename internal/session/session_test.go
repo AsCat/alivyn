@@ -23,6 +23,32 @@ type scriptedClient struct {
 	calls   [][]model.Message
 }
 
+func TestWorldContextUsesRecordedEventsAndCanBeDisabled(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock"}, History: h}
+	messages, _, err := s.contextMessages(ctx, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(flatten(messages), "汐湾") || !strings.Contains(flatten(messages), "没有标签的录音") {
+		t.Fatalf("fictional world not grounded in recorded event: %s", flatten(messages))
+	}
+	s.Config.WorldPack = "none"
+	messages, _, err = s.contextMessages(ctx, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(flatten(messages), "汐湾") || strings.Contains(flatten(messages), "没有标签的录音") {
+		t.Fatal("disabled world reached the model")
+	}
+}
+
 func (c *scriptedClient) Complete(_ context.Context, _ string, messages []model.Message) (string, error) {
 	c.calls = append(c.calls, append([]model.Message(nil), messages...))
 	reply := c.replies[0]

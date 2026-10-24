@@ -154,6 +154,23 @@ CREATE TABLE IF NOT EXISTS relationship_meta (
   id INTEGER PRIMARY KEY CHECK(id = 1),
   version INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS world_state (
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  day INTEGER NOT NULL,
+  local_date TEXT NOT NULL,
+  progress INTEGER NOT NULL,
+  last_user_turns INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS world_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  day INTEGER NOT NULL,
+  local_date TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  zh TEXT NOT NULL,
+  en TEXT NOT NULL,
+  related_to_user INTEGER NOT NULL CHECK(related_to_user IN (0,1)),
+  UNIQUE(day, kind)
+);
 `); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)

@@ -73,7 +73,7 @@ func pairSharedFeishu(ctx context.Context, relayURL string, out io.Writer) error
 		case <-ticker.C:
 		}
 	}
-	return errors.New("pairing code expired; run the pair command again")
+	return errors.New("pairing code expired; retry pairing. If you sent the code, the relay operator should check the Feishu receive-message event, persistent-connection mode, and app publication")
 }
 
 type sharedSender struct{ client sharedclient.Client }

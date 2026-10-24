@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -58,8 +59,16 @@ func runRelay(args []string, out io.Writer) error {
 	appID := os.Getenv("ALIVYN_RELAY_FEISHU_APP_ID")
 	appSecret := os.Getenv("ALIVYN_RELAY_FEISHU_APP_SECRET")
 	botURL := os.Getenv("ALIVYN_RELAY_FEISHU_BOT_URL")
+	if appID == "" && appSecret == "" {
+		if local, err := config.LoadFeishu(); err == nil {
+			appID, appSecret = local.AppID, local.AppSecret
+		}
+	}
+	if appID != "" && botURL == "" {
+		botURL = "https://applink.feishu.cn/client/bot/open?appId=" + url.QueryEscape(appID)
+	}
 	if appID == "" || appSecret == "" || botURL == "" {
-		return errors.New("relay operator must set ALIVYN_RELAY_FEISHU_APP_ID, ALIVYN_RELAY_FEISHU_APP_SECRET, and ALIVYN_RELAY_FEISHU_BOT_URL")
+		return errors.New("relay operator must connect a local Feishu app or set ALIVYN_RELAY_FEISHU_APP_ID and ALIVYN_RELAY_FEISHU_APP_SECRET")
 	}
 	listen := os.Getenv("ALIVYN_RELAY_LISTEN")
 	if listen == "" {

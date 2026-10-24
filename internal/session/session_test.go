@@ -235,6 +235,66 @@ func TestCustomBackgroundShapesFirstContactInsteadOfFixedGreeting(t *testing.T) 
 	}
 }
 
+func TestRecognitionProbeUsesPreviousReplyAndRewritesTechnicalVoice(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Now()
+	if err := h.AddUserMessage(ctx, "是我啊", at, time.Local); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Add(ctx, "assistant", "给我点提示？", at); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.AddUserMessage(ctx, "你不记得我了吗", at, time.Local); err != nil {
+		t.Fatal(err)
+	}
+	client := &scriptedClient{replies: []string{"抱歉，我这边没有留下线索。再给我点提示吧。", "你还没说你是谁呢，我怎么猜。"}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Background: "慢热，先观察对方"}, History: h, Client: client}
+	reply, err := s.ComposeReply(ctx)
+	if err != nil || reply != "你还没说你是谁呢，我怎么猜。" || len(client.calls) != 2 {
+		t.Fatalf("technical recognition reply was not rewritten: %q %v", reply, err)
+	}
+	if !strings.Contains(flatten(client.calls[0]), "别再重复要提示") {
+		t.Fatal("model was not told it had already asked for a clue")
+	}
+}
+
+func TestFirstContactSocialBeatsUseActualContext(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	client := &capturingClient{}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock"}, History: h, Client: client}
+	for _, step := range []struct{ user, reply string }{
+		{"你好", "你好，你是？"},
+		{"是我啊", "你这是让我猜谜？"},
+		{"你不记得我了吗", "你连名字都没说，我怎么认你。"},
+		{"我今天在商场认识你的", "那不是我。我们只在这儿聊过。"},
+	} {
+		if err := h.AddUserMessage(ctx, step.user, time.Now(), time.Local); err != nil {
+			t.Fatal(err)
+		}
+		got, err := s.GenerateReply(ctx)
+		if err != nil || got != step.reply {
+			t.Fatalf("%q: got %q, want %q (%v)", step.user, got, step.reply, err)
+		}
+	}
+	if len(client.messages) != 0 {
+		t.Fatal("first-contact social beats unexpectedly used the model")
+	}
+	state, err := h.Relationship(ctx)
+	if err != nil || state.Stage != "stranger" {
+		t.Fatalf("recognition probes created false familiarity: %+v %v", state, err)
+	}
+}
+
 func flatten(messages []model.Message) string {
 	var contents []string
 	for _, message := range messages {

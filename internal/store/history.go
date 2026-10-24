@@ -150,6 +150,10 @@ CREATE TABLE IF NOT EXISTS relationship_state (
   last_shared_day TEXT NOT NULL,
   reserved INTEGER NOT NULL CHECK(reserved IN (0,1))
 );
+CREATE TABLE IF NOT EXISTS relationship_meta (
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  version INTEGER NOT NULL
+);
 `); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)

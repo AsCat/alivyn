@@ -55,7 +55,7 @@ func TestConversationPersistsAcrossChatRuns(t *testing.T) {
 	if err := checkModel(context.Background(), &output); err != nil {
 		t.Fatal(err)
 	}
-	for _, userInput := range []string{"Do you remember me?", "What did I ask?"} {
+	for _, userInput := range []string{"I started reading a novel.", "What did I tell you?"} {
 		if err := chat(context.Background(), strings.NewReader(userInput+"\n/exit\n"), &output); err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +66,7 @@ func TestConversationPersistsAcrossChatRuns(t *testing.T) {
 		t.Fatalf("expected check and two chats, got %d requests", len(requests))
 	}
 	last := requests[2]
-	if len(last) != 4 || last[0].Role != "system" || last[1].Content != "Do you remember me?" || last[2].Content != "hello from Ari" || last[3].Content != "What did I ask?" {
+	if len(last) != 4 || last[0].Role != "system" || last[1].Content != "I started reading a novel." || last[2].Content != "hello from Ari" || last[3].Content != "What did I tell you?" {
 		t.Fatalf("conversation was not retained: %+v", last)
 	}
 	if !strings.Contains(output.String(), "Ari> hello from Ari") {

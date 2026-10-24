@@ -51,11 +51,12 @@ last_shared_day=excluded.last_shared_day, reserved=excluded.reserved`,
 }
 
 func (h *History) ensureRelationship(ctx context.Context) error {
-	var exists int
-	if err := h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM relationship_state WHERE id = 1").Scan(&exists); err != nil {
+	var version int
+	err := h.db.QueryRowContext(ctx, "SELECT version FROM relationship_meta WHERE id = 1").Scan(&version)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	if exists != 0 {
+	if version >= 2 {
 		return nil
 	}
 	// Backfill once for existing installations. Close rows before writing because
@@ -92,6 +93,10 @@ FROM messages m WHERE m.role = 'user' ORDER BY m.id`)
 	}
 	defer tx.Rollback()
 	if err := saveRelationshipTx(ctx, tx, s); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO relationship_meta(id, version) VALUES(1, 2)
+ON CONFLICT(id) DO UPDATE SET version=excluded.version`); err != nil {
 		return err
 	}
 	return tx.Commit()

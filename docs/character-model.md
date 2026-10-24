@@ -11,6 +11,7 @@ The creators of *Westworld* described hosts through recurring daily loops, disti
 - **Continuity:** source-linked personal and event memories can affect later replies. The model may only refer to events the user actually shared; it cannot invent a life outside the conversation.
 - **Rhythm:** Feishu replies have a short, bounded timing variation measured from message arrival. A slow model call absorbs that time. This is delivery pacing, not a claim that the individual was busy doing something else.
 - **Voice review:** common assistant phrases and unsupported guesses about the user's feelings trigger one rewrite attempt.
+- **First-contact social beats:** the default character has a few authored responses for recognition tests such as “It's me” and false claims of an offline meeting. They read the actual recent dialogue and are limited to early acquaintance. This prevents the model from fabricating recognition or answering a social tease with a technical status report. Custom character backgrounds continue through model generation.
 
 ## Next character milestone
 

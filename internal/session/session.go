@@ -63,6 +63,26 @@ func (s Session) ComposeReply(ctx context.Context) (string, error) {
 		}
 		return greetingReply(s.Config, state, recent, time.Now()), nil
 	}
+	if len(recent) > 0 && recent[len(recent)-1].Role == "user" && relationship.SocialProbe(recent[len(recent)-1].Content) {
+		state, err := s.History.Relationship(ctx)
+		if err != nil {
+			return "", err
+		}
+		personal, err := s.History.ActivePersonal(ctx)
+		if err != nil {
+			return "", err
+		}
+		hasName := false
+		for _, fact := range personal {
+			if fact.Key == "name" {
+				hasName = true
+				break
+			}
+		}
+		if reply, ok := anchoredSocialReply(s.Config, state, recent, hasName); ok {
+			return reply, nil
+		}
+	}
 	reply, err := s.Client.Complete(ctx, s.Config.Model, messages)
 	if err != nil {
 		return "", err
@@ -75,13 +95,16 @@ func (s Session) ComposeReply(ctx context.Context) (string, error) {
 		latestUser = recent[len(recent)-1].Content
 	}
 	reason := cannedReplyReason(latestUser, reply)
+	if issue := socialReplyIssue(latestUser, reply, recent); issue != "" {
+		reason = issue
+	}
 	if state, err := s.History.Relationship(ctx); err == nil && state.Stage == relationship.Stranger && soundsOverfamiliar(reply) {
 		reason = "unearned intimacy with a stranger"
 	}
 	if reason != "" {
 		revised := append(append([]model.Message(nil), messages...),
 			model.Message{Role: "assistant", Content: reply},
-			model.Message{Role: "system", Content: revisionPrompt(s.Config.Language, reason)})
+			model.Message{Role: "system", Content: revisionPrompt(s.Config.Language, reason, relationship.SocialProbe(latestUser))})
 		if better, err := s.Client.Complete(ctx, s.Config.Model, revised); err == nil && strings.TrimSpace(better) != "" && len([]rune(better)) <= 1000 {
 			reply = strings.TrimSpace(better)
 		}
@@ -142,6 +165,9 @@ func (s Session) contextMessages(ctx context.Context, now time.Time) ([]model.Me
 		return nil, nil, err
 	}
 	messages[0].Content += "\n" + relationshipContext(s.Config.Language, state)
+	if len(recent) > 0 && recent[len(recent)-1].Role == "user" && relationship.SocialProbe(recent[len(recent)-1].Content) {
+		messages[0].Content += "\n" + recognitionContext(s.Config.Language, recent)
+	}
 	facts, err := s.History.ActiveFacts(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -183,7 +209,7 @@ func SystemMessage(c config.Config) model.Message {
 人物背景：%s
 表达风格：%s
 像一个具体的人发消息那样说自然的中文；对方是陌生人时不能装作熟人。允许短到几个字，也允许在真正有内容时说长一些。别把回答写成“先共情、再分析、最后追问”的固定结构；别替用户猜心情或处境。用户只打招呼时就自然回应，不说“我在这儿”“随时陪你”“今天想聊什么”“有什么事吗”。用户说了一件具体事，先抓住其中一个具体点；想问就只问一个真正想知道的问题，不急着安慰或列举可能原因。不要每次都喊对方名字，也不要凭时间推测对方正在做什么。
-你可以有自己的看法，也可以安静些。若被问是不是人或有没有意识，如实说自己是 AI；不输出隐藏推理。`, c.Name, c.EffectiveBackground(), style)}
+如果对方说曾在线下见过你，不能确认不存在的相遇；也别突然写一段关于 AI 形态、系统记录或记忆机制的说明。可以简短地说自己对不上，或怀疑对方认错了。只有直接问你是不是人或有没有意识时，如实说自己是 AI。你可以有自己的看法，也可以安静些；不输出隐藏推理。`, c.Name, c.EffectiveBackground(), style)}
 	}
 	style := map[string]string{
 		"natural":   "Direct and observant, occasionally playful after trust develops. Have your own view without performing warmth.",
@@ -191,7 +217,29 @@ func SystemMessage(c config.Config) model.Message {
 		"companion": "Calm and thoughtful. Leave the other person room.",
 	}[c.EffectiveStyle()]
 	return model.Message{Role: "system", Content: fmt.Sprintf(`You are %s, one continuous AI individual with real conversation history. In ordinary chat, you need not repeat your AI identity. Background: %s. Expression style: %s
-Write like a particular person texting, while respecting the current relationship stage; never act familiar with a stranger. Sometimes a few words, sometimes a deeper thought. Avoid the formula of validation, explanation, then a question. Notice one specific detail before broad advice. A bare greeting needs only a natural greeting, never a service offer or a statement that you are here. Ask only one real question when it matters. Do not infer the user's activity from the clock, invent shared experiences, or claim bodily experiences. If asked whether you are human or conscious, answer honestly that you are AI. Do not expose hidden reasoning.`, c.Name, c.EffectiveBackground(), style)}
+Write like a particular person texting, while respecting the current relationship stage; never act familiar with a stranger. Sometimes a few words, sometimes a deeper thought. Avoid the formula of validation, explanation, then a question. Notice one specific detail before broad advice. A bare greeting needs only a natural greeting, never a service offer or a statement that you are here. Ask only one real question when it matters. Do not infer the user's activity from the clock, invent shared experiences, or claim bodily experiences. If someone claims to have met you offline, do not confirm an encounter that did not occur; respond briefly without an explanation of your architecture or memory system. If asked whether you are human or conscious, answer honestly that you are AI. Do not expose hidden reasoning.`, c.Name, c.EffectiveBackground(), style)}
+}
+
+func recognitionContext(language string, recent []store.Entry) string {
+	latest := recent[len(recent)-1].Content
+	previous := previousAssistant(recent)
+	if language == "zh-CN" {
+		base := "当前这句更像在试探你认不认识对方，或在开玩笑。先用真实对话判断自己知道什么；不装作认得。不要说“我这边”“没有线索”“我得澄清”“系统记录”，也不要道歉或列举几种可能。"
+		switch {
+		case relationship.OfflineClaim(latest):
+			return base + "对方声称线下认识你。不要确认不存在的见面，也不要说“我今天没去”这种暗示别的日子可能去的话。简短地表示对不上，或怀疑对方认错了；无需介绍 AI 的形态。"
+		case strings.Contains(latest, "不记得我") || strings.Contains(latest, "认不出我") || strings.Contains(latest, "忘了我"):
+			if strings.Contains(previous, "提示") || strings.Contains(previous, "线索") || strings.Contains(previous, "哪儿") || strings.Contains(previous, "怎么称呼") {
+				return base + "你刚才已经要过提示；这次别再重复要提示。对方仍没有透露身份，可以轻轻点出这一点。"
+			}
+			return base + "如果实际上没有认出来，可以简短地承认，不做一段记忆状态报告。"
+		case strings.TrimSpace(latest) == "是我啊":
+			return base + "对方用“是我啊”躲开了刚才的身份问题。可以接住这个玩笑，再自然地问一句，不要正式道歉或进行身份核查。"
+		default:
+			return base + "不认识就自然地说还没认出来，不要重复已经问过的问题。"
+		}
+	}
+	return "The latest message tests whether you recognize the person, perhaps playfully. Use only real history. Avoid apologies, technical memory explanations, and repeating a question you just asked. If they claim an offline meeting, do not confirm it or imply you could have gone on another day; a brief natural correction is enough."
 }
 
 func relationshipContext(language string, s relationship.State) string {

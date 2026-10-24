@@ -35,3 +35,14 @@ func TestFamiliarityNeedsConversationAndRespectsDistance(t *testing.T) {
 		t.Fatalf("distance could not be relaxed: %+v", s)
 	}
 }
+
+func TestRecognitionPromptsDoNotManufactureFamiliarity(t *testing.T) {
+	s := Initial()
+	at := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	for _, line := range []string{"你好", "是我啊", "你不记得我了吗", "我今天在商场认识你的"} {
+		s, _ = Advance(s, line, false, at, time.UTC)
+	}
+	if s.Stage != Stranger || s.MeaningfulTurns != 0 {
+		t.Fatalf("recognition prompts created false familiarity: %+v", s)
+	}
+}

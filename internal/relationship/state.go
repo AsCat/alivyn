@@ -80,7 +80,7 @@ func stageFor(s State) Stage {
 }
 
 func meaningful(text string) bool {
-	if asksForDistance(text) || welcomesCloseness(text) || strings.HasPrefix(text, "忘记") || strings.HasPrefix(strings.ToLower(text), "forget ") {
+	if asksForDistance(text) || welcomesCloseness(text) || SocialProbe(text) || strings.HasPrefix(text, "忘记") || strings.HasPrefix(strings.ToLower(text), "forget ") {
 		return false
 	}
 	text = strings.ToLower(strings.TrimFunc(strings.TrimSpace(text), func(r rune) bool {
@@ -91,6 +91,33 @@ func meaningful(text string) bool {
 		return false
 	}
 	return true
+}
+
+// SocialProbe identifies a recognition test that does not itself supply new
+// knowledge or create a closer relationship.
+func SocialProbe(text string) bool {
+	lower := strings.ToLower(strings.Trim(strings.TrimSpace(text), "。.!！?？"))
+	for _, phrase := range []string{"你不记得我", "你认不出我", "你忘了我", "不认识我了", "don't you remember me", "do you remember me", "it's me"} {
+		if strings.Contains(lower, phrase) {
+			return true
+		}
+	}
+	if lower == "是我" || lower == "是我啊" || lower == "是我呀" {
+		return true
+	}
+	if OfflineClaim(lower) {
+		return true
+	}
+	return false
+}
+
+func OfflineClaim(text string) bool {
+	lower := strings.ToLower(text)
+	if (strings.Contains(lower, "认识你") || strings.Contains(lower, "见过你") || strings.Contains(lower, "碰到你") || strings.Contains(lower, "遇见你")) &&
+		(strings.Contains(lower, "在") || ((strings.Contains(lower, "今天") || strings.Contains(lower, "昨天") || strings.Contains(lower, "刚才")) && !strings.Contains(lower, "想认识"))) {
+		return true
+	}
+	return strings.Contains(lower, "i met you at") || strings.Contains(lower, "i saw you at")
 }
 
 func asksForDistance(text string) bool {

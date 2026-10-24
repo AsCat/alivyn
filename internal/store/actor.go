@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/AsCat/alivyn/internal/actor"
@@ -40,4 +43,52 @@ func (h *History) SaveActorDecision(ctx context.Context, userMessageID int64, de
 VALUES (?, ?, ?) ON CONFLICT(source_message_id) DO UPDATE SET decision_json=excluded.decision_json,
 decided_at=excluded.decided_at`, userMessageID, string(raw), at.UTC().Format(time.RFC3339Nano))
 	return err
+}
+
+// ConfirmActorDecision records world attention only after a reply passes review.
+// A planned decision whose reply fails cannot influence the character's world.
+func (h *History) ConfirmActorDecision(ctx context.Context, userMessageID int64, decision actor.Decision, at time.Time) error {
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var saved string
+	if err := tx.QueryRowContext(ctx, "SELECT decision_json FROM actor_decisions WHERE source_message_id = ?", userMessageID).Scan(&saved); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(decision)
+	if err != nil {
+		return err
+	}
+	if saved != string(raw) {
+		return errors.New("actor decision changed before reply confirmation")
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM goal_world_engagements WHERE source_message_id = ?", userMessageID); err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, evidenceID := range decision.EvidenceIDs {
+		if !strings.HasPrefix(evidenceID, "worldv2:") {
+			continue
+		}
+		eventID, err := strconv.ParseInt(strings.TrimPrefix(evidenceID, "worldv2:"), 10, 64)
+		if err != nil || eventID < 1 {
+			return fmt.Errorf("invalid world evidence reference %q", evidenceID)
+		}
+		var objectID string
+		if err := tx.QueryRowContext(ctx, "SELECT object_id FROM goal_world_events WHERE id = ?", eventID).Scan(&objectID); err != nil {
+			return err
+		}
+		if seen[objectID] {
+			continue
+		}
+		seen[objectID] = true
+		if _, err := tx.ExecContext(ctx, `INSERT INTO goal_world_engagements
+(source_message_id, object_id, event_id, at_ns) VALUES (?, ?, ?, ?)`,
+			userMessageID, objectID, eventID, at.UnixNano()); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

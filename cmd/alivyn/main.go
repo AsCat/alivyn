@@ -111,7 +111,7 @@ func run(args []string) error {
 
 func usage() {
 	fmt.Println("Alivyn · 意续 — persistent conversation preview")
-	fmt.Println("Usage: alivyn [tui|init|chat|history|actor status|actor set legacy|actor_v1|actor eval [quick|all]|world show|world timeline|world set tidehaven|none|world demo [en|zh-CN]|memory ...|contact ...|persona show|persona set natural|romantic|companion|persona background show|persona background set <text>|channel feishu connect [relay-url]|channel feishu pair [relay-url]|channel feishu run|channel feishu status|channel feishu add|relay serve|serve [once]|model check|model key import|replay|doctor|demo [en|zh-CN|tui]|version|help]")
+	fmt.Println("Usage: alivyn [tui|init|chat|history|actor status|actor set legacy|actor_v1|actor eval [quick|all]|world show|world timeline|world set tidehaven|none|world demo [actor] [en|zh-CN]|memory ...|contact ...|persona show|persona set natural|romantic|companion|persona background show|persona background set <text>|channel feishu connect [relay-url]|channel feishu pair [relay-url]|channel feishu run|channel feishu status|channel feishu add|relay serve|serve [once]|model check|model key import|replay|doctor|demo [en|zh-CN|tui]|version|help]")
 }
 
 type demoModel struct{}

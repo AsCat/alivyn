@@ -1,6 +1,6 @@
 # Persistent actor architecture (RFC 02)
 
-Status: partially implemented as the opt-in `actor_v1` encounter engine. Sourced retrieval, a persisted decision, separate realization, a review pass, and isolated cross-situation evaluation are in place. The goal-driven world loop, unified event ledger, and proactive decision integration remain planned. The current seven-day Tidehaven story is a persistence prototype.
+Status: partially implemented as the opt-in `actor_v1` encounter engine and bounded goal-driven Tidehaven world. Sourced retrieval, a persisted decision, separate realization, review, and isolated cross-situation evaluation are in place. The new world ledger records object identity, causal parents, provenance, and validated state transitions; it imports the earlier authored story. Open-ended event proposals, a ledger shared across all domains, and proactive decision integration remain planned.
 
 ## Product goal and truth boundary
 

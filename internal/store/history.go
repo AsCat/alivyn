@@ -184,6 +184,30 @@ CREATE TABLE IF NOT EXISTS assistant_turns (
   source_message_id INTEGER PRIMARY KEY REFERENCES messages(id),
   assistant_message_id INTEGER NOT NULL UNIQUE REFERENCES messages(id)
 );
+CREATE TABLE IF NOT EXISTS goal_world_state (
+  id INTEGER PRIMARY KEY CHECK(id = 1),
+  state_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS goal_world_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  day INTEGER NOT NULL UNIQUE,
+  local_date TEXT NOT NULL,
+  action TEXT NOT NULL,
+  object_id TEXT NOT NULL,
+  parent_event_id INTEGER REFERENCES goal_world_events(id),
+  provenance TEXT NOT NULL,
+  zh TEXT NOT NULL,
+  en TEXT NOT NULL,
+  related_to_user INTEGER NOT NULL CHECK(related_to_user IN (0,1)),
+  catchup INTEGER NOT NULL CHECK(catchup IN (0,1))
+);
+CREATE TABLE IF NOT EXISTS goal_world_engagements (
+  source_message_id INTEGER NOT NULL REFERENCES actor_decisions(source_message_id) ON DELETE CASCADE,
+  object_id TEXT NOT NULL,
+  event_id INTEGER NOT NULL REFERENCES goal_world_events(id),
+  at_ns INTEGER NOT NULL,
+  PRIMARY KEY(source_message_id, object_id)
+);
 `); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)

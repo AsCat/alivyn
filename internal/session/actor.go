@@ -52,6 +52,9 @@ func (s Session) composeActorReply(ctx context.Context, now time.Time, sourceMes
 		return "", fmt.Errorf("actor review: %w", err)
 	}
 	if review.Pass {
+		if err := s.History.ConfirmActorDecision(ctx, frame.SourceMessageID, decision, now); err != nil {
+			return "", err
+		}
 		return reply, nil
 	}
 	if revised {
@@ -67,6 +70,9 @@ func (s Session) composeActorReply(ctx context.Context, now time.Time, sourceMes
 	}
 	if !review.Pass {
 		return "", fmt.Errorf("actor reply did not pass grounded review: %s", review.Issue)
+	}
+	if err := s.History.ConfirmActorDecision(ctx, frame.SourceMessageID, decision, now); err != nil {
+		return "", err
 	}
 	return reply, nil
 }
@@ -114,10 +120,12 @@ func (s Session) actorFrame(ctx context.Context, now time.Time, sourceMessageID 
 			frame.Values = world.ValuesZh
 			frame.Abilities = world.AbilitiesZh
 			frame.Canon = world.CanonZh
+			frame.WorldGoal = world.GoalZh
 		} else {
 			frame.Values = world.ValuesEn
 			frame.Abilities = world.AbilitiesEn
 			frame.Canon = world.CanonEn
+			frame.WorldGoal = world.GoalEn
 		}
 	}
 	if state.Reserved {
@@ -137,11 +145,12 @@ func (s Session) actorFrame(ctx context.Context, now time.Time, sourceMessageID 
 		break
 	}
 	if s.Config.EffectiveWorldPack() == "tidehaven" {
-		_, err := s.History.AdvanceWorld(ctx, now, zone)
+		worldState, err := s.History.AdvanceGoalWorld(ctx, now, zone)
 		if err != nil {
 			return actor.Frame{}, err
 		}
-		events, err := s.History.WorldEvents(ctx, 5)
+		frame.WorldState = &worldState
+		events, err := s.History.GoalWorldEvents(ctx, 12)
 		if err != nil {
 			return actor.Frame{}, err
 		}
@@ -150,7 +159,11 @@ func (s Session) actorFrame(ctx context.Context, now time.Time, sourceMessageID 
 			if s.Config.Language == "zh-CN" {
 				content = event.Zh
 			}
-			frame.Evidence = append(frame.Evidence, actor.Evidence{ID: fmt.Sprintf("world:%d", event.Day), Provenance: "simulated_world", At: event.Date, Text: content})
+			parent := ""
+			if event.ParentID > 0 {
+				parent = fmt.Sprintf("worldv2:%d", event.ParentID)
+			}
+			frame.Evidence = append(frame.Evidence, actor.Evidence{ID: fmt.Sprintf("worldv2:%d", event.ID), Provenance: "simulated_world", At: event.Date, Text: content, ObjectID: event.ObjectID, ParentID: parent, Action: event.Action})
 		}
 	}
 	facts, err := s.History.ActiveFacts(ctx)

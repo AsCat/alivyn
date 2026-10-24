@@ -180,15 +180,27 @@ func (s Session) contextMessages(ctx context.Context, now time.Time) ([]model.Me
 	}
 	messages[0].Content += "\n" + timeContext(now, zone, recent)
 	if s.Config.EffectiveWorldPack() == "tidehaven" {
-		worldState, err := s.History.AdvanceWorld(ctx, now, zone)
-		if err != nil {
-			return nil, nil, err
+		if s.Config.EffectiveEngine() == "actor_v1" {
+			state, err := s.History.AdvanceGoalWorld(ctx, now, zone)
+			if err != nil {
+				return nil, nil, err
+			}
+			events, err := s.History.GoalWorldEvents(ctx, 6)
+			if err != nil {
+				return nil, nil, err
+			}
+			messages[0].Content += "\n" + goalWorldContext(s.Config.Language, state, events)
+		} else {
+			worldState, err := s.History.AdvanceWorld(ctx, now, zone)
+			if err != nil {
+				return nil, nil, err
+			}
+			worldEvents, err := s.History.WorldEvents(ctx, 4)
+			if err != nil {
+				return nil, nil, err
+			}
+			messages[0].Content += "\n" + worldContext(s.Config.Language, worldState, worldEvents)
 		}
-		worldEvents, err := s.History.WorldEvents(ctx, 4)
-		if err != nil {
-			return nil, nil, err
-		}
-		messages[0].Content += "\n" + worldContext(s.Config.Language, worldState, worldEvents)
 	}
 	state, err := s.History.Relationship(ctx)
 	if err != nil {
@@ -226,6 +238,25 @@ func (s Session) contextMessages(ctx context.Context, now time.Time) ([]model.Me
 		messages = append(messages, model.Message{Role: entry.Role, Content: entry.Content})
 	}
 	return messages, recent, nil
+}
+
+func goalWorldContext(language string, state world.GoalState, events []world.GoalEvent) string {
+	var lines []string
+	if language == "zh-CN" {
+		lines = append(lines, world.CanonZh, "设定内目标："+world.GoalZh,
+			fmt.Sprintf("当前进展：第 %d 天，第 %d 批录音。以下为已发生事件；同一对象 ID 指同一批录音：", state.Day, state.Batch))
+	} else {
+		lines = append(lines, world.CanonEn, "Fictional goal: "+world.GoalEn,
+			fmt.Sprintf("Current state: day %d, batch %d. These events happened in the setting; the same object ID means the same batch:", state.Day, state.Batch))
+	}
+	for _, event := range events {
+		content := event.En
+		if language == "zh-CN" {
+			content = event.Zh
+		}
+		lines = append(lines, fmt.Sprintf("%s [%s, parent #%d] %s", event.Date, event.ObjectID, event.ParentID, content))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func worldContext(language string, state world.State, events []world.Event) string {

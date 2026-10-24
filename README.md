@@ -6,7 +6,7 @@ Alivyn is a self-hosted project for one continuous AI individual. It is designed
 
 > **Status: local preview.** A project bot has passed a real phone test for QR pairing, private text replies, and proactive delivery. The relay currently runs only on the operator's Mac; no public HTTPS relay or default onboarding URL is available yet. External-account access has not been verified. Follow the [roadmap](docs/roadmap.md) for the implementation sequence.
 
-[简体中文](README.zh-CN.md) · [Vision](docs/vision.md) · [v0.1 specification](docs/spec-v0.1.md) · [Architecture](docs/architecture.md) · [Character model](docs/character-model.md) · [Roadmap](docs/roadmap.md) · [Prototype checks](docs/prototype-validation.md)
+[简体中文](README.zh-CN.md) · [Vision](docs/vision.md) · [v0.1 specification](docs/spec-v0.1.md) · [Architecture](docs/architecture.md) · [Actor architecture proposal](docs/actor-architecture.md) · [Character model](docs/character-model.md) · [Roadmap](docs/roadmap.md) · [Prototype checks](docs/prototype-validation.md)
 
 ## The experience we are building
 

@@ -6,7 +6,7 @@ Alivyn 是可自托管的开源项目。它围绕同一个持续存在的 AI 个
 
 > **当前状态：本地预览。** 项目机器人已通过真实手机验证：扫码配对、文字私聊回复、主动发送均已成功。中继目前只运行在项目运营方的 Mac 上；公开 HTTPS 中继和默认接入地址尚未提供，外部账号访问也未验证。实施顺序见[开发路线](docs/roadmap.md)，人物与关系设计见[角色模型](docs/character-model.md)。
 
-[English](README.md) · [目标](docs/vision.md) · [v0.1 规格](docs/spec-v0.1.md) · [架构](docs/architecture.md) · [路线](docs/roadmap.md) · [原型验证](docs/prototype-validation.md)
+[English](README.md) · [目标](docs/vision.md) · [v0.1 规格](docs/spec-v0.1.md) · [架构](docs/architecture.md) · [持续角色架构提案](docs/actor-architecture.zh-CN.md) · [路线](docs/roadmap.md) · [原型验证](docs/prototype-validation.md)
 
 ## 我们要做出的体验
 

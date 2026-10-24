@@ -97,13 +97,15 @@ func TestOnlyGroundedWorldAttentionChangesNextAction(t *testing.T) {
 		name, want      string
 		worldDecision   bool
 		confirmDecision bool
+		worldUsed       bool
 		forget          bool
 		wantRelated     bool
 	}{
-		{"unrelated chat", "repair", false, false, false, false},
-		{"unaccepted plan", "repair", true, false, false, false},
-		{"world conversation", "inspect", true, true, false, true},
-		{"forgotten conversation", "repair", true, true, true, false},
+		{"unrelated chat", "repair", false, false, false, false, false},
+		{"unaccepted plan", "repair", true, false, false, false, false},
+		{"unrelated reply with world in plan", "repair", true, true, false, false, false},
+		{"world conversation", "inspect", true, true, true, false, true},
+		{"forgotten conversation", "repair", true, true, true, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h, err := OpenHistory(ctx, t.TempDir())
@@ -123,7 +125,11 @@ func TestOnlyGroundedWorldAttentionChangesNextAction(t *testing.T) {
 					t.Fatal(err)
 				}
 				if tc.confirmDecision {
-					if err := h.ConfirmActorDecision(ctx, 1, decision, start.Add(time.Hour)); err != nil {
+					review := actor.Review{Pass: true}
+					if tc.worldUsed {
+						review.UsedWorldIDs = []string{"worldv2:1"}
+					}
+					if err := h.ConfirmActorDecision(ctx, 1, decision, review, start.Add(time.Hour)); err != nil {
 						t.Fatal(err)
 					}
 				}

@@ -154,7 +154,7 @@ func goalWorldDemo(ctx context.Context, out io.Writer, language string) error {
 			if err := h.SaveActorDecision(ctx, entries[0].ID, decision, at.Add(time.Hour)); err != nil {
 				return err
 			}
-			if err := h.ConfirmActorDecision(ctx, entries[0].ID, decision, at.Add(time.Hour)); err != nil {
+			if err := h.ConfirmActorDecision(ctx, entries[0].ID, decision, actor.Review{Pass: true, UsedWorldIDs: []string{"worldv2:1"}}, at.Add(time.Hour)); err != nil {
 				return err
 			}
 		}

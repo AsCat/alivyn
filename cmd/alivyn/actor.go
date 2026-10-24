@@ -134,7 +134,7 @@ func evalActor(ctx context.Context, out io.Writer, mode string) error {
 					return err
 				}
 				fmt.Fprintf(out, "%s user: %s\n", at.Format("01-02"), input)
-				fmt.Fprintf(out, "     %s [%s; %s; %v]: %s\n", c.Name, decision.Act, decision.Focus, decision.EvidenceIDs, reply)
+				fmt.Fprintf(out, "     %s [%s; %s; %v; truth=%t]: %s\n", c.Name, decision.Act, decision.Focus, decision.EvidenceIDs, decision.TruthBoundary, reply)
 				if err := h.Add(ctx, "assistant", reply, at.Add(time.Minute)); err != nil {
 					return err
 				}

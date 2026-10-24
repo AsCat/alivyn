@@ -81,6 +81,36 @@ func TestActorRetriesEmptyDraftWithoutReplanning(t *testing.T) {
 	}
 }
 
+func TestActorReplansWhenWordingCannotPassReview(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 24, 10, 0, 0, 0, time.UTC)
+	if err := h.AddUserMessage(ctx, "今天团队把我的方案否了。", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &actorScript{replies: []string{
+		`{"act":"acknowledge","focus":"proposal rejected","evidence_ids":["chat:1"],"brevity":"short"}`,
+		"你一定很难过。", `{"pass":false,"issue":"Assigned a feeling the user did not state","used_world_ids":[]}`,
+		"听起来你很难过。", `{"pass":false,"issue":"Still assigned a feeling","used_world_ids":[]}`,
+		`{"act":"ask","focus":"team's reason","evidence_ids":["chat:1"],"brevity":"short"}`,
+		"",
+		"他们具体怎么说的？", `{"pass":true,"issue":"","used_world_ids":[]}`,
+	}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "actor_v1", WorldPack: "none"}, History: h, Client: client}
+	reply, err := s.ComposeReplyAt(ctx, at)
+	if err != nil || reply != "他们具体怎么说的？" || client.calls != 9 {
+		t.Fatalf("alternate approach failed: reply=%q calls=%d err=%v", reply, client.calls, err)
+	}
+	decision, found, err := h.ActorDecision(ctx, 1)
+	if err != nil || !found || decision.Act != "ask" {
+		t.Fatalf("rejected plan was still stored: %+v found=%v err=%v", decision, found, err)
+	}
+}
+
 func TestActorWorldEvidenceKeepsCausalObject(t *testing.T) {
 	ctx := context.Background()
 	h, err := store.OpenHistory(ctx, t.TempDir())
@@ -100,7 +130,7 @@ func TestActorWorldEvidenceKeepsCausalObject(t *testing.T) {
 	if err := h.SaveActorDecision(ctx, 1, decision, first.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.ConfirmActorDecision(ctx, 1, decision, first.Add(time.Minute)); err != nil {
+	if err := h.ConfirmActorDecision(ctx, 1, decision, actor.Review{Pass: true, UsedWorldIDs: []string{"worldv2:1"}}, first.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if err := h.AddUserMessage(ctx, "那盒录音后来怎样？", first.AddDate(0, 0, 1), time.UTC); err != nil {

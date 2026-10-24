@@ -1,6 +1,6 @@
 # Persistent actor architecture (RFC 02)
 
-Status: partially implemented as the opt-in `actor_v1` encounter engine and bounded goal-driven Tidehaven world. Sourced retrieval, a persisted decision, separate realization, review, and isolated cross-situation evaluation are in place. The new world ledger records object identity, causal parents, provenance, and validated state transitions; it imports the earlier authored story. Open-ended event proposals, a ledger shared across all domains, and proactive decision integration remain planned.
+Status: partially implemented as the opt-in `actor_v1` encounter engine and bounded goal-driven Tidehaven world. Sourced retrieval, a persisted decision, realization with only relevant evidence, a reality-boundary mode, review, replanning after failed wording, and isolated cross-situation evaluation are in place. The new world ledger records object identity, causal parents, provenance, and validated state transitions; it imports the earlier authored story. Open-ended event proposals, a ledger shared across all domains, and proactive decision integration remain planned.
 
 ## Product goal and truth boundary
 
@@ -54,12 +54,13 @@ TurnDecision {
   relationship:    current distance and explicit user boundaries
   open_thread:     whether to continue an unresolved topic
   uncertainty:     what must not be asserted as fact
+  truth_boundary:  whether the user is asking about identity, fictional setting, or physical action
 }
 ```
 
 The same process handles greetings, work, disagreement, jokes, disclosure, time apart, and questions about Alivyn's own life. The model interprets context and realizes language; code supplies evidence, persists changes, and enforces boundaries. Keyword branches must no longer return a fixed line. Existing greeting and recognition scripts retire only after the new path passes evaluation.
 
-Language generation receives the chosen act and relevant evidence, not an entire diary or old replies as style examples. Previous replies are conversation facts, including any poor wording; they are not instructions to imitate. Unsupported meetings, chronology errors, or crossed boundaries trigger a rewrite or a safe refusal to send. Validation should target facts and boundaries, not an ever-growing blacklist of “AI-sounding” phrases.
+Language generation receives the chosen act and relevant evidence, not an entire diary or old replies as style examples. Previous replies are conversation facts, including any poor wording; they are not instructions to imitate. A direct question about identity, the setting, or physical action activates a reality-boundary mode that omits fictional daily events from realization. Review distinguishes world events the planner saw from those the reply actually used; only the latter can influence the next world action. Unsupported meetings, chronology errors, or crossed boundaries trigger a rewrite, then a different conversational act, or a safe refusal to send.
 
 The same path handles three different examples. If asked “Do you remember me?”, retrieval finds an exchange that actually happened; Alivyn can acknowledge it without claiming to know the person's offline identity. If the user says their work was rejected, the decision may ask about one concrete reason or express a view, without automatically entering a comfort script. If asked how her own week is going, she may mention a committed archive event while leaving unwritten future events unknown. These are possible **acts**, not fixed replies for particular inputs.
 
@@ -98,6 +99,6 @@ Automated checks cover provenance, causality, time, boundaries, and duplicate de
 2. Implement one general encounter path and evaluate it in isolated histories. Budget model calls and provide a failure fallback. Retire fixed greeting and recognition replies only after the new path passes.
 3. Replace the seven-day script with a canon- and goal-constrained event proposer; only validated events enter the ledger.
 4. Feed goals and open threads into the existing proactive policy while preserving pause, quiet-hour, and frequency precedence.
-5. Switch the Feishu instance after cross-situation acceptance, with a rollback build. Do not hot-patch production again for one greeting.
+5. Explicitly switch a paired Feishu instance to trial mode after cross-situation acceptance, with a rollback build, then continue judging naturalness through real conversations.
 
 Separate model calls for decision and expression may add latency and cost to a user-provided model. The prototype should establish correct state and consistent behavior first, then use evaluation to decide whether those calls can be merged. Runtime configuration controls the budget; character dialogue does not.

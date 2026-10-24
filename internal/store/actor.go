@@ -47,7 +47,10 @@ decided_at=excluded.decided_at`, userMessageID, string(raw), at.UTC().Format(tim
 
 // ConfirmActorDecision records world attention only after a reply passes review.
 // A planned decision whose reply fails cannot influence the character's world.
-func (h *History) ConfirmActorDecision(ctx context.Context, userMessageID int64, decision actor.Decision, at time.Time) error {
+func (h *History) ConfirmActorDecision(ctx context.Context, userMessageID int64, decision actor.Decision, review actor.Review, at time.Time) error {
+	if !review.Pass {
+		return errors.New("cannot confirm a rejected actor reply")
+	}
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -67,10 +70,14 @@ func (h *History) ConfirmActorDecision(ctx context.Context, userMessageID int64,
 	if _, err := tx.ExecContext(ctx, "DELETE FROM goal_world_engagements WHERE source_message_id = ?", userMessageID); err != nil {
 		return err
 	}
+	selected := map[string]bool{}
+	for _, id := range decision.EvidenceIDs {
+		selected[id] = true
+	}
 	seen := map[string]bool{}
-	for _, evidenceID := range decision.EvidenceIDs {
-		if !strings.HasPrefix(evidenceID, "worldv2:") {
-			continue
+	for _, evidenceID := range review.UsedWorldIDs {
+		if !selected[evidenceID] || !strings.HasPrefix(evidenceID, "worldv2:") {
+			return fmt.Errorf("review used unselected world evidence %q", evidenceID)
 		}
 		eventID, err := strconv.ParseInt(strings.TrimPrefix(evidenceID, "worldv2:"), 10, 64)
 		if err != nil || eventID < 1 {

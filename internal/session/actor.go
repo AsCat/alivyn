@@ -52,13 +52,13 @@ func (s Session) composeActorReply(ctx context.Context, now time.Time, sourceMes
 		return "", fmt.Errorf("actor review: %w", err)
 	}
 	if review.Pass {
-		if err := s.History.ConfirmActorDecision(ctx, frame.SourceMessageID, decision, now); err != nil {
+		if err := s.History.ConfirmActorDecision(ctx, frame.SourceMessageID, decision, review, now); err != nil {
 			return "", err
 		}
 		return reply, nil
 	}
 	if revised {
-		return "", fmt.Errorf("actor reply did not pass grounded review: %s", review.Issue)
+		return s.retryActorApproach(ctx, now, frame, decision, review.Issue)
 	}
 	reply, err = actor.Realize(ctx, s.Client, s.Config.Model, frame, decision, review.Issue)
 	if err != nil {
@@ -69,9 +69,37 @@ func (s Session) composeActorReply(ctx context.Context, now time.Time, sourceMes
 		return "", fmt.Errorf("actor revision review: %w", err)
 	}
 	if !review.Pass {
+		return s.retryActorApproach(ctx, now, frame, decision, review.Issue)
+	}
+	if err := s.History.ConfirmActorDecision(ctx, frame.SourceMessageID, decision, review, now); err != nil {
+		return "", err
+	}
+	return reply, nil
+}
+
+func (s Session) retryActorApproach(ctx context.Context, now time.Time, frame actor.Frame, rejected actor.Decision, issue string) (string, error) {
+	decision, err := actor.Replan(ctx, s.Client, s.Config.Model, frame, rejected, issue)
+	if err != nil {
+		return "", fmt.Errorf("actor replanning: %w", err)
+	}
+	if err := s.History.SaveActorDecision(ctx, frame.SourceMessageID, decision, now); err != nil {
+		return "", err
+	}
+	reply, err := actor.Realize(ctx, s.Client, s.Config.Model, frame, decision, "")
+	if errors.Is(err, actor.ErrInvalidReply) {
+		reply, err = actor.Realize(ctx, s.Client, s.Config.Model, frame, decision, "The draft was empty or too long. Write one concise complete message.")
+	}
+	if err != nil {
+		return "", err
+	}
+	review, err := actor.Check(ctx, s.Client, s.Config.Model, frame, decision, reply)
+	if err != nil {
+		return "", fmt.Errorf("actor alternate review: %w", err)
+	}
+	if !review.Pass {
 		return "", fmt.Errorf("actor reply did not pass grounded review: %s", review.Issue)
 	}
-	if err := s.History.ConfirmActorDecision(ctx, frame.SourceMessageID, decision, now); err != nil {
+	if err := s.History.ConfirmActorDecision(ctx, frame.SourceMessageID, decision, review, now); err != nil {
 		return "", err
 	}
 	return reply, nil
@@ -108,7 +136,7 @@ func (s Session) actorFrame(ctx context.Context, now time.Time, sourceMessageID 
 	}
 	frame := actor.Frame{
 		SourceMessageID: latest.ID,
-		Reality:         "An AI character met through this chat. Its world is simulated. It cannot have met the user offline, and events in its setting cannot serve as real-world alibis.",
+		Reality:         "An AI character met through this chat. Its world is simulated, but it can make and persist choices within that world even between conversations. These are simulated actions, not physical-world actions. It cannot have met the user offline, and setting events cannot serve as real-world alibis.",
 		Name:            s.Config.Name, Language: s.Config.Language,
 		Style: s.Config.EffectiveStyle(), Background: s.Config.EffectiveBackground(),
 		Relationship: string(state.Stage), Now: now.In(zone).Format(time.RFC3339),

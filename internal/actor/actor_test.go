@@ -110,6 +110,20 @@ func TestDecisionAllowsConversationalRepair(t *testing.T) {
 	}
 }
 
+func TestDecisionKeepsOnlySourcedContinuity(t *testing.T) {
+	frame := Frame{Latest: Evidence{ID: "chat:3"}, Evidence: []Evidence{{ID: "chat:1"}}}
+	valid := `{"act":"repair","focus":"own misread","evidence_ids":["chat:1","chat:3"],"brevity":"short","posture":"repairing","carryover":{"posture":"repairing","concern":"I guessed a motive without evidence","source_ids":["chat:1"],"lifetime":"hours"}}`
+	decision, err := ParseDecision(valid, frame)
+	if err != nil || decision.Carryover == nil || decision.Carryover.Posture != "repairing" {
+		t.Fatalf("sourced continuity was lost: %+v %v", decision, err)
+	}
+	invalid := strings.Replace(valid, `"source_ids":["chat:1"]`, `"source_ids":["chat:999"]`, 1)
+	decision, err = ParseDecision(invalid, frame)
+	if err != nil || decision.Carryover != nil {
+		t.Fatalf("unsourced continuity survived: %+v %v", decision, err)
+	}
+}
+
 func TestReviewAllowsOneNaturalQuestionButRejectsStacking(t *testing.T) {
 	frame := Frame{Latest: Evidence{ID: "chat:1"}}
 	decision := Decision{Act: "acknowledge", Focus: "greet", EvidenceIDs: []string{"chat:1"}, Brevity: "short"}
@@ -118,8 +132,13 @@ func TestReviewAllowsOneNaturalQuestionButRejectsStacking(t *testing.T) {
 		t.Fatalf("stacked questions passed: %+v %v", review, err)
 	}
 	review, err = Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":""}`}, "mock", frame, decision, "嗨，怎么称呼？")
+	if err != nil || review.Pass {
+		t.Fatalf("acknowledgment grew an unplanned question: %+v %v", review, err)
+	}
+	decision.Act = "ask"
+	review, err = Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":""}`}, "mock", frame, decision, "嗨，怎么称呼？")
 	if err != nil || !review.Pass {
-		t.Fatalf("one natural question was rejected: %+v %v", review, err)
+		t.Fatalf("planned natural question was rejected: %+v %v", review, err)
 	}
 }
 
@@ -139,6 +158,15 @@ func TestReviewOnlyAcceptsSelectedWorldUse(t *testing.T) {
 	review, err = Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":"","used_world_ids":["worldv2:1"]}`}, "mock", frame, decision, "汐湾是虚构的。")
 	if err != nil || review.Pass {
 		t.Fatalf("reality-boundary world use was not a review failure: %+v err=%v", review, err)
+	}
+}
+
+func TestReviewIgnoresSelectedChatIDsMistakenForWorldUse(t *testing.T) {
+	frame := Frame{Latest: Evidence{ID: "chat:5", Provenance: "observed_chat", Text: "今天在商场认识你"}}
+	decision := Decision{Act: "clarify", Focus: "physical meeting boundary", EvidenceIDs: []string{"chat:5"}, Brevity: "short", TruthBoundary: true}
+	review, err := Check(context.Background(), fakeCompleter{response: `{"pass":true,"issue":"","used_world_ids":["chat:5"]}`}, "mock", frame, decision, "我们只在这里聊过，没在线下见过。")
+	if err != nil || !review.Pass || len(review.UsedWorldIDs) != 0 {
+		t.Fatalf("chat evidence became a world event: %+v %v", review, err)
 	}
 }
 

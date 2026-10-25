@@ -23,6 +23,9 @@ func recordPersonalTx(ctx context.Context, tx *sql.Tx, change memory.PersonalCha
 		if _, err := tx.ExecContext(ctx, "DELETE FROM actor_decisions"); err != nil {
 			return err
 		}
+		if _, err := tx.ExecContext(ctx, "DELETE FROM actor_continuity"); err != nil {
+			return err
+		}
 		rows, err := tx.QueryContext(ctx, "SELECT source_message_id FROM personal_memory WHERE memory_key = ? AND action = 'upsert'", change.Key)
 		if err != nil {
 			return err

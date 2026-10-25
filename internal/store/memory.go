@@ -148,6 +148,9 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			if _, err := tx.ExecContext(ctx, "DELETE FROM actor_decisions"); err != nil {
 				return 0, err
 			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM actor_continuity"); err != nil {
+				return 0, err
+			}
 			// Redact each source utterance and its immediate assistant replies,
 			// including replies that repeated a date without naming the topic.
 			rows, err := tx.QueryContext(ctx, "SELECT source_message_id FROM memory_revisions WHERE topic = ?", change.Topic)

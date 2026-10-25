@@ -2,6 +2,8 @@
 
 Status: partially implemented as the opt-in `actor_v1` encounter engine and bounded goal-driven Tidehaven world. Sourced retrieval, a persisted decision, realization with only relevant evidence, a reality-boundary mode, review, replanning after failed wording, and isolated cross-situation evaluation are in place. The new world ledger records object identity, causal parents, provenance, and validated state transitions; it imports the earlier authored story. Open-ended event proposals, a ledger shared across all domains, and proactive decision integration remain planned.
 
+The affective and behavioral continuity layer is specified in [RFC 03](./affective-life.md). A short-lived, sourced part is implemented; the longer-term model is still planned.
+
 ## Product goal and truth boundary
 
 Alivyn should behave as **one individual who continues living in a fictional world while gradually forming a relationship with the user**. Her world can change while the user is away. When the user arrives, she chooses how to respond from her experiences, current aims, and relationship, rather than from a greeting, comfort, or recognition template.

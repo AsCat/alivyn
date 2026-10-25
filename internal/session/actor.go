@@ -143,14 +143,20 @@ func (s Session) actorFrame(ctx context.Context, now time.Time, sourceMessageID 
 		PriorUserTurns: priorUserTurns,
 		Latest:         actor.Evidence{ID: fmt.Sprintf("chat:%d", latest.ID), Provenance: "observed_chat", At: latest.CreatedAt.In(zone).Format(time.RFC3339), Text: latest.Content},
 	}
+	frame.Continuity, err = s.History.ActorContinuityAt(ctx, latest.ID, now)
+	if err != nil {
+		return actor.Frame{}, err
+	}
 	if s.Config.EffectiveWorldPack() == "tidehaven" {
 		if s.Config.Language == "zh-CN" {
 			frame.Values = world.ValuesZh
+			frame.Habits = world.HabitsZh
 			frame.Abilities = world.AbilitiesZh
 			frame.Canon = world.CanonZh
 			frame.WorldGoal = world.GoalZh
 		} else {
 			frame.Values = world.ValuesEn
+			frame.Habits = world.HabitsEn
 			frame.Abilities = world.AbilitiesEn
 			frame.Canon = world.CanonEn
 			frame.WorldGoal = world.GoalEn

@@ -23,6 +23,8 @@ This is a **starter world pack**. The experimental goal policy validates action 
 
 ## Next character milestone
 
+The broader affect and behavior contract is specified in [Affective life and behavioral continuity](./affective-life.md) ([中文](./affective-life.zh-CN.md)). `actor_v1` now persists short, sourced posture and unfinished threads; the longer-term model remains a design goal.
+
 1. Move the starter canon into a versioned, editable world pack with stable values, habits, relationships, places, and conversational boundaries. Existing timelines must retain their pack version.
 2. Record momentary mood as a time-bounded interpretation of sourced events. Mood may influence tone, but should never be presented as a human bodily feeling or invented incident.
 3. Connect each proactive impulse to a concrete memory, user preference, or existing conversation. Record why it was sent or suppressed.

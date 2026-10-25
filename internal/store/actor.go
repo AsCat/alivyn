@@ -31,6 +31,29 @@ func (h *History) ActorDecision(ctx context.Context, userMessageID int64) (actor
 	return decision, true, nil
 }
 
+// ActorContinuityAt reads only an earlier accepted turn. A queued newer
+// message cannot change how an older pending message was encountered.
+func (h *History) ActorContinuityAt(ctx context.Context, userMessageID int64, now time.Time) (*actor.Continuity, error) {
+	var raw string
+	var expires int64
+	err := h.db.QueryRowContext(ctx, `SELECT state_json, expires_ns FROM actor_continuity
+WHERE source_message_id < ? ORDER BY source_message_id DESC LIMIT 1`, userMessageID).Scan(&raw, &expires)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if expires <= now.UnixNano() {
+		return nil, nil
+	}
+	var state actor.Continuity
+	if err := json.Unmarshal([]byte(raw), &state); err != nil {
+		return nil, err
+	}
+	return &state, nil
+}
+
 func (h *History) SaveActorDecision(ctx context.Context, userMessageID int64, decision actor.Decision, at time.Time) error {
 	if userMessageID < 1 {
 		return errors.New("actor decision requires a user message")
@@ -66,6 +89,25 @@ func (h *History) ConfirmActorDecision(ctx context.Context, userMessageID int64,
 	}
 	if saved != string(raw) {
 		return errors.New("actor decision changed before reply confirmation")
+	}
+	expires := at.UnixNano()
+	var continuity actor.Continuity
+	if decision.Carryover != nil {
+		continuity = *decision.Carryover
+		if continuity.Lifetime == "hours" {
+			expires = at.Add(6 * time.Hour).UnixNano()
+		} else {
+			expires = at.Add(72 * time.Hour).UnixNano()
+		}
+	}
+	continuityJSON, err := json.Marshal(continuity)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO actor_continuity(source_message_id, state_json, expires_ns)
+VALUES (?, ?, ?) ON CONFLICT(source_message_id) DO UPDATE SET state_json=excluded.state_json, expires_ns=excluded.expires_ns`,
+		userMessageID, string(continuityJSON), expires); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, "DELETE FROM goal_world_engagements WHERE source_message_id = ?", userMessageID); err != nil {
 		return err

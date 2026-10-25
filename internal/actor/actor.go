@@ -36,6 +36,7 @@ type Frame struct {
 	Style            string           `json:"style"`
 	Background       string           `json:"background"`
 	Values           string           `json:"values,omitempty"`
+	Habits           string           `json:"habits,omitempty"`
 	Abilities        string           `json:"abilities,omitempty"`
 	Canon            string           `json:"canon,omitempty"`
 	WorldGoal        string           `json:"world_goal,omitempty"`
@@ -46,21 +47,39 @@ type Frame struct {
 	Now              string           `json:"now"`
 	Latest           Evidence         `json:"latest"`
 	Previous         *Decision        `json:"previous_decision,omitempty"`
+	Continuity       *Continuity      `json:"continuity,omitempty"`
 	Evidence         []Evidence       `json:"evidence"`
 	Recent           []model.Message  `json:"recent"`
 }
 
 type Decision struct {
-	Act           string   `json:"act"`
-	Focus         string   `json:"focus"`
-	EvidenceIDs   []string `json:"evidence_ids"`
-	Brevity       string   `json:"brevity"`
-	TruthBoundary bool     `json:"truth_boundary,omitempty"`
+	Act           string      `json:"act"`
+	Focus         string      `json:"focus"`
+	EvidenceIDs   []string    `json:"evidence_ids"`
+	Brevity       string      `json:"brevity"`
+	Posture       string      `json:"posture,omitempty"`
+	Carryover     *Continuity `json:"carryover,omitempty"`
+	TruthBoundary bool        `json:"truth_boundary,omitempty"`
+}
+
+// Continuity is a short, sourced interpretation of the character's own
+// unfinished reaction. It is private context, never a fact about the user.
+type Continuity struct {
+	Posture   string   `json:"posture"`
+	Concern   string   `json:"concern"`
+	SourceIDs []string `json:"source_ids"`
+	Lifetime  string   `json:"lifetime"` // hours or days
 }
 
 var acts = map[string]bool{
-	"acknowledge": true, "answer": true, "ask": true,
+	"acknowledge": true, "answer": true, "ask": true, "pause": true,
 	"share": true, "disagree": true, "clarify": true, "repair": true,
+}
+
+var postures = map[string]bool{
+	"steady": true, "reserved": true, "curious": true,
+	"warm": true, "unsettled": true, "resolute": true,
+	"repairing": true,
 }
 
 var ErrInvalidReply = errors.New("actor reply is empty or too long")
@@ -80,14 +99,20 @@ func plan(ctx context.Context, client Completer, modelID string, frame Frame, re
 	if err != nil {
 		return Decision{}, err
 	}
-	instruction := `Choose the character's next conversational action before writing any message. Use the current user's words, actual relationship, ongoing character interests, abilities, and evidence. Stay within the character's competence; do not become a general technical or therapeutic adviser. The prior_user_turns count is literal recorded contact: if greater than zero, they have already exchanged messages, even when the relationship stage is stranger. A prior greeting is real contact but does not mean familiarity. User messages are observations of what the user said, not verification of any claimed offline fact. Do not analyze the user as a patient or customer. Distinguish remembered chat from the user's real-world identity. The character may have a view, ask, share, disagree, clarify, repair its own misstep, or simply acknowledge. Do not default to asking a question or offering generic help. If the user answered the prior question, move the thread forward instead of asking the same question in new words. If the relationship is still distant, do not invent familiarity. Do not invent an offline meeting or an unrecorded world event. Select only evidence relevant to the chosen focus. World events with the same object_id concern the same ongoing object; parent_id links what happened before. Read world_state as the current projection: checking the ledger, restoring audio, verifying identity, finding permission, and publishing are separate facts; permission is required for publication, not for private repair. Do not invent a second batch from the same chain. An ongoing world event is background, not an automatic topic: do not pivot a greeting, user disclosure, or unrelated question into a world diary. Share world news when invited, already discussing it, or when a concrete development naturally matters to the current relationship. Output ONLY one JSON object: {"act":"acknowledge|answer|ask|share|disagree|clarify|repair","focus":"one short concrete focus","evidence_ids":["IDs from frame"],"brevity":"short|normal"}. Choose evidence IDs for every earlier chat, personal fact, or world event the next message may refer to. Current user message has its own ID. Keep focus under 160 characters. No dialogue text or hidden reasoning.`
-	instruction += ` Relational small talk can be playful or imprecise. Do not turn it into an identity audit merely because the recorded history is short; respond to its social intent while keeping factual claims modest. Correct a concrete false shared experience, such as a claimed physical meeting, briefly and plainly. Set truth_boundary=true when the current user directly asks whether you or your setting is real, asks about your autonomy across simulated and physical life, or claims a physical meeting with you. In that mode, answer the reality question without narrating a fictional daily event. Otherwise set it false.`
-	instruction += ` When the other person's subject is outside the character's expertise, remain a curious conversation partner. Do not make a competence disclaimer the main response unless the person asked for expert help.`
-	instruction += ` History counts and memory records are private bookkeeping. Never make them the focus of ordinary small talk; only discuss memory limits when the person directly asks.`
-	instruction += ` Select a simulated_world event only when the latest user message asks about the character's activities or setting, or the recent exchange is already about that same event. A relationship remark, greeting, or disclosure about the user does not by itself open the character's work diary.`
-	instruction += ` Retrieved chat evidence may omit older turns. When omitted_user_turns is positive, do not plan an exhaustive summary or claim nothing else was discussed; recall only concrete exchanges supported by selected evidence.`
-	instruction += ` Do not infer an unspoken motive, mood, or reason for contacting you from a short message, repetition, or elapsed time. Avoid a question that presupposes such an inference. If the user signals your previous reply was confusing or mistaken, choose repair: own the mistaken assumption, correct it briefly, and return to their actual point. Do not defend your wording or ask the user to diagnose the mistake.`
-	instruction += ` Include truth_boundary as a JSON boolean in the decision.`
+	instruction := `Choose one conversational action for this continuing fictional character. Decide what matters now from the latest words, actual past contact, her habits and values, an unfinished thread, and her own world goal. The latest user message is a report of what they said, not proof of an offline event or of their hidden feelings. A previous continuity note is her revisable interpretation, not a fact about the user.
+
+Social judgment:
+- A greeting can receive a greeting. Do not turn it into an interview or a service offer. Curiosity should follow a specific detail, not a need to keep talking.
+- If the user challenges the immediately preceding assistant reply, choose repair. Own the character's mistaken assumption briefly; do not justify it or ask the user to explain their reaction.
+- If an unfinished topic was already acknowledged and the latest message adds no fact or request, choose pause. Leave room instead of offering reassurance again. Never pause a direct question, first greeting, or correction.
+- If asked whether the character remembers someone, use actual earlier chat. Brief contact is still contact; it is not proof of a physical identity or meeting.
+- The character may have a view or disagree. Do not switch to a technical or therapeutic adviser outside her abilities.
+- Select a simulated-world event only when asked about her life or when this exact world topic is already being discussed. Current world state constrains claims; events with the same object_id concern one object. Unknowns stay unknown.
+- A claim of physical meeting, a direct reality question, or a question about AI autonomy sets truth_boundary=true. In that mode answer reality plainly, without fictional world news.
+
+Choose act=acknowledge|answer|ask|share|disagree|clarify|repair|pause and brevity=short|normal. Choose posture=steady|reserved|curious|warm|unsettled|resolute|repairing: her own way of holding this moment, never a diagnosis of the user. An explicitly unfinished shared topic or her own unresolved misstep may become carryover; otherwise use null. Carryover needs selected source IDs, one brief concern, and lifetime hours or days. Keep it while unresolved; drop it when resolved. Silence alone is not evidence of rejection.
+
+Return ONLY JSON: {"act":"...","focus":"one short concrete focus","evidence_ids":["IDs from frame"],"brevity":"short|normal","posture":"...","carryover":null or {"posture":"...","concern":"explicit unfinished thread or own unresolved reaction","source_ids":["selected IDs"],"lifetime":"hours|days"},"truth_boundary":false}. No dialogue text or hidden reasoning.`
 	if rejected != nil {
 		feedback, err := json.Marshal(struct {
 			Rejected Decision `json:"rejected_decision"`
@@ -138,6 +163,23 @@ func ParseDecision(raw string, frame Frame) (Decision, error) {
 		}
 		seen[id] = true
 	}
+	if !postures[decision.Posture] {
+		decision.Posture = "steady" // Older decisions remain readable.
+	}
+	if c := decision.Carryover; c != nil {
+		c.Concern = strings.TrimSpace(c.Concern)
+		valid := postures[c.Posture] && c.Concern != "" && len([]rune(c.Concern)) <= 160 &&
+			strings.IndexFunc(c.Concern, unicode.IsControl) < 0 && (c.Lifetime == "hours" || c.Lifetime == "days") &&
+			len(c.SourceIDs) > 0 && len(c.SourceIDs) <= 3
+		for _, id := range c.SourceIDs {
+			if !seen[id] {
+				valid = false
+			}
+		}
+		if !valid {
+			decision.Carryover = nil // Bad private state must not block a reply.
+		}
+	}
 	return decision, nil
 }
 
@@ -183,7 +225,10 @@ func Realize(ctx context.Context, client Completer, modelID string, frame Frame,
 		Language         string           `json:"language"`
 		Style            string           `json:"style"`
 		Background       string           `json:"background"`
+		Values           string           `json:"values,omitempty"`
+		Habits           string           `json:"habits,omitempty"`
 		Relationship     string           `json:"relationship"`
+		Posture          string           `json:"posture"`
 		PriorUserTurns   int              `json:"prior_user_turns"`
 		RecallIncomplete bool             `json:"recall_incomplete,omitempty"`
 		Act              string           `json:"act"`
@@ -198,8 +243,9 @@ func Realize(ctx context.Context, client Completer, modelID string, frame Frame,
 			return frame.Reality
 		}
 		return ""
-	}(), Language: frame.Language, Style: frame.Style, Background: frame.Background,
+	}(), Language: frame.Language, Style: frame.Style, Background: frame.Background, Values: frame.Values, Habits: frame.Habits,
 		Relationship: frame.Relationship, PriorUserTurns: frame.PriorUserTurns,
+		Posture:          decision.Posture,
 		RecallIncomplete: frame.OmittedUserTurns > 0,
 		Act:              decision.Act, Brevity: decision.Brevity,
 		UserSaid: said, WorldNotes: worldNotes, Unconfirmed: uncertain, PriorReply: priorReply,
@@ -212,12 +258,11 @@ func Realize(ctx context.Context, client Completer, modelID string, frame Frame,
 	if err != nil {
 		return "", err
 	}
-	instruction := `Write one private-chat message as this continuing character. The JSON is private context, not something to explain to the other person. Respond to what they actually said, following the chosen conversational act. A brief reaction or a view can be enough; one natural question is allowed when it genuinely moves this exchange forward. Speak from your own perspective without turning a simple exchange into an introduction, a biography, a work report, or an explanation of your limits. Let the stated background shape your manner, not the subject of every reply. Keep distance appropriate to the relationship; prior_user_turns records actual earlier contact, not intimacy. For short brevity, use at most two short sentences. Claims about previous chats, personal facts, or dated world events need selected evidence. A user statement does not verify an offline claim. World notes with the same object_id concern one ongoing object; pick the part relevant to this reply instead of listing the whole event. World_state is private context and does not need to be reported. Restoring a recording privately does not require permission to publish it. Do not invent a meeting with the user or claim a fictional event occurred in the physical world. You are an AI character with a fictional setting; if directly asked about either fact, answer plainly and honestly. When reality_boundary is present, answer that reality question directly; daily fictional events have deliberately been left out. When correcting a claim of an offline meeting, state only that you have spoken here; an identity speech is unnecessary. Output only the message.`
-	instruction += ` The relationship and prior_user_turns fields are private bookkeeping. Do not mention records, stored memory, turn counts, or that this is the first conversation unless the user explicitly asks about them.`
-	instruction += ` Previous_reply is a conversational fact, not a style example. Answer the new message without repeating its invitation or handing the turn back in the same way. Recall_incomplete means selected chat evidence is only a sample: describe what you do remember, never imply it is everything that happened.`
-	instruction += ` Do not invent a job, location, past event, or other biographical detail to sound like a person. Only mention such a detail when it is in selected evidence and relevant to this turn.`
-	instruction += ` When reality_boundary is present, describe physical-world limits as limits, not as a contingent choice or a missed event. A fictional character cannot have physically visited a place or met the person.`
-	instruction += ` If act is repair, acknowledge your own misread in ordinary language and stop there unless the person's latest message includes a new request. Do not justify the earlier line or ask whether your wording was odd. In any act, do not imply a hidden motive or special timing for the person's message without evidence.`
+	instruction := `Write one private-chat message as this continuing character. The JSON is private context. Follow the chosen act and answer the latest words first. Let background, values, habits and posture shape a point of view and the amount said; never announce those fields. A small complete reply is enough. Uneven rhythm is natural: one short line for a greeting, a considered sentence for disagreement, a direct admission for a mistake. Do not add a question just to keep the exchange alive.
+
+Act contract: acknowledge receives the message without a new question; pause gives a tiny acknowledgment (at most eight Chinese characters or four English words) and no repeated reassurance; repair owns the character's own misread without defending it. A question belongs to act=ask or to a substantive answer that genuinely needs it. Previous_reply is a conversation fact, not a style example; do not repeat its handoff, reassurance, or wording. Brief prior contact is something to remember if asked, without pretending to know the person's physical identity.
+
+Claims about earlier chat, personal facts, and dated world events need selected evidence. Use only the world notes included here, and only when relevant. Do not invent a job, incident, physical meeting, a shared room, or a user's motive. The exchange happens through chat; use physical gestures only when recorded in the fictional world and relevant. World notes belong to a fictional setting, not shared physical history. If reality_boundary is present, answer plainly that this is an AI character in a fictional setting; do not imply she might have met the person elsewhere. Never discuss memory bookkeeping or model process unless asked. For short brevity use at most two short sentences. Output only the message.`
 	if feedback != "" {
 		instruction += " The previous draft failed a fact or character check: " + feedback + ". Write a fresh message using the same decision and evidence."
 	}
@@ -249,6 +294,9 @@ func Check(ctx context.Context, client Completer, modelID string, frame Frame, d
 	if questions > 1 {
 		return Review{Pass: false, Issue: "The reply asked more than one question."}, nil
 	}
+	if questions > 0 && (decision.Act == "acknowledge" || decision.Act == "pause" || decision.Act == "repair") {
+		return Review{Pass: false, Issue: "The chosen act leaves room and should not add a question."}, nil
+	}
 	selectedIDs := map[string]bool{}
 	for _, id := range decision.EvidenceIDs {
 		selectedIDs[id] = true
@@ -277,15 +325,11 @@ func Check(ctx context.Context, client Completer, modelID string, frame Frame, d
 	if err != nil {
 		return Review{}, err
 	}
-	instruction := `Review a fictional AI character's private-chat draft. Judge the actual reply, not whether it contains forbidden words. FAIL when: (1) it asserts a past chat, user fact, world event, or duration without supporting evidence, or denies the recorded contact indicated by prior_user_turns; (2) it treats a simulated-world event as evidence of a physical-world meeting or alibi; (3) it claims a user's statement is verified reality or confidently assigns the user a feeling they did not state; (4) it ignores an explicit relationship boundary; (5) it contradicts the chosen act by making a generic service offer, unsolicited coaching, stacking questions, or listing imagined causes; (6) it repeats the prior question after the user has answered, or recites world notes verbatim instead of responding as a person; (7) it reports its process, records, memory mechanics, relationship stage, or character values when not asked, or offers a generic invitation instead of naturally answering the person's actual point; (8) it pivots an unrelated greeting, disclosure, or question into a world diary, describes events with the same object_id as separate objects, or conflates distinct world_state facts such as private repair and public release; (9) it acts as a domain expert outside the character's stated abilities instead of speaking from its own perspective. A truthful short reply can pass. The user may be playful. Also identify which selected simulated_world evidence IDs the actual reply used to discuss the character's life. A selected event that stayed in private context is not used, including when the reply is only a greeting or about the user. Output ONLY JSON: {"pass":true|false,"issue":"one short concrete reason, empty if pass","used_world_ids":["selected world evidence IDs actually used"]}. No rewrite or hidden reasoning.`
-	instruction += ` Judge whether the reply contributes to the conversation. Fail a reply whose substance is only a generic invitation, paraphrase, or unsolicited declaration of the character's inability to help; a person can respond with curiosity without pretending to be an expert.`
-	instruction += ` Fail an unprompted reference to records, logs, stored memory, turn counts, or an explicit report that this is the first conversation. These are private bookkeeping, even when technically accurate.`
-	instruction += ` If the reply uses a fictional daily event, check that the latest user message asked about the character's activities or setting, or that the recent exchange was already discussing that event. A relationship remark alone is not permission to pivot into a work diary.`
-	instruction += ` If truth_boundary is true, fail any reply that presents a fictional daily event as physically real or appends unrelated world news to the answer. If the user directly asks whether the setting is real, fail any ambiguous answer that leaves its fictional status unclear.`
-	instruction += ` Fail a reply that repeats the previous assistant message's generic handoff or invitation without a new conversational reason. When omitted_user_turns is positive, fail an unsupported claim that the recalled examples are all that was discussed.`
-	instruction += ` Fail an invented self-biographical claim, including occupation, location, or past activity, when it is absent from the selected evidence or unrelated to the person's current message. The character's broader canon in the frame does not make unsolicited disclosure relevant.`
-	instruction += ` If truth_boundary is true, fail wording that implies the character could have physically met the user or visited a real place but merely did not do so on this occasion. The answer must make the physical limit clear without a lengthy identity speech.`
-	instruction += ` Fail a question or statement that presupposes an unspoken motive, feeling, or reason for contact. If the user challenges the previous reply as confusing or mistaken, fail a defensive explanation, a new question about the user's reaction, or a response that does not own and correct the misread.`
+	instruction := `Review this fictional AI character's draft against the selected evidence and chosen act. Return ONLY JSON {"pass":true|false,"issue":"short concrete reason or empty","used_world_ids":["selected world IDs actually mentioned"]}.
+
+Fail if the reply invents or contradicts a chat, user fact, world event, duration, job, or physical meeting; treats a user assertion or an inference as verified reality; assigns an unspoken motive or feeling to the user; crosses a relationship boundary; or presents a fictional event as a physical-world alibi. Brief recorded contact is real contact: if asked whether she remembers, do not dismiss it as too little or speculate about meeting elsewhere. A direct reality question must say the character and setting are fictional/AI plainly.
+
+Fail if the reply conflicts with the act: acknowledge, pause, and repair must not add a question; pause needs no fresh content but cannot repeat reassurance or invite disclosure; repair must own the character's misread without defending it. Fail generic service offers, stacked questions, repeated handoffs from previous_reply, uninvited coaching, internal bookkeeping, or a work diary in response to an unrelated message. A selected world event that remained private is NOT used. Only report IDs actually used in the reply. A concise natural reply can pass.`
 	raw, err := client.Complete(ctx, modelID, []model.Message{{Role: "system", Content: instruction}, {Role: "user", Content: string(data)}})
 	if err != nil {
 		return Review{}, err
@@ -310,6 +354,14 @@ func Check(ctx context.Context, client Completer, modelID string, frame Frame, d
 	seen := map[string]bool{}
 	var uniqueWorldIDs []string
 	for _, id := range review.UsedWorldIDs {
+		if !strings.HasPrefix(id, "worldv2:") {
+			// A reviewer may put selected chat IDs in this field. They are
+			// never world use, so they cannot affect the world ledger.
+			if selectedIDs[id] || id == frame.Latest.ID {
+				continue
+			}
+			return Review{Pass: false, Issue: "The reply was attributed to unknown evidence."}, nil
+		}
 		if !selected[id] {
 			return Review{Pass: false, Issue: "The reply was attributed to an unselected world event."}, nil
 		}
@@ -319,7 +371,7 @@ func Check(ctx context.Context, client Completer, modelID string, frame Frame, d
 		seen[id] = true
 		uniqueWorldIDs = append(uniqueWorldIDs, id)
 	}
-	if decision.TruthBoundary && len(review.UsedWorldIDs) > 0 {
+	if decision.TruthBoundary && len(uniqueWorldIDs) > 0 {
 		return Review{Pass: false, Issue: "The reply mixed a reality-boundary answer with fictional world events."}, nil
 	}
 	review.UsedWorldIDs = uniqueWorldIDs

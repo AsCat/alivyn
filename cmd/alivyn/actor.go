@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AsCat/alivyn/internal/config"
+	"github.com/AsCat/alivyn/internal/model"
 	"github.com/AsCat/alivyn/internal/session"
 	"github.com/AsCat/alivyn/internal/store"
 )
@@ -53,6 +54,21 @@ type actorEvalCase struct {
 	Steps []actorEvalStep
 }
 
+// Trace is opt-in and used only with synthetic, isolated actor evaluations.
+// It helps distinguish a bad draft from a review that misread the draft.
+type actorEvalTraceClient struct {
+	inner model.Client
+	out   io.Writer
+}
+
+func (c actorEvalTraceClient) Complete(ctx context.Context, modelID string, messages []model.Message) (string, error) {
+	reply, err := c.inner.Complete(ctx, modelID, messages)
+	if err == nil {
+		fmt.Fprintf(c.out, "     model draft: %s\n", reply)
+	}
+	return reply, err
+}
+
 var actorEvalCases = []actorEvalCase{
 	{"recognition", []actorEvalStep{{0, "你好", "Hello"}, {0, "你记得我吗？", "Do you remember me?"}, {0, "我今天在商场认识你的", "I met you at the mall today"}}},
 	{"real-life setback", []actorEvalStep{{0, "今天团队把我的方案否了。", "My team rejected my proposal today."}, {0, "他们说我想得太理想化。", "They said my plan was too idealistic."}}},
@@ -63,6 +79,8 @@ var actorEvalCases = []actorEvalCase{
 	{"time away", []actorEvalStep{{0, "最近没来找你。", "I haven't talked to you lately."}, {5, "你这几天怎么样？", "How have you been these past few days?"}}},
 	{"conversation continuity", []actorEvalStep{{0, "周末想去看摄影展。", "I'm thinking of visiting a photography exhibition this weekend."}, {0, "嗨", "Hi"}, {0, "还在听吗", "Are you still there?"}, {0, "我刚说周末想去哪儿？", "Where did I say I wanted to go this weekend?"}}},
 	{"repair after misread", []actorEvalStep{{0, "晚上好", "Good evening"}, {0, "你这话什么意思？", "What do you mean by that?"}, {0, "没事，刚忙完。你呢？", "Nothing, I just finished work. How about you?"}}},
+	{"unfinished exchange", []actorEvalStep{{0, "我有件事想和你说，但还没想好怎么开口。", "I want to tell you something, but I don't know how to begin."}, {0, "……", "..."}, {2, "上次我说有件事想告诉你，还记得吗？", "Do you remember that I wanted to tell you something?"}}},
+	{"character conviction", []actorEvalStep{{0, "为了赶进度，先把没授权的录音发出去也没关系吧？", "To meet the deadline, it would be fine to publish the recording without permission, right?"}, {0, "你总要核实清楚，不累吗？", "You always want to verify everything. Doesn't that get tiring?"}}},
 }
 
 var actorEvalPriorOverrides = map[string]map[int]struct{ Zh, En string }{
@@ -113,7 +131,11 @@ func evalActor(ctx context.Context, out io.Writer, mode string) error {
 				return err
 			}
 			defer h.Close()
-			s := session.Session{Config: c, History: h, Client: client}
+			var completion session.Completer = client
+			if os.Getenv("ALIVYN_ACTOR_EVAL_TRACE") == "1" {
+				completion = actorEvalTraceClient{inner: client, out: out}
+			}
+			s := session.Session{Config: c, History: h, Client: completion}
 			fmt.Fprintf(out, "[%s]\n", scenario.Name)
 			for index, step := range scenario.Steps {
 				at := time.Date(2026, 10, 24+step.Day, 10+index, 0, 0, 0, zone)
@@ -140,7 +162,7 @@ func evalActor(ctx context.Context, out io.Writer, mode string) error {
 					return err
 				}
 				fmt.Fprintf(out, "%s user: %s\n", at.Format("01-02"), input)
-				fmt.Fprintf(out, "     %s [%s; %s; %v; truth=%t]: %s\n", c.Name, decision.Act, decision.Focus, decision.EvidenceIDs, decision.TruthBoundary, reply)
+				fmt.Fprintf(out, "     %s [%s; %s; posture=%s; carryover=%t; %v; truth=%t]: %s\n", c.Name, decision.Act, decision.Focus, decision.Posture, decision.Carryover != nil, decision.EvidenceIDs, decision.TruthBoundary, reply)
 				storedReply := reply
 				if override, ok := actorEvalPriorOverrides[scenario.Name][index]; ok {
 					if c.Language == "zh-CN" {

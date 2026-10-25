@@ -176,6 +176,11 @@ CREATE TABLE IF NOT EXISTS actor_decisions (
   decision_json TEXT NOT NULL,
   decided_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS actor_continuity (
+  source_message_id INTEGER PRIMARY KEY REFERENCES messages(id),
+  state_json TEXT NOT NULL,
+  expires_ns INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS relationship_snapshots (
   source_message_id INTEGER PRIMARY KEY REFERENCES messages(id),
   state_json TEXT NOT NULL

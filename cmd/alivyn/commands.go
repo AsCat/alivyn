@@ -188,7 +188,9 @@ func chat(ctx context.Context, in io.Reader, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "%s> %s\n", c.Name, display.Clean(reply))
+		if reply != "" {
+			fmt.Fprintf(out, "%s> %s\n", c.Name, display.Clean(reply))
+		}
 	}
 }
 

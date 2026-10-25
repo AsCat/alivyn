@@ -45,6 +45,9 @@ func (s Session) GenerateReply(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if strings.TrimSpace(reply) == "" {
+		return "", nil // The actor chose to let this turn rest.
+	}
 	if err := s.History.Add(ctx, "assistant", reply, time.Now()); err != nil {
 		return "", fmt.Errorf("save model reply: %w", err)
 	}

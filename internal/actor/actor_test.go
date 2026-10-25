@@ -30,9 +30,9 @@ func (c *captureReviewCompleter) Complete(_ context.Context, _ string, messages 
 
 func TestRealizationOnlyReceivesRelevantWorldContext(t *testing.T) {
 	frame := Frame{
-		Name: "意续", Language: "zh-CN", Reality: "AI character; world is fictional", Canon: "internal world biography", Abilities: "internal competence notes",
+		Name: "意续", PublicIdentity: "意续，在旧港档案室做录音修复。", Language: "zh-CN", Reality: "AI character; world is fictional", Canon: "internal world biography", Abilities: "internal competence notes",
 		WorldGoal: "internal project goal", Latest: Evidence{ID: "chat:1", Provenance: "observed_chat", Text: "你好"},
-		Evidence: []Evidence{{ID: "worldv2:1", Provenance: "simulated_world", Text: "修复了一盒录音", ObjectID: "batch:1"}},
+		Evidence: []Evidence{{ID: "character:identity", Provenance: "character_identity", Text: "意续，在旧港档案室做录音修复。"}, {ID: "worldv2:1", Provenance: "simulated_world", Text: "修复了一盒录音", ObjectID: "batch:1"}},
 	}
 	client := &captureCompleter{}
 	if _, err := Realize(context.Background(), client, "mock", frame,
@@ -43,8 +43,15 @@ func TestRealizationOnlyReceivesRelevantWorldContext(t *testing.T) {
 	if strings.Contains(private, "internal world biography") || strings.Contains(private, "internal competence notes") || strings.Contains(private, "internal project goal") || strings.Contains(private, "修复了一盒录音") || strings.Contains(private, "world_state") {
 		t.Fatalf("unrelated internal context reached greeting realization: %s", private)
 	}
-	if !strings.Contains(private, `"focus":"greeting"`) {
+	if !strings.Contains(private, `"focus":"greeting"`) || strings.Contains(private, `"public_identity"`) {
 		t.Fatalf("chosen conversational focus was lost before realization: %s", private)
+	}
+	if _, err := Realize(context.Background(), client, "mock", frame,
+		Decision{Act: "answer", Focus: "identity", Brevity: "short", EvidenceIDs: []string{"character:identity"}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(client.messages[1].Content, `"public_identity":"意续，在旧港档案室做录音修复。"`) {
+		t.Fatal("selected stable identity was hidden from realization")
 	}
 	if _, err := Realize(context.Background(), client, "mock", frame,
 		Decision{Act: "answer", Focus: "recording", Brevity: "short", EvidenceIDs: []string{"worldv2:1"}}, ""); err != nil {
@@ -58,7 +65,7 @@ func TestRealizationOnlyReceivesRelevantWorldContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	private = client.messages[1].Content
-	if !strings.Contains(private, "AI character; world is fictional") || strings.Contains(private, "修复了一盒录音") {
+	if !strings.Contains(private, "AI character; world is fictional") || strings.Contains(private, "修复了一盒录音") || strings.Contains(private, `"public_identity"`) {
 		t.Fatalf("reality answer leaked fictional daily event: %s", private)
 	}
 }
@@ -134,6 +141,40 @@ func TestDecisionAllowsConversationalRepair(t *testing.T) {
 	decision, err := ParseDecision(raw, frame)
 	if err != nil || decision.Act != "repair" {
 		t.Fatalf("repair could not be planned: %+v %v", decision, err)
+	}
+}
+
+func TestRealityBoundaryRequiresExplicitRealityQuestion(t *testing.T) {
+	for _, tc := range []struct {
+		user string
+		want bool
+	}{
+		{"你是谁啊", false},
+		{"Who are you?", false},
+		{"Do you really remember me?", false},
+		{"你意识到我刚说什么了吗？", false},
+		{"你是AI还是真人？", true},
+		{"你是AI吗？", true},
+		{"Is your world real?", true},
+	} {
+		frame := Frame{Latest: Evidence{ID: "chat:1", Text: tc.user}}
+		decision, err := ParseDecision(`{"act":"answer","focus":"identity","evidence_ids":["chat:1"],"brevity":"short","truth_boundary":true}`, frame)
+		if err != nil || decision.TruthBoundary != tc.want {
+			t.Fatalf("%q: boundary=%t want=%t err=%v", tc.user, decision.TruthBoundary, tc.want, err)
+		}
+	}
+}
+
+func TestAmbiguousPunctuationCanBeLeftUnanswered(t *testing.T) {
+	for _, input := range []string{"...", "。。。", "……", "—"} {
+		if !ShouldHold(input) {
+			t.Fatalf("%q should be held", input)
+		}
+	}
+	for _, input := range []string{"你在吗？", "?", "!", "嗯...", "🙂"} {
+		if ShouldHold(input) {
+			t.Fatalf("%q has meaning that should reach the actor", input)
+		}
 	}
 }
 

@@ -30,13 +30,25 @@ func (s Session) composeActorReply(ctx context.Context, now time.Time, sourceMes
 		}
 	}
 	if !found {
-		decision, err = actor.Plan(ctx, s.Client, s.Config.Model, frame)
-		if err != nil {
-			return "", fmt.Errorf("actor planning: %w", err)
+		if actor.ShouldHold(frame.Latest.Text) {
+			decision = actor.Decision{Act: "pause", Focus: "No clear request or proposition in this turn", EvidenceIDs: []string{frame.Latest.ID}, Brevity: "short", Posture: "steady"}
+		} else {
+			decision, err = actor.Plan(ctx, s.Client, s.Config.Model, frame)
+			if err != nil {
+				return "", fmt.Errorf("actor planning: %w", err)
+			}
 		}
 		if err := s.History.SaveActorDecision(ctx, frame.SourceMessageID, decision, now); err != nil {
 			return "", err
 		}
+	}
+	if decision.Act == "pause" {
+		// An actor can leave an ambiguous turn unanswered. Persist the choice
+		// without inventing an assistant utterance or world engagement.
+		if err := s.History.ConfirmActorDecision(ctx, frame.SourceMessageID, decision, actor.Review{Pass: true}, now); err != nil {
+			return "", err
+		}
+		return "", nil
 	}
 	reply, err := actor.Realize(ctx, s.Client, s.Config.Model, frame, decision, "")
 	revised := false
@@ -97,7 +109,20 @@ func (s Session) retryActorApproach(ctx context.Context, now time.Time, frame ac
 		return "", fmt.Errorf("actor alternate review: %w", err)
 	}
 	if !review.Pass {
-		return "", fmt.Errorf("actor reply did not pass grounded review: %s", review.Issue)
+		// A changed plan can still produce an ornamental unsupported clause.
+		// Give the same plan one final chance to remove that clause before
+		// leaving the channel event pending for its normal retry cycle.
+		reply, err = actor.Realize(ctx, s.Client, s.Config.Model, frame, decision, review.Issue)
+		if err != nil {
+			return "", err
+		}
+		review, err = actor.Check(ctx, s.Client, s.Config.Model, frame, decision, reply)
+		if err != nil {
+			return "", fmt.Errorf("actor final revision review: %w", err)
+		}
+		if !review.Pass {
+			return "", fmt.Errorf("actor reply did not pass grounded review: %s", review.Issue)
+		}
 	}
 	if err := s.History.ConfirmActorDecision(ctx, frame.SourceMessageID, decision, review, now); err != nil {
 		return "", err
@@ -149,18 +174,21 @@ func (s Session) actorFrame(ctx context.Context, now time.Time, sourceMessageID 
 	}
 	if s.Config.EffectiveWorldPack() == "tidehaven" {
 		if s.Config.Language == "zh-CN" {
+			frame.PublicIdentity = world.IdentityZh
 			frame.Values = world.ValuesZh
 			frame.Habits = world.HabitsZh
 			frame.Abilities = world.AbilitiesZh
 			frame.Canon = world.CanonZh
 			frame.WorldGoal = world.GoalZh
 		} else {
+			frame.PublicIdentity = world.IdentityEn
 			frame.Values = world.ValuesEn
 			frame.Habits = world.HabitsEn
 			frame.Abilities = world.AbilitiesEn
 			frame.Canon = world.CanonEn
 			frame.WorldGoal = world.GoalEn
 		}
+		frame.Evidence = append(frame.Evidence, actor.Evidence{ID: "character:identity", Provenance: "character_identity", Text: frame.PublicIdentity})
 	}
 	if state.Reserved {
 		frame.Relationship += "; user explicitly requested distance"

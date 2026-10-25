@@ -291,6 +291,9 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 		if err != nil {
 			return err
 		}
+		if strings.TrimSpace(reply) == "" {
+			return h.SkipFeishuReply(ctx, item.EventID)
+		}
 		if err := h.SetFeishuReply(ctx, item.EventID, reply, time.Now()); err != nil {
 			return err
 		}

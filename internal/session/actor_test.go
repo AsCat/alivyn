@@ -111,6 +111,32 @@ func TestActorReplansWhenWordingCannotPassReview(t *testing.T) {
 	}
 }
 
+func TestActorRemovesUnsupportedClauseAfterReplan(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 24, 22, 0, 0, 0, time.UTC)
+	if err := h.AddUserMessage(ctx, "睡了吗", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &actorScript{replies: []string{
+		`{"act":"answer","focus":"answer whether awake","evidence_ids":["chat:1"],"brevity":"short"}`,
+		"没睡，手上还有点没收完的东西。", `{"pass":false,"issue":"invented current activity"}`,
+		"没睡，正忙着呢。", `{"pass":false,"issue":"still invents current activity"}`,
+		`{"act":"answer","focus":"answer directly","evidence_ids":["chat:1"],"brevity":"short"}`,
+		"没睡，刚把录音关了。", `{"pass":false,"issue":"invented current activity"}`,
+		"还没睡。", `{"pass":true,"issue":""}`,
+	}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "actor_v1", WorldPack: "none"}, History: h, Client: client}
+	reply, err := s.ComposeReplyAt(ctx, at)
+	if err != nil || reply != "还没睡。" || client.calls != 10 {
+		t.Fatalf("final revision failed: reply=%q calls=%d err=%v", reply, client.calls, err)
+	}
+}
+
 func TestActorWorldEvidenceKeepsCausalObject(t *testing.T) {
 	ctx := context.Background()
 	h, err := store.OpenHistory(ctx, t.TempDir())

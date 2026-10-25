@@ -89,6 +89,44 @@ func (f *fakeCompleter) Complete(_ context.Context, _ string, _ []model.Message)
 	return "hello", nil
 }
 
+type pauseCompleter struct{ calls int }
+
+func (f *pauseCompleter) Complete(_ context.Context, _ string, _ []model.Message) (string, error) {
+	f.calls++
+	return `{"act":"pause","focus":"leave an ambiguous turn unanswered","evidence_ids":[],"brevity":"short"}`, nil
+}
+
+func TestFeishuActorCanLeaveAmbiguousTurnUnanswered(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if _, err := h.EnqueueFeishu(ctx, "e1", "chat", "m1", "。。。", time.Now(), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &pauseCompleter{}
+	s := session.Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "actor_v1", WorldPack: "none"}, History: h, Client: client}
+	sender := &flakySender{}
+	if err := processFeishuOnce(ctx, h, s, sender); err != nil {
+		t.Fatal(err)
+	}
+	if err := processFeishuOnce(ctx, h, s, sender); err != nil {
+		t.Fatal(err)
+	}
+	if sender.calls != 0 || client.calls != 0 {
+		t.Fatalf("silence caused a send or regenerated a decision: sends=%d model=%d", sender.calls, client.calls)
+	}
+	if _, ok, err := h.NextFeishu(ctx); err != nil || ok {
+		t.Fatalf("silent event remained pending: found=%t err=%v", ok, err)
+	}
+	transcript, err := h.RecentForModel(ctx, 10)
+	if err != nil || len(transcript) != 1 || transcript[0].Role != "user" {
+		t.Fatalf("silence invented an assistant turn: %+v err=%v", transcript, err)
+	}
+}
+
 type flakySender struct {
 	calls int
 	fail  bool

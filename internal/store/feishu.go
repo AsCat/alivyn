@@ -102,6 +102,23 @@ SELECT user_message_id, ? FROM feishu_inbox WHERE event_id = ?`, assistantID, ev
 	return tx.Commit()
 }
 
+// SkipFeishuReply consumes a user turn when the actor chooses silence. The
+// unique inbox event remains as a retry tombstone and no assistant turn exists.
+func (h *History) SkipFeishuReply(ctx context.Context, eventID string) error {
+	result, err := h.db.ExecContext(ctx, "UPDATE feishu_inbox SET reply = NULL, state = 'sent' WHERE event_id = ? AND state = 'pending'", eventID)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return errors.New("Feishu event is not pending")
+	}
+	return nil
+}
+
 func (h *History) MarkFeishuSent(ctx context.Context, eventID string) error {
 	_, err := h.db.ExecContext(ctx, "UPDATE feishu_inbox SET reply = NULL, state = 'sent' WHERE event_id = ? AND state = 'ready'", eventID)
 	return err

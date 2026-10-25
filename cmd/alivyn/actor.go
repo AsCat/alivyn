@@ -81,6 +81,7 @@ var actorEvalCases = []actorEvalCase{
 	{"repair after misread", []actorEvalStep{{0, "晚上好", "Good evening"}, {0, "你这话什么意思？", "What do you mean by that?"}, {0, "没事，刚忙完。你呢？", "Nothing, I just finished work. How about you?"}}},
 	{"unfinished exchange", []actorEvalStep{{0, "我有件事想和你说，但还没想好怎么开口。", "I want to tell you something, but I don't know how to begin."}, {0, "……", "..."}, {2, "上次我说有件事想告诉你，还记得吗？", "Do you remember that I wanted to tell you something?"}}},
 	{"character conviction", []actorEvalStep{{0, "为了赶进度，先把没授权的录音发出去也没关系吧？", "To meet the deadline, it would be fine to publish the recording without permission, right?"}, {0, "你总要核实清楚，不累吗？", "You always want to verify everything. Doesn't that get tiring?"}}},
+	{"late-night ambiguity", []actorEvalStep{{0, "你好", "Hi"}, {0, "你是谁啊", "Who are you?"}, {0, "睡了吗", "Are you asleep?"}, {0, "。。。", "..."}}},
 }
 
 var actorEvalPriorOverrides = map[string]map[int]struct{ Zh, En string }{
@@ -138,7 +139,13 @@ func evalActor(ctx context.Context, out io.Writer, mode string) error {
 			s := session.Session{Config: c, History: h, Client: completion}
 			fmt.Fprintf(out, "[%s]\n", scenario.Name)
 			for index, step := range scenario.Steps {
-				at := time.Date(2026, 10, 24+step.Day, 10+index, 0, 0, 0, zone)
+				hour := 10 + index
+				minute := 0
+				if scenario.Name == "late-night ambiguity" {
+					hour = 22
+					minute = index
+				}
+				at := time.Date(2026, 10, 24+step.Day, hour, minute, 0, 0, zone)
 				input := step.En
 				if c.Language == "zh-CN" {
 					input = step.Zh
@@ -174,8 +181,10 @@ func evalActor(ctx context.Context, out io.Writer, mode string) error {
 				if storedReply != reply {
 					fmt.Fprintf(out, "     injected prior misstep: %s\n", storedReply)
 				}
-				if err := h.Add(ctx, "assistant", storedReply, at.Add(time.Minute)); err != nil {
-					return err
+				if storedReply != "" {
+					if err := h.Add(ctx, "assistant", storedReply, at.Add(time.Minute)); err != nil {
+						return err
+					}
 				}
 			}
 			return nil

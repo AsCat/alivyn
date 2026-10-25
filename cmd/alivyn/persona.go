@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/AsCat/alivyn/internal/character"
 	"github.com/AsCat/alivyn/internal/config"
 )
 
@@ -15,7 +16,7 @@ func runPersona(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "%s: %s\nBackground: %s\n", c.Name, c.EffectiveStyle(), c.EffectiveBackground())
+		fmt.Fprintf(out, "%s: %s\nBackground: %s\n", c.Name, c.EffectiveStyle(), displayPersonaBackground(c))
 		return nil
 	}
 	if len(args) == 2 && args[0] == "background" && args[1] == "show" {
@@ -23,7 +24,7 @@ func runPersona(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(out, c.EffectiveBackground())
+		fmt.Fprintln(out, displayPersonaBackground(c))
 		return nil
 	}
 	if len(args) >= 3 && args[0] == "background" && args[1] == "set" {
@@ -41,4 +42,11 @@ func runPersona(args []string, out io.Writer) error {
 		return nil
 	}
 	return errors.New("usage: alivyn persona show|set natural|romantic|companion|background show|background set <text>")
+}
+
+func displayPersonaBackground(c config.Config) string {
+	if c.EffectiveEngine() == "character_v2" && strings.TrimSpace(c.Background) == "" {
+		return character.DefaultPersona(c.Language)
+	}
+	return c.EffectiveBackground()
 }

@@ -16,6 +16,28 @@ func seedChannelIntent(t *testing.T, h *History, at time.Time, key string) {
 	}
 }
 
+func TestFailedContactCompositionMustComposeAgain(t *testing.T) {
+	ctx := context.Background()
+	at, zone := contactTestClock(t)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedChannelIntent(t, h, at, "compose-failure")
+	first, ready, err := h.NextChannelContact(ctx, at, zone, "en")
+	if err != nil || !ready {
+		t.Fatalf("not prepared: %t %v", ready, err)
+	}
+	if err := h.RetryChannelComposition(ctx, first.IntentID); err != nil {
+		t.Fatal(err)
+	}
+	retry, ready, err := h.NextChannelContact(ctx, at.Add(2*time.Minute), zone, "en")
+	if err != nil || !ready || !retry.FirstTry || retry.Key != first.Key {
+		t.Fatalf("placeholder could be sent: %+v %t %v", retry, ready, err)
+	}
+}
+
 func TestChannelContactPolicyRetryAndRestart(t *testing.T) {
 	ctx := context.Background()
 	at, zone := contactTestClock(t)

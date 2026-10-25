@@ -59,3 +59,32 @@ func TestProviderErrorDoesNotRevealCredentials(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestCharacterProviderControlsAndPortableDefaults(t *testing.T) {
+	for _, configured := range []bool{false, true} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var input map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Error(err)
+			}
+			if configured {
+				if input["thinking"].(map[string]any)["type"] != "enabled" || input["reasoning_effort"] != "low" || input["response_format"].(map[string]any)["type"] != "json_object" {
+					t.Errorf("missing character controls: %+v", input)
+				}
+			} else if input["thinking"] != nil || input["reasoning_effort"] != nil || input["response_format"] != nil {
+				t.Errorf("provider-specific options leaked into portable default: %+v", input)
+			}
+			w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+		}))
+		client := Client{BaseURL: server.URL, APIKey: "test"}
+		if configured {
+			client.Thinking = "enabled"
+			client.ReasoningEffort = "low"
+			client.JSONOutput = true
+		}
+		if _, err := client.Complete(context.Background(), "mock", []Message{{Role: "user", Content: "hi"}}); err != nil {
+			t.Fatal(err)
+		}
+		server.Close()
+	}
+}

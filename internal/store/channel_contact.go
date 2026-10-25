@@ -16,6 +16,13 @@ type ChannelContact struct {
 	FirstTry bool
 }
 
+// RetryChannelComposition is only called before the first send. It removes a
+// placeholder delivery so the next attempt must compose again, never send it.
+func (h *History) RetryChannelComposition(ctx context.Context, id int64) error {
+	_, err := h.db.ExecContext(ctx, "DELETE FROM contact_delivery WHERE intent_id=? AND state='pending' AND attempts=1", id)
+	return err
+}
+
 // NextChannelContact reevaluates policy immediately before recording an attempt.
 // A recorded attempt is retried only within Feishu's one-hour UUID window.
 func (h *History) NextChannelContact(ctx context.Context, at time.Time, zone *time.Location, language string) (ChannelContact, bool, error) {

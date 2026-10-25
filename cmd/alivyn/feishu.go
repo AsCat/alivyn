@@ -227,6 +227,7 @@ func runSelfFeishu(out io.Writer) error {
 		return nil
 	})
 	s := session.Session{Config: c, History: h, Client: client}
+	defer s.StartCharacterReflection(ctx)()
 	go workFeishu(ctx, h, s, ch, out)
 	go workChannelContact(ctx, h, s, zone, c.Language, func() bool {
 		connectionMu.Lock()

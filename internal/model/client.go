@@ -16,9 +16,14 @@ import (
 // Client is a small compatibility probe for chat-completion providers. It is
 // not yet Alivyn's production provider interface.
 type Client struct {
-	BaseURL    string
-	APIKey     string
-	HTTPClient *http.Client
+	BaseURL         string
+	APIKey          string
+	HTTPClient      *http.Client
+	Thinking        string // Provider-specific opt-in; empty omits it for compatibility.
+	Temperature     *float64
+	ReasoningEffort string
+	JSONOutput      bool
+	MaxTokens       int
 }
 
 type Message struct {
@@ -27,14 +32,33 @@ type Message struct {
 }
 
 type request struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
+	Model           string    `json:"model"`
+	Messages        []Message `json:"messages"`
+	Thinking        *thinking `json:"thinking,omitempty"`
+	Temperature     *float64  `json:"temperature,omitempty"`
+	ReasoningEffort string    `json:"reasoning_effort,omitempty"`
+	ResponseFormat  *thinking `json:"response_format,omitempty"`
+	MaxTokens       int       `json:"max_tokens,omitempty"`
+}
+
+type thinking struct {
+	Type string `json:"type"`
 }
 
 type response struct {
 	Choices []struct {
 		Message Message `json:"message"`
 	} `json:"choices"`
+}
+
+func (c Client) CompletePlain(ctx context.Context, model string, messages []Message) (string, error) {
+	c.JSONOutput = false
+	return c.Complete(ctx, model, messages)
+}
+
+func (c Client) CompleteJSON(ctx context.Context, model string, messages []Message) (string, error) {
+	c.JSONOutput = true
+	return c.Complete(ctx, model, messages)
 }
 
 func (c Client) Complete(ctx context.Context, model string, messages []Message) (string, error) {
@@ -49,7 +73,14 @@ func (c Client) Complete(ctx context.Context, model string, messages []Message) 
 		return "", errors.New("API key is required")
 	}
 	u.Path = strings.TrimRight(u.Path, "/") + "/chat/completions"
-	data, err := json.Marshal(request{Model: model, Messages: messages})
+	input := request{Model: model, Messages: messages, Temperature: c.Temperature, ReasoningEffort: c.ReasoningEffort, MaxTokens: c.MaxTokens}
+	if c.Thinking != "" {
+		input.Thinking = &thinking{Type: c.Thinking}
+	}
+	if c.JSONOutput {
+		input.ResponseFormat = &thinking{Type: "json_object"}
+	}
+	data, err := json.Marshal(input)
 	if err != nil {
 		return "", err
 	}

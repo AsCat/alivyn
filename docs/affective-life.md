@@ -1,5 +1,7 @@
 # Affective life and behavioral continuity (RFC 03)
 
+Implementation update (2026-10-26): [Character dialogue v2](character-dialogue.md) replaces the plan/realize/review reply path when `character_v2` is selected. The design below records the earlier engine and remaining longer-term goals.
+
 Status: partially implemented. `actor_v1` now passes the chosen focus, the character's own desire and feeling, ordered recent dialogue, and sourced unfinished threads into expression. Short-lived continuity expires or is removed on forgetting. New world events arising from a topic the user actually discussed can create one proactive contact candidate, subject to the existing contact policy. Evolving long-term views and general device capabilities remain design goals.
 
 ## Why this layer exists

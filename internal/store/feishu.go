@@ -86,6 +86,13 @@ func (h *History) SetFeishuReply(ctx context.Context, eventID, reply string, at 
 	if rows != 1 {
 		return errors.New("Feishu event is not pending")
 	}
+	var sourceID int64
+	if err := tx.QueryRowContext(ctx, "SELECT user_message_id FROM feishu_inbox WHERE event_id = ?", eventID).Scan(&sourceID); err != nil {
+		return err
+	}
+	if err := commitCharacterTurnTx(ctx, tx, sourceID, reply); err != nil {
+		return err
+	}
 	message, err := tx.ExecContext(ctx, "INSERT INTO messages(role, content, created_at) VALUES ('assistant', ?, ?)", reply, at.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return err
@@ -105,7 +112,12 @@ SELECT user_message_id, ? FROM feishu_inbox WHERE event_id = ?`, assistantID, ev
 // SkipFeishuReply consumes a user turn when the actor chooses silence. The
 // unique inbox event remains as a retry tombstone and no assistant turn exists.
 func (h *History) SkipFeishuReply(ctx context.Context, eventID string) error {
-	result, err := h.db.ExecContext(ctx, "UPDATE feishu_inbox SET reply = NULL, state = 'sent' WHERE event_id = ? AND state = 'pending'", eventID)
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, "UPDATE feishu_inbox SET reply = NULL, state = 'sent' WHERE event_id = ? AND state = 'pending'", eventID)
 	if err != nil {
 		return err
 	}
@@ -116,7 +128,14 @@ func (h *History) SkipFeishuReply(ctx context.Context, eventID string) error {
 	if rows != 1 {
 		return errors.New("Feishu event is not pending")
 	}
-	return nil
+	var sourceID int64
+	if err := tx.QueryRowContext(ctx, "SELECT user_message_id FROM feishu_inbox WHERE event_id = ?", eventID).Scan(&sourceID); err != nil {
+		return err
+	}
+	if err := commitCharacterTurnTx(ctx, tx, sourceID, ""); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (h *History) MarkFeishuSent(ctx context.Context, eventID string) error {

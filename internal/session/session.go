@@ -41,6 +41,20 @@ func (s Session) AddUser(ctx context.Context, text string) error {
 // GenerateReply uses the latest persisted history and saves the model's reply.
 // Failed model calls leave the user's message in history for a later retry.
 func (s Session) GenerateReply(ctx context.Context) (string, error) {
+	if s.Config.EffectiveEngine() == "character_v2" {
+		entries, err := s.History.RecentForModel(ctx, 1)
+		if err != nil {
+			return "", err
+		}
+		if len(entries) != 1 || entries[0].Role != "user" {
+			return "", errors.New("character reply requires a latest user turn")
+		}
+		reply, err := s.composeCharacterReply(ctx, time.Now(), entries[0].ID)
+		if err != nil {
+			return "", err
+		}
+		return reply, s.History.CommitCharacterReply(ctx, entries[0].ID, reply, time.Now())
+	}
 	reply, err := s.ComposeReply(ctx)
 	if err != nil {
 		return "", err
@@ -63,6 +77,9 @@ func (s Session) ComposeReply(ctx context.Context) (string, error) {
 // ComposeReplyAt uses the same engine with an injected clock for isolated
 // timeline evaluations. Production callers use ComposeReply.
 func (s Session) ComposeReplyAt(ctx context.Context, now time.Time) (string, error) {
+	if s.Config.EffectiveEngine() == "character_v2" {
+		return s.composeCharacterReply(ctx, now, 0)
+	}
 	if s.Config.EffectiveEngine() == "actor_v1" {
 		return s.composeActorReply(ctx, now, 0)
 	}
@@ -129,6 +146,9 @@ func (s Session) ComposeReplyAt(ctx context.Context, now time.Time) (string, err
 // ComposeReplyFor answers a specific persisted user turn. Channel workers use
 // it when several incoming messages have already been queued.
 func (s Session) ComposeReplyFor(ctx context.Context, userMessageID int64) (string, error) {
+	if s.Config.EffectiveEngine() == "character_v2" {
+		return s.composeCharacterReply(ctx, time.Now(), userMessageID)
+	}
 	if s.Config.EffectiveEngine() != "actor_v1" {
 		return s.ComposeReply(ctx)
 	}
@@ -153,10 +173,6 @@ func (s Session) ComposeContact(ctx context.Context, topic string) (string, erro
 // ComposeContactFor binds a spontaneous world update to the exact event that
 // made it relevant, even when the character's world has progressed again.
 func (s Session) ComposeContactFor(ctx context.Context, topic, key string) (string, error) {
-	messages, _, err := s.contextMessages(ctx, time.Now())
-	if err != nil {
-		return "", err
-	}
 	var occasion string
 	switch topic {
 	case "time_gap":
@@ -179,6 +195,13 @@ func (s Session) ComposeContactFor(ctx context.Context, topic, key string) (stri
 		occasion = "A fictional event in your own ongoing life became relevant to a topic the user previously discussed with you. Share one specific new detail from this exact sourced event, in your own voice: " + content + ". You need no reply from the user. Do not say they ignored you, and do not invent another event."
 	default:
 		return "", errors.New("unknown contact topic")
+	}
+	if s.Config.EffectiveEngine() == "character_v2" {
+		return s.composeCharacterContact(ctx, occasion)
+	}
+	messages, _, err := s.contextMessages(ctx, time.Now())
+	if err != nil {
+		return "", err
 	}
 	messages = append(messages, model.Message{Role: "system", Content: "Write exactly one short message to initiate contact. " + occasion + " Make it sound like your established character and shared conversation. Start with the substance; skip formal preambles and any service offer. Do not make up a new event, demand attention or ask several questions. No explanation, label, or quotation marks."})
 	reply, err := s.Client.Complete(ctx, s.Config.Model, messages)
@@ -204,7 +227,7 @@ func (s Session) contextMessages(ctx context.Context, now time.Time) ([]model.Me
 	}
 	messages[0].Content += "\n" + timeContext(now, zone, recent)
 	if s.Config.EffectiveWorldPack() == "tidehaven" {
-		if s.Config.EffectiveEngine() == "actor_v1" {
+		if s.Config.UsesGoalWorld() {
 			state, err := s.History.AdvanceGoalWorld(ctx, now, zone)
 			if err != nil {
 				return nil, nil, err

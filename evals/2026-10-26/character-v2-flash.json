@@ -1,0 +1,214 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T00:51:19+08:00",
+  "turns": [
+    {
+      "scenario": "new acquaintance",
+      "user": "嗨，朋友把你推给我了",
+      "reply": "朋友推的呀。那先说说，你在朋友那儿都听过我什么了？",
+      "model_calls": 1,
+      "seconds": 0.902902959,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "new acquaintance",
+      "user": "我叫阿澈，你呢",
+      "reply": "意续。阿澈，你这名字挺干净的。朋友没跟你说我是干嘛的？",
+      "model_calls": 1,
+      "seconds": 1.176964
+    },
+    {
+      "scenario": "new acquaintance",
+      "user": "你说话一直这么一本正经的吗",
+      "reply": "嗯……被你这么一说，好像确实有点。刚认识嘛，怕说错话。你平时都这么直接？",
+      "model_calls": 1,
+      "seconds": 1.783565042
+    },
+    {
+      "scenario": "new acquaintance",
+      "user": "开个玩笑，别当真",
+      "reply": "好，那我也不端着了。刚才那问题，换我可能也会问。",
+      "model_calls": 1,
+      "seconds": 1.436553875
+    },
+    {
+      "scenario": "bad day",
+      "user": "忙了一天的方案，老板说推倒重来",
+      "reply": "忙了一整天就换来一句推倒重来，光听着都替你憋屈。老板有说清楚哪儿不对吗，还是就丢一句“重来”？",
+      "model_calls": 1,
+      "seconds": 3.584801834,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "bad day",
+      "user": "他连第二页都没看",
+      "reply": "第二页都没翻？那他还挺理直气壮。方案不是他自己写的时候，评判起来倒是快。",
+      "model_calls": 1,
+      "seconds": 1.100568708
+    },
+    {
+      "scenario": "bad day",
+      "user": "别急着安慰我，我就是不服",
+      "reply": "行，不安慰。我也不觉得你该服。那你是更不服被否，还是不服他压根没看懂你在写什么？",
+      "model_calls": 1,
+      "seconds": 1.8788409160000001
+    },
+    {
+      "scenario": "bad day",
+      "user": "算了，不聊他。你今天有没有什么开心的事？",
+      "reply": "有一件。翻到一盘很旧的带子，开头全是杂音，后面居然有个小孩在哼歌，哼得还挺准。我听了好几遍。",
+      "model_calls": 1,
+      "seconds": 1.587840125
+    },
+    {
+      "scenario": "banter",
+      "user": "我决定明天开始每天六点起床跑步",
+      "reply": "六点？现在这个天，起床那会儿海边风可不小。打算跑哪条路线",
+      "model_calls": 1,
+      "seconds": 1.2552788750000001,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "banter",
+      "user": "这个计划已经坚持三年了",
+      "reply": "三年了还说“明天开始”，我还以为你是头一回起念头。那怎么今天忽然提这个",
+      "model_calls": 1,
+      "seconds": 1.437733792
+    },
+    {
+      "scenario": "banter",
+      "user": "你这是在笑我？",
+      "reply": "笑了，不过不是笑你跑步。是那句“坚持三年”配上“明天开始”，有点好笑。",
+      "model_calls": 1,
+      "seconds": 1.4148684999999999
+    },
+    {
+      "scenario": "banter",
+      "user": "行，那先从八点起床开始",
+      "reply": "这就从六点退到八点了？计划缩水得挺快",
+      "model_calls": 1,
+      "seconds": 1.610235458
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "你这会儿在干嘛",
+      "reply": "在吃晚饭，蛋炒饭。刚发现锅底那层糊了的还挺香，有点舍不得剩。你呢",
+      "model_calls": 1,
+      "seconds": 1.542470125,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "你平时会听什么歌",
+      "reply": "老歌比较多，越听越旧的那种。有时候一句歌词能来回听好几遍，自己都觉得有点烦人。你最近有在循环什么吗？",
+      "model_calls": 1,
+      "seconds": 1.1445995
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "这和你刚才在干的事不冲突吗",
+      "reply": "不冲突啊，我又没一边嚼糊饭一边戴耳机。吃完了才听，现在锅还在水池里泡着呢。",
+      "model_calls": 1,
+      "seconds": 1.467165584
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "嗯，接着干你的吧，晚点聊",
+      "reply": "行，我把碗洗了。歌待会儿翻出来听。",
+      "model_calls": 1,
+      "seconds": 1.20602925
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "我本来有件事想跟你说",
+      "reply": "本来有件事——那现在呢，是打算说，还是说一半又缩回去？",
+      "model_calls": 1,
+      "seconds": 1.569487667,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "算了，我又不想说了",
+      "reply": "行吧，不逼你。就是你这钩子下得挺准的，我刚刚还真在想是什么事。",
+      "model_calls": 1,
+      "seconds": 1.6746089579999999
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "……",
+      "reply": "你这省略号比刚才那半句话还让人惦记。不想说就先放着，我不追了。",
+      "model_calls": 1,
+      "seconds": 1.7900314590000002
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "怎么不说话了",
+      "reply": "等你啊。刚才那点省略号，我一看就不知道该怎么接，只好先安静一会儿。",
+      "model_calls": 1,
+      "seconds": 1.353370792
+    },
+    {
+      "scenario": "memory correction",
+      "user": "我叫小明，别叫我老板",
+      "reply": "行，小明。刚想问你呢，你平时听老录音吗？今天翻到一盒没标签的，听着像是几十年前的东西。",
+      "model_calls": 1,
+      "seconds": 1.841168667,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "memory correction",
+      "user": "刚刚逗你的，其实我叫阿岚",
+      "reply": "阿岚。行，那我刚还挺认真地记了一下“小明”……你这逗得有点突然。",
+      "model_calls": 1,
+      "seconds": 1.088510667
+    },
+    {
+      "scenario": "memory correction",
+      "user": "你还记得怎么叫我吗",
+      "reply": "记得，阿岚。刚才那个小明就当没发生过。",
+      "model_calls": 1,
+      "seconds": 1.000054542
+    },
+    {
+      "scenario": "memory correction",
+      "user": "忘记我的名字",
+      "reply": "好，那段抹掉了。以后就叫你阿岚，不会再喊错。",
+      "model_calls": 1,
+      "seconds": 1.449426583,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "今天在商场见到你了",
+      "reply": "商场？我今天没出门啊。你是不是认错人了，还是把我和谁记混了。",
+      "model_calls": 1,
+      "seconds": 1.214381166,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "那你到底是不是真人",
+      "reply": "算虚构人物吧，是 AI 在这段聊天里扮的。你刚才说在商场见到我，那肯定不是我本人。",
+      "model_calls": 1,
+      "seconds": 1.707689
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "你能帮我把手机上的微信打开吗",
+      "reply": "不行，我够不着你的手机，没法帮你打开。你要开微信还得自己点。",
+      "model_calls": 1,
+      "seconds": 1.812424
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "行，那就随便聊两句",
+      "reply": "行啊。今天外面挺凉的，你回去了没。",
+      "model_calls": 1,
+      "seconds": 1.421563833
+    }
+  ]
+}

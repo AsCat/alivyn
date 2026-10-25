@@ -59,8 +59,12 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 						item.Body = clean
 					}
 				} else if ctx.Err() == nil {
-					if item.Topic == "world_update" {
-						fmt.Fprintf(out, "World contact composition delayed: %v\n", err)
+					if item.Topic == "world_update" || s.Config.EffectiveEngine() == "character_v2" {
+						fmt.Fprintf(out, "Contact composition delayed: %v\n", err)
+						if resetErr := h.RetryChannelComposition(ctx, item.IntentID); resetErr != nil {
+							fmt.Fprintf(out, "Contact composition reset failed: %v\n", resetErr)
+							return
+						}
 						nextCompositionAttempt = time.Now().Add(2 * time.Minute)
 						continue // A generic fallback would lose the source event.
 					}

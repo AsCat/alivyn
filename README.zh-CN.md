@@ -51,7 +51,7 @@ go run ./cmd/alivyn
 
 当前记忆提取器识别明确的面试表述，也识别“我叫阿意”“我喜欢咖啡”等简短、明确的个人陈述。个人记忆保留来源，长对话后仍能调用；后来说“我不喜欢咖啡”会修正旧偏好，说“忘记我喜欢咖啡”或“忘记我的名字”会删除对应记忆并遮盖原始消息。面试记忆保留改期和 `memory forget interview` 的机制。用 `memory list` 查看当前事实，或用 `memory export` 导出包含 `events` 和 `personal` 的 JSON。较长或含糊的说法不会自动变成长期个人记忆；这里也不是完整账号数据导出。
 
-实验中的“持续角色”回应引擎按[顶层架构](docs/actor-architecture.zh-CN.md)检索有来源的经历，先记录简短的对话决定，再把关注点、角色自己的愿望与情绪、近期连续对话和未完话题带入表达，并在发送前审查事实和关系边界。短期状态会过期，也会随遗忘请求清除；详见[情感生活 RFC](docs/affective-life.zh-CN.md)。目标驱动世界账本保持事件对象与因果链；真实聊过的世界话题取得新进展后，可产生一次受联系策略约束的主动消息候选。`alivyn actor eval all` 使用当前模型在隔离数据库里运行多轮场景；`alivyn actor status` 查看引擎，`alivyn actor set actor_v1` 可启用实验版，渠道重启后生效，`alivyn actor set legacy` 可恢复默认版。实验版每条回复通常调用模型三次，重写和重新规划时最多九次。开放式事件提议和长期观点演化仍在开发中；新安装默认仍使用旧引擎。
+实验版 `character_v2` 使用稳定人物卡、按真实顺序排列的对话和一次直接生成；独立后台任务维护短期人物状态。架构、限制和比较方法见[持续人物对话 v2](docs/character-dialogue.zh-CN.md)。使用 `alivyn actor set character_v2` 启用后重启渠道；`alivyn actor audition character_v2 all` 使用当前模型密钥运行隔离的多轮场景，不发送真实消息。原有 `actor_v1` 保留用于比较，评估期间新安装仍默认使用 `legacy`。
 
 无需模型密钥或聊天账号即可复演联系决策：
 

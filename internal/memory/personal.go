@@ -15,7 +15,7 @@ type PersonalChange struct {
 }
 
 var (
-	zhName   = regexp.MustCompile(`^(?:我叫|叫我|以后叫我)([\p{Han}\p{L}\p{N}·_-]{1,24})$`)
+	zhName   = regexp.MustCompile(`^(?:(?:其实|实际上))?(?:我叫|叫我|以后叫我|我的名字是)([\p{Han}\p{L}\p{N}·_-]{1,24})$`)
 	zhLike   = regexp.MustCompile(`^我(喜欢|不喜欢|讨厌)([^，。！？,.!?]{1,24})$`)
 	zhForget = regexp.MustCompile(`^忘记我(喜欢|不喜欢|讨厌)([^，。！？,.!?]{1,24})$`)
 	enName   = regexp.MustCompile(`(?i)^(?:my name is|call me) ([a-z][a-z0-9 _'-]{0,23})$`)
@@ -45,6 +45,28 @@ func ExtractPersonal(text string) (PersonalChange, bool) {
 	}
 	if parts := enLike.FindStringSubmatch(text); parts != nil {
 		return PersonalChange{Key: preferenceKey(parts[2]), Value: text}, true
+	}
+	// A direct disclosure can be one clause in a longer message. Only promote
+	// an unambiguous name; other conversational clauses remain ordinary text.
+	var name PersonalChange
+	for _, clause := range strings.FieldsFunc(text, func(r rune) bool { return strings.ContainsRune("，,。.!！;；", r) }) {
+		clause = strings.TrimSpace(clause)
+		var value string
+		if parts := zhName.FindStringSubmatch(clause); parts != nil {
+			value = "用户希望被称为" + parts[1]
+		}
+		if parts := enName.FindStringSubmatch(clause); parts != nil {
+			value = "The user prefers to be called " + strings.TrimSpace(parts[1])
+		}
+		if value != "" {
+			if name.Value != "" && name.Value != value {
+				return PersonalChange{}, false
+			}
+			name = PersonalChange{Key: "name", Value: value}
+		}
+	}
+	if name.Value != "" {
+		return name, true
 	}
 	return PersonalChange{}, false
 }

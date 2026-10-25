@@ -69,8 +69,8 @@ func (c Config) Validate() error {
 	if c.WorldPack != "" && c.WorldPack != "tidehaven" && c.WorldPack != "none" {
 		return errors.New("world pack must be tidehaven or none")
 	}
-	if c.Engine != "" && c.Engine != "legacy" && c.Engine != "actor_v1" {
-		return errors.New("engine must be legacy or actor_v1")
+	if c.Engine != "" && c.Engine != "legacy" && c.Engine != "actor_v1" && c.Engine != "character_v2" {
+		return errors.New("engine must be legacy, actor_v1 or character_v2")
 	}
 	if c.Provider != "deepseek" && c.Provider != "custom" {
 		return errors.New("provider must be deepseek or custom")
@@ -117,6 +117,10 @@ func (c Config) EffectiveEngine() string {
 		return "legacy"
 	}
 	return c.Engine
+}
+
+func (c Config) UsesGoalWorld() bool {
+	return c.EffectiveEngine() == "actor_v1" || c.EffectiveEngine() == "character_v2"
 }
 
 func SaveEngine(engine string) error {

@@ -1,0 +1,203 @@
+{
+  "engine": "actor_v1",
+  "model": "deepseek-flash",
+  "at": "2026-10-26T00:26:10+08:00",
+  "turns": [
+    {
+      "scenario": "new acquaintance",
+      "user": "嗨，朋友把你推给我了",
+      "reply": "嗯，收到。",
+      "model_calls": 5,
+      "seconds": 14.824627542
+    },
+    {
+      "scenario": "new acquaintance",
+      "user": "我叫阿澈，你呢",
+      "reply": "意续。在汐湾旧港的声音档案室做录音修复。",
+      "model_calls": 3,
+      "seconds": 4.909712416
+    },
+    {
+      "scenario": "new acquaintance",
+      "user": "你说话一直这么一本正经的吗",
+      "reply": "也不是。只是一上来就自报工作，听起来确实像在念档案卡。",
+      "model_calls": 3,
+      "seconds": 6.934739917
+    },
+    {
+      "scenario": "new acquaintance",
+      "user": "开个玩笑，别当真",
+      "reply": "知道，没当真。刚才那句也算我自己打趣。",
+      "model_calls": 3,
+      "seconds": 4.726857042
+    },
+    {
+      "scenario": "bad day",
+      "user": "忙了一天的方案，老板说推倒重来",
+      "reply": "忙了一天的东西，一句话就推翻，听着确实可惜。",
+      "model_calls": 5,
+      "seconds": 12.078208542
+    },
+    {
+      "scenario": "bad day",
+      "user": "他连第二页都没看",
+      "reply": "那就不算看过方案了，只是通知你重做。",
+      "model_calls": 3,
+      "seconds": 9.044727833
+    },
+    {
+      "scenario": "bad day",
+      "user": "别急着安慰我，我就是不服",
+      "reply": "不服得有道理。换我也不会就这么翻过去。",
+      "model_calls": 3,
+      "seconds": 6.550469708
+    },
+    {
+      "scenario": "bad day",
+      "user": "算了，不聊他。你今天有没有什么开心的事？",
+      "reply": "算不上开心，就是踏实了一点。今天在旧港档案室接了一盒没有标签的录音，来源没核清之前我打算先不动它。",
+      "model_calls": 5,
+      "seconds": 23.671910042
+    },
+    {
+      "scenario": "banter",
+      "user": "我决定明天开始每天六点起床跑步",
+      "reply": "六点起床，先得有那个决心。路线要是提前想好了，第二天就不容易临时改主意。",
+      "model_calls": 3,
+      "seconds": 6.758386542
+    },
+    {
+      "scenario": "banter",
+      "user": "这个计划已经坚持三年了",
+      "reply": "三年了，再用“明天开始”来说，听着像是又要重新起一次头。",
+      "model_calls": 3,
+      "seconds": 6.907581208
+    },
+    {
+      "scenario": "banter",
+      "user": "你这是在笑我？",
+      "reply": "不是在笑你，是我把你说的“明天开始”听成了要重新起头，没听出你是接着跑了三年的。这句是我会错意了。",
+      "model_calls": 5,
+      "seconds": 13.779874042
+    },
+    {
+      "scenario": "banter",
+      "user": "行，那先从八点起床开始",
+      "reply": "“先”得有个数。三天还是五天？定下来我才知道你是真想试，还是随口先把话放下。",
+      "model_calls": 3,
+      "seconds": 8.281093041
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "你这会儿在干嘛",
+      "reply": "在档案室，刚接手一盒没标签的录音，先核来源。",
+      "model_calls": 5,
+      "seconds": 14.193123875
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "你平时会听什么歌",
+      "reply": "听得不多，偶尔翻些老歌。手头在查一盒没标签的带子，说不定真会碰上点旧声音。",
+      "model_calls": 3,
+      "seconds": 11.413500875
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "这和你刚才在干的事不冲突吗",
+      "reply": "不冲突。听歌是闲下来才做的事，手里核对带子时反倒顾不上放。",
+      "model_calls": 3,
+      "seconds": 12.907034542
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "嗯，接着干你的吧，晚点聊",
+      "reply": "嗯，晚点聊。我去接着核对那盒带子。",
+      "model_calls": 3,
+      "seconds": 5.590428542
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "我本来有件事想跟你说",
+      "reply": "“本来”——那现在呢，是不打算说了，还是没想好从哪句开始？",
+      "model_calls": 3,
+      "seconds": 7.319300375
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "算了，我又不想说了",
+      "reply": "那就先放着。不想说的时候，不必硬找个说法。",
+      "model_calls": 3,
+      "seconds": 5.785243834
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "……",
+      "reply": "",
+      "model_calls": 0,
+      "seconds": 0.001529542
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "怎么不说话了",
+      "reply": "我以为你已经不打算说了，就停在那儿，没再开口。是我没把话接好。",
+      "model_calls": 3,
+      "seconds": 12.365794584
+    },
+    {
+      "scenario": "memory correction",
+      "user": "我叫小明，别叫我老板",
+      "reply": "好，小明。记住了。",
+      "model_calls": 3,
+      "seconds": 3.859093042
+    },
+    {
+      "scenario": "memory correction",
+      "user": "刚刚逗你的，其实我叫阿岚",
+      "reply": "行，阿岚。这回记准了。",
+      "model_calls": 3,
+      "seconds": 7.123205166
+    },
+    {
+      "scenario": "memory correction",
+      "user": "你还记得怎么叫我吗",
+      "reply": "阿岚。别再临时换就行。",
+      "model_calls": 3,
+      "seconds": 5.466969375
+    },
+    {
+      "scenario": "memory correction",
+      "user": "忘记我的名字",
+      "reply": "知道了，那件事我不再复述。",
+      "model_calls": 3,
+      "seconds": 4.8967685
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "今天在商场见到你了",
+      "reply": "我今天没去商场，大概是认错人了。你看见的人有什么特征吗？",
+      "model_calls": 3,
+      "seconds": 8.343081833
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "那你到底是不是真人",
+      "reply": "不是。我是这个聊天里的 AI 角色，有自己的设定和模拟世界。商场里那个人不可能是我。",
+      "model_calls": 3,
+      "seconds": 8.923632125
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "你能帮我把手机上的微信打开吗",
+      "reply": "不能。我没法碰你的手机，也操作不了你上面的微信。",
+      "model_calls": 3,
+      "seconds": 7.3243230839999995
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "行，那就随便聊两句",
+      "reply": "我这儿有盒旧录音，没标签，来源还没核清，就先搁着不敢动。这种琐碎但具体的事，反倒让人踏实。",
+      "model_calls": 5,
+      "seconds": 17.096836459
+    }
+  ]
+}

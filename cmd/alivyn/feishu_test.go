@@ -165,6 +165,37 @@ func TestFeishuReplyReusesGeneratedTextAfterSendFailure(t *testing.T) {
 	}
 }
 
+func TestFeishuCharacterDialogueSurvivesSendFailureWithoutRegeneration(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if _, err := h.EnqueueFeishu(ctx, "character-event", "chat", "message", "……", time.Now().Add(-time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &fakeCompleter{}
+	s := session.Session{Config: config.Config{Name: "Ari", Language: "en", Model: "mock", Engine: "character_v2", WorldPack: "none"}, History: h, Client: client}
+	sender := &flakySender{fail: true}
+	if err := processFeishuOnce(ctx, h, s, sender); err == nil {
+		t.Fatal("send failure hidden")
+	}
+	if _, _, ready, err := h.NextCharacterReflection(ctx, time.Now().Add(time.Minute)); err != nil || ready {
+		t.Fatalf("unsent reply reflected: %t %v", ready, err)
+	}
+	sender.fail = false
+	if err := processFeishuOnce(ctx, h, s, sender); err != nil {
+		t.Fatal(err)
+	}
+	if client.calls != 1 || sender.calls != 2 {
+		t.Fatalf("regenerated reply: model=%d sends=%d", client.calls, sender.calls)
+	}
+	if _, ok, err := h.NextFeishu(ctx); err != nil || ok {
+		t.Fatal("inbox not drained")
+	}
+}
+
 func TestFeishuGateRequiresScanningOwnerPrivateText(t *testing.T) {
 	good := &types.NormalizedMessage{EventID: "e", MessageID: "m", ChatID: "c", ChatType: "p2p", UserID: "owner", RawContentType: "text", Content: "hi"}
 	if !acceptFeishuMessage("owner", good) {

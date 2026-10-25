@@ -64,7 +64,7 @@ func runWorld(ctx context.Context, args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if c.EffectiveEngine() == "actor_v1" {
+	if c.UsesGoalWorld() {
 		state, err := h.AdvanceGoalWorld(ctx, time.Now(), zone)
 		if err != nil {
 			return err
@@ -114,7 +114,7 @@ func advanceConfiguredWorld(ctx context.Context, h *store.History, c config.Conf
 	if c.EffectiveWorldPack() != "tidehaven" {
 		return nil
 	}
-	if c.EffectiveEngine() == "actor_v1" {
+	if c.UsesGoalWorld() {
 		_, err := h.AdvanceGoalWorld(ctx, now, zone)
 		return err
 	}

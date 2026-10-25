@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/AsCat/alivyn/internal/memory"
@@ -18,6 +19,9 @@ type PersonalFact struct {
 
 func recordPersonalTx(ctx context.Context, tx *sql.Tx, change memory.PersonalChange, sourceID int64, at time.Time) error {
 	if change.Forget {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM character_turns"); err != nil {
+			return err
+		}
 		// Decisions can contain paraphrases of a forgotten fact. They are
 		// derived state and can be planned again if a delivery is retried.
 		if _, err := tx.ExecContext(ctx, "DELETE FROM actor_decisions"); err != nil {
@@ -26,24 +30,43 @@ func recordPersonalTx(ctx context.Context, tx *sql.Tx, change memory.PersonalCha
 		if _, err := tx.ExecContext(ctx, "DELETE FROM actor_continuity"); err != nil {
 			return err
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT source_message_id FROM personal_memory WHERE memory_key = ? AND action = 'upsert'", change.Key)
+		rows, err := tx.QueryContext(ctx, "SELECT source_message_id,value FROM personal_memory WHERE memory_key = ? AND action = 'upsert'", change.Key)
 		if err != nil {
 			return err
 		}
 		var sources []int64
+		var names []string
 		for rows.Next() {
 			var id int64
-			if err := rows.Scan(&id); err != nil {
+			var value string
+			if err := rows.Scan(&id, &value); err != nil {
 				rows.Close()
 				return err
 			}
 			sources = append(sources, id)
+			if change.Key == "name" {
+				for _, prefix := range []string{"用户希望被称为", "The user prefers to be called "} {
+					if strings.HasPrefix(value, prefix) && len(value) > len(prefix) {
+						names = append(names, strings.TrimPrefix(value, prefix))
+					}
+				}
+			}
 		}
 		if err := rows.Err(); err != nil {
 			rows.Close()
 			return err
 		}
 		rows.Close()
+		// Later recalls may repeat a name without creating a new personal fact.
+		// Remove those echoes as well, including prepared channel replies.
+		for _, name := range names {
+			if _, err := tx.ExecContext(ctx, "UPDATE messages SET content='[forgotten memory]' WHERE id < ? AND instr(lower(content),lower(?))>0", sourceID, name); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE feishu_inbox SET reply=NULL,state='sent' WHERE state IN ('pending','ready') AND instr(lower(COALESCE(reply,'')),lower(?))>0", name); err != nil {
+				return err
+			}
+		}
 		for _, id := range sources {
 			// A response to the original disclosure may repeat the fact.
 			if _, err := tx.ExecContext(ctx, `UPDATE messages SET content = '[forgotten memory]'

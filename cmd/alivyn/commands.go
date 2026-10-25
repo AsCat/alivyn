@@ -115,7 +115,13 @@ func configuredClient(c config.Config) (model.Client, error) {
 	if err != nil {
 		return model.Client{}, err
 	}
-	return model.Client{BaseURL: c.BaseURL, APIKey: key}, nil
+	client := model.Client{BaseURL: c.BaseURL, APIKey: key}
+	if c.Engine == "character_v2" && c.Provider == "deepseek" {
+		client.Thinking = "enabled"
+		client.ReasoningEffort = "low"
+		client.MaxTokens = 2048
+	}
+	return client, nil
 }
 
 func importModelKey(in io.Reader, out io.Writer) error {
@@ -162,6 +168,7 @@ func chat(ctx context.Context, in io.Reader, out io.Writer) error {
 		return err
 	}
 	s := session.Session{Config: c, History: h, Client: client}
+	defer s.StartCharacterReflection(ctx)()
 	if c.Language == "zh-CN" {
 		fmt.Fprintf(out, "%s 是 AI。输入 /exit 退出；对话会保存在这台设备。\n", c.Name)
 	} else {
@@ -206,7 +213,9 @@ func runTUI() error {
 	if err != nil {
 		return err
 	}
-	return tui.Run(ctx, session.Session{Config: c, History: h, Client: client})
+	s := session.Session{Config: c, History: h, Client: client}
+	defer s.StartCharacterReflection(ctx)()
+	return tui.Run(ctx, s)
 }
 
 func showHistory(ctx context.Context, out io.Writer) error {

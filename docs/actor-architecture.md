@@ -1,5 +1,7 @@
 # Persistent actor architecture (RFC 02)
 
+Implementation update (2026-10-26): [Character dialogue v2](character-dialogue.md) replaces the plan/realize/review reply path when `character_v2` is selected. The design below records the earlier engine and remaining longer-term goals.
+
 Status: partially implemented as the opt-in `actor_v1` encounter engine and bounded goal-driven Tidehaven world. Sourced retrieval, a persisted decision, realization with only relevant evidence, a reality-boundary mode, review, replanning after failed wording, and isolated cross-situation evaluation are in place. The new world ledger records object identity, causal parents, provenance, and validated state transitions; it imports the earlier authored story. Open-ended event proposals, a ledger shared across all domains, and proactive decision integration remain planned.
 
 The affective and behavioral continuity layer is specified in [RFC 03](./affective-life.md). A short-lived, sourced part is implemented; the longer-term model is still planned.

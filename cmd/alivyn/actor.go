@@ -15,6 +15,9 @@ import (
 )
 
 func runActor(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) > 0 && args[0] == "audition" {
+		return runAudition(ctx, args[1:], out)
+	}
 	if len(args) == 1 && args[0] == "status" {
 		c, err := config.Load()
 		if err != nil {
@@ -23,7 +26,7 @@ func runActor(ctx context.Context, args []string, out io.Writer) error {
 		fmt.Fprintf(out, "Actor engine: %s\n", c.EffectiveEngine())
 		return nil
 	}
-	if len(args) == 2 && args[0] == "set" && (args[1] == "legacy" || args[1] == "actor_v1") {
+	if len(args) == 2 && args[0] == "set" && (args[1] == "legacy" || args[1] == "actor_v1" || args[1] == "character_v2") {
 		if err := config.SaveEngine(args[1]); err != nil {
 			return err
 		}
@@ -40,7 +43,7 @@ func runActor(ctx context.Context, args []string, out io.Writer) error {
 		}
 		return evalActor(ctx, out, mode)
 	}
-	return errors.New("usage: alivyn actor status|set legacy|actor_v1|eval [quick|all]")
+	return errors.New("usage: alivyn actor status|set legacy|actor_v1|character_v2|eval [quick|all]|audition [character_v2|actor_v1] [all|scenario-name]")
 }
 
 type actorEvalStep struct {
@@ -95,11 +98,11 @@ func evalActor(ctx context.Context, out io.Writer, mode string) error {
 	if err != nil {
 		return err
 	}
+	c.Engine = "actor_v1"
 	client, err := configuredClient(c)
 	if err != nil {
 		return err
 	}
-	c.Engine = "actor_v1"
 	zone, err := c.Location()
 	if err != nil {
 		return err

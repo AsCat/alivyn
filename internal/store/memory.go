@@ -148,6 +148,9 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			}
 		}
 		if change.Action == memory.Forget && change.Topic == "interview" {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM character_turns"); err != nil {
+				return 0, err
+			}
 			if _, err := tx.ExecContext(ctx, "DELETE FROM actor_decisions"); err != nil {
 				return 0, err
 			}
@@ -253,6 +256,8 @@ ORDER BY r.topic`)
 // RecentForModel omits source messages of superseded or forgotten facts.
 // Superseded transcript entries remain visible to the user; forgotten entries
 // are redacted in the database.
+const ForgetAcknowledgement = "Please acknowledge that I asked you to forget a stored fact, without recalling its details."
+
 func (h *History) RecentForModel(ctx context.Context, limit int) ([]Entry, error) {
 	return h.recentForModel(ctx, limit, 0)
 }
@@ -340,7 +345,7 @@ func (h *History) recentForModel(ctx context.Context, limit int, throughID int64
 			continue
 		}
 		if forgetRequest[entry.ID] {
-			filtered = append(filtered, Entry{ID: entry.ID, Role: entry.Role, Content: "Please acknowledge that I asked you to forget a stored fact, without recalling its details.", CreatedAt: entry.CreatedAt})
+			filtered = append(filtered, Entry{ID: entry.ID, Role: entry.Role, Content: ForgetAcknowledgement, CreatedAt: entry.CreatedAt})
 			continue
 		}
 		if stale[entry.ID] {

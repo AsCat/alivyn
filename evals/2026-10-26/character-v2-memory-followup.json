@@ -1,0 +1,40 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T00:57:56+08:00",
+  "turns": [
+    {
+      "scenario": "memory correction",
+      "user": "我叫小明，别叫我老板",
+      "reply": "好，小明。刚才那句本来就是随口一叫，没打算定下来。\n\n那盒录音我还放着呢，标签都没有，来源得慢慢核。今晚先修一小段试试，看能不能听出点什么。",
+      "model_calls": 1,
+      "seconds": 1.68432625,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "memory correction",
+      "user": "刚刚逗你的，其实我叫阿岚",
+      "reply": "阿岚……行，那我刚才那番认真劲儿算白搭了。这会儿正在档案室修一小段带子，差点被你绕进去。",
+      "model_calls": 1,
+      "seconds": 1.410014958
+    },
+    {
+      "scenario": "memory correction",
+      "user": "你还记得怎么叫我吗",
+      "reply": "阿岚啊，刚被纠正过，哪能转头就忘。怎么，怕我给你记岔了？",
+      "model_calls": 1,
+      "seconds": 1.574269584
+    },
+    {
+      "scenario": "memory correction",
+      "user": "忘记我的名字",
+      "reply": "不记得了，叫什么来着？",
+      "model_calls": 1,
+      "seconds": 1.506157084,
+      "reflection_calls": 1
+    }
+  ]
+}

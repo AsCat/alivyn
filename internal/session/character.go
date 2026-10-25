@@ -25,6 +25,7 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 	f.Recent = nil
 	inDialogue := map[string]bool{}
 	lastChat := ""
+	var sources []actor.Evidence
 	for _, e := range entries {
 		if e.Content == store.ForgetAcknowledgement {
 			inDialogue[fmt.Sprintf("chat:%d", e.ID)] = true
@@ -43,6 +44,7 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 			text = string(r[:2000]) + "…"
 		}
 		f.Recent = append(f.Recent, model.Message{Role: e.Role, Content: text})
+		sources = append(sources, actor.Evidence{ID: fmt.Sprintf("chat:%d", e.ID), Provenance: "observed_chat", At: e.CreatedAt.Format(time.RFC3339), Text: e.Role + ": " + text})
 		if e.ID != f.SourceMessageID {
 			lastChat = e.CreatedAt.Format(time.RFC3339)
 		}
@@ -71,11 +73,16 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 	if strings.TrimSpace(persona) == "" {
 		persona = character.DefaultPersona(s.Config.Language)
 	}
-	moment, at, err := s.History.CharacterMomentBefore(ctx, f.SourceMessageID, now)
+	state, at, err := s.History.CharacterStateBefore(ctx, f.SourceMessageID, now)
 	if err != nil {
 		return character.Context{}, err
 	}
-	c := character.Context{Frame: f, Persona: persona, Moment: moment, LastChatAt: lastChat}
+	threadSources, err := s.History.OpenThreadSources(ctx, state.OpenThreads)
+	if err != nil {
+		return character.Context{}, err
+	}
+	sources = append(sources, threadSources...)
+	c := character.Context{Frame: f, Persona: persona, Moment: state.Moment, LastChatAt: lastChat, OpenThreads: state.OpenThreads, Sources: sources}
 	if !at.IsZero() {
 		c.MomentAt = at.Format(time.RFC3339)
 	}
@@ -162,7 +169,7 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 	}
 	// Proactive contact includes the last response, unlike a source-bound reply.
 	c.Frame.Recent = nil
-	references := append([]actor.Evidence(nil), c.Frame.Evidence...)
+	references := append(append([]actor.Evidence(nil), c.Frame.Evidence...), c.Sources...)
 	for i, e := range entries {
 		if e.Content != "[forgotten memory]" {
 			content := e.Content
@@ -176,8 +183,16 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 			}
 		}
 	}
-	var momentAt time.Time
-	c.Moment, momentAt, err = s.History.CharacterMomentBefore(ctx, sourceID+1, now)
+	state, momentAt, err := s.History.CharacterStateBefore(ctx, sourceID+1, now)
+	c.Moment = state.Moment
+	c.OpenThreads = state.OpenThreads
+	if err == nil {
+		more, sourceErr := s.History.OpenThreadSources(ctx, state.OpenThreads)
+		if sourceErr != nil {
+			return c, nil, sourceErr
+		}
+		references = append(references, more...)
+	}
 	if !momentAt.IsZero() {
 		c.MomentAt = momentAt.Format(time.RFC3339)
 	}
@@ -196,6 +211,11 @@ func (s Session) ReflectCharacter(ctx context.Context, now time.Time) error {
 	c, err := s.characterContext(ctx, now, id)
 	if err != nil {
 		return err
+	}
+	if source, found, err := s.History.CharacterReplySource(ctx, id); err != nil {
+		return err
+	} else if found {
+		c.Sources = append(c.Sources, source)
 	}
 	snapshot, err := character.Reflect(ctx, s.Client, s.Config.Model, c, delivered.Reply)
 	if err != nil {

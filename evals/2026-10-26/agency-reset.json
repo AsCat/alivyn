@@ -1,0 +1,40 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T01:48:26+08:00",
+  "turns": [
+    {
+      "scenario": "reset identity",
+      "user": "我叫林晓",
+      "reply": "你好，林晓。",
+      "model_calls": 1,
+      "seconds": 0.739584875,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "reset identity",
+      "user": "我喜欢柠檬茶",
+      "reply": "这个好，我记住了。",
+      "model_calls": 1,
+      "seconds": 0.671359166
+    },
+    {
+      "scenario": "reset identity",
+      "user": "/清除记忆",
+      "reply": "记忆已清除，已恢复初始人物状态。人物设定、模型配置和飞书连接已保留。",
+      "model_calls": 0,
+      "seconds": 0.000061417
+    },
+    {
+      "scenario": "reset identity",
+      "user": "你记得我叫什么吗",
+      "reply": "还没记住，你再说一次？",
+      "model_calls": 1,
+      "seconds": 0.969947167,
+      "reflection_calls": 1
+    }
+  ]
+}

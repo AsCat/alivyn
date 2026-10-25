@@ -91,6 +91,66 @@ type burstCompleter struct {
 	reply    string
 }
 
+type heldCompleter struct {
+	started chan struct{}
+	release chan struct{}
+	calls   int
+}
+
+func (f *heldCompleter) Complete(ctx context.Context, _ string, _ []model.Message) (string, error) {
+	f.calls++
+	close(f.started)
+	select {
+	case <-f.release:
+		return "old context reply", nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+}
+
+func TestResetDuringGenerationCannotSendOrResurrectOldReply(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Now().Add(-time.Minute)
+	if _, err := h.EnqueueFeishu(ctx, "old", "chat", "m1", "我叫林晓", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &heldCompleter{started: make(chan struct{}), release: make(chan struct{})}
+	s := session.Session{Config: config.Config{Name: "意续", Language: "zh-CN", Engine: "character_v2", Model: "mock", WorldPack: "none"}, History: h, Client: client}
+	sender := &flakySender{}
+	done := make(chan error, 1)
+	go func() { done <- processFeishuOnce(ctx, h, s, sender) }()
+	select {
+	case <-client.started:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	if _, err := h.EnqueueFeishu(ctx, "reset", "chat", "m2", "/清除记忆", at.Add(time.Second), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	close(client.release)
+	if err := <-done; !errors.Is(err, store.ErrTurnSuperseded) {
+		t.Fatal("old generation was not discarded", err)
+	}
+	if sender.calls != 0 {
+		t.Fatal("old reply sent")
+	}
+	if err := processFeishuOnce(ctx, h, s, sender); err != nil {
+		t.Fatal(err)
+	}
+	if sender.calls != 1 || client.calls != 1 {
+		t.Fatal("reset acknowledgement made a model call or was not sent")
+	}
+	if entries, err := h.RecentForModel(ctx, 20); err != nil || len(entries) != 0 {
+		t.Fatalf("cleared exchange restored: %+v %v", entries, err)
+	}
+}
+
 func (f *burstCompleter) Complete(_ context.Context, _ string, messages []model.Message) (string, error) {
 	f.calls++
 	f.messages = messages

@@ -52,6 +52,53 @@ func TestCharacterStateCommitsWithReplyExpiresAndForgets(t *testing.T) {
 	}
 }
 
+func TestIntentionAndOpenThreadsSurviveRestartAndQuietTurnGetsReflected(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	h, err := OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now()
+	if err := h.AddUserMessage(ctx, "有件事还没说", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	t1 := character.Turn{Mode: "say", Reply: "明天再聊，我想歇会儿。", StateUpdated: true, Moment: character.Moment{Intention: "休息"}, OpenThreads: []character.OpenThread{{Subject: "用户有件事尚未说", Owner: "user", SourceIDs: []string{"chat:1"}}}}
+	if err := h.SaveCharacterTurn(ctx, 1, t1, at); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.CommitCharacterReply(ctx, 1, t1.Reply, at); err != nil {
+		t.Fatal(err)
+	}
+	h.Close()
+	h, err = OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	state, _, err := h.CharacterStateBefore(ctx, 3, at.Add(time.Minute))
+	if err != nil || state.Moment.Intention != "休息" || len(state.OpenThreads) != 1 {
+		t.Fatal(state, err)
+	}
+	state, _, err = h.CharacterStateBefore(ctx, 3, at.Add(3*time.Hour))
+	if err != nil || state.Moment.Intention != "" || len(state.OpenThreads) != 1 {
+		t.Fatal("old intention did not expire independently", state, err)
+	}
+	if err := h.AddUserMessage(ctx, "不用再说那件事了", at.Add(time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SaveCharacterTurn(ctx, 3, character.Turn{Mode: "wait"}, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.CommitCharacterReply(ctx, 3, "", at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	id, _, ready, err := h.NextCharacterReflection(ctx, at.Add(3*time.Minute))
+	if err != nil || !ready || id != 3 {
+		t.Fatalf("quiet ending never reflected: %d %t %v", id, ready, err)
+	}
+}
+
 func TestCharacterWorldReceiptIsAtomicAndIdempotent(t *testing.T) {
 	ctx := context.Background()
 	h, err := OpenHistory(ctx, t.TempDir())

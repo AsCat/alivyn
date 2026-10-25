@@ -201,7 +201,7 @@ func (m conversation) View() tea.View {
 	if m.hasError {
 		status = lipgloss.NewStyle().Foreground(lipgloss.Color("#E8A09A")).Render(status)
 	}
-	help := choose(m.session.Config.Language, "Enter send  ·  PgUp/PgDn history  ·  Esc quit", "Enter 发送  ·  PgUp/PgDn 查看历史  ·  Esc 退出")
+	help := choose(m.session.Config.Language, "Enter send  ·  /reset memory  ·  PgUp/PgDn history  ·  Esc quit", "Enter 发送  ·  /清除记忆 重置  ·  PgUp/PgDn 历史  ·  Esc 退出")
 	content := title + "\n" + subtitle + "\n" + m.view.View() + "\n" + status + "\n" + m.input.View() + "\n" + help
 	view := tea.NewView(content)
 	if cursor := m.input.Cursor(); cursor != nil {

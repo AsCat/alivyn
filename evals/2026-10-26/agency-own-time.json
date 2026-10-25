@@ -1,0 +1,39 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T01:47:01+08:00",
+  "turns": [
+    {
+      "scenario": "own time",
+      "user": "你下午有什么安排",
+      "reply": "在档案室修那盒没标签的录音。",
+      "model_calls": 1,
+      "seconds": 0.935315291,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "own time",
+      "user": "那你先忙，我也去收拾房间",
+      "reply": "好，去吧。",
+      "model_calls": 1,
+      "seconds": 0.927617459
+    },
+    {
+      "scenario": "own time",
+      "user": "我又来了，随便说两句吧",
+      "reply": "嗯，录音还放着呢。",
+      "model_calls": 1,
+      "seconds": 0.729641167
+    },
+    {
+      "scenario": "own time",
+      "user": "你刚才要做的事情呢",
+      "reply": "还在弄，刚停了一下。",
+      "model_calls": 1,
+      "seconds": 0.755413541
+    }
+  ]
+}

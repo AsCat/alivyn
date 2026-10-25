@@ -41,31 +41,18 @@ func (s Session) AddUser(ctx context.Context, text string) error {
 // GenerateReply uses the latest persisted history and saves the model's reply.
 // Failed model calls leave the user's message in history for a later retry.
 func (s Session) GenerateReply(ctx context.Context) (string, error) {
-	if s.Config.EffectiveEngine() == "character_v2" {
-		entries, err := s.History.RecentForModel(ctx, 1)
-		if err != nil {
-			return "", err
-		}
-		if len(entries) != 1 || entries[0].Role != "user" {
-			return "", errors.New("character reply requires a latest user turn")
-		}
-		reply, err := s.composeCharacterReply(ctx, time.Now(), entries[0].ID)
-		if err != nil {
-			return "", err
-		}
-		return reply, s.History.CommitCharacterReply(ctx, entries[0].ID, reply, time.Now())
-	}
-	reply, err := s.ComposeReply(ctx)
+	entries, err := s.History.Recent(ctx, 1)
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(reply) == "" {
-		return "", nil // The actor chose to let this turn rest.
+	if len(entries) != 1 || entries[0].Role != "user" {
+		return "", errors.New("reply requires a latest user turn")
 	}
-	if err := s.History.Add(ctx, "assistant", reply, time.Now()); err != nil {
-		return "", fmt.Errorf("save model reply: %w", err)
+	reply, err := s.ComposeReplyFor(ctx, entries[0].ID)
+	if err != nil {
+		return "", err
 	}
-	return reply, nil
+	return reply, s.History.CommitCharacterReply(ctx, entries[0].ID, reply, time.Now())
 }
 
 // ComposeReply builds a reply without persisting it. Channel workers can use
@@ -77,6 +64,9 @@ func (s Session) ComposeReply(ctx context.Context) (string, error) {
 // ComposeReplyAt uses the same engine with an injected clock for isolated
 // timeline evaluations. Production callers use ComposeReply.
 func (s Session) ComposeReplyAt(ctx context.Context, now time.Time) (string, error) {
+	if reply, found, err := s.History.CommandReply(ctx, 0, s.Config.Language); err != nil || found {
+		return reply, err
+	}
 	if s.Config.EffectiveEngine() == "character_v2" {
 		return s.composeCharacterReply(ctx, now, 0)
 	}
@@ -146,6 +136,9 @@ func (s Session) ComposeReplyAt(ctx context.Context, now time.Time) (string, err
 // ComposeReplyFor answers a specific persisted user turn. Channel workers use
 // it when several incoming messages have already been queued.
 func (s Session) ComposeReplyFor(ctx context.Context, userMessageID int64) (string, error) {
+	if reply, found, err := s.History.CommandReply(ctx, userMessageID, s.Config.Language); err != nil || found {
+		return reply, err
+	}
 	if s.Config.EffectiveEngine() == "character_v2" {
 		return s.composeCharacterReply(ctx, time.Now(), userMessageID)
 	}

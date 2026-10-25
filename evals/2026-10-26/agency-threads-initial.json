@@ -1,0 +1,39 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T01:48:19+08:00",
+  "turns": [
+    {
+      "scenario": "unfinished subject",
+      "user": "有件有点难开口的事，想跟你说",
+      "reply": "你讲，我听着。",
+      "model_calls": 1,
+      "seconds": 0.951893125,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "unfinished subject",
+      "user": "先说说你今天怎么样吧",
+      "reply": "今天还好。你不想说就先不说。",
+      "model_calls": 1,
+      "seconds": 0.615176625
+    },
+    {
+      "scenario": "unfinished subject",
+      "user": "原来如此",
+      "reply": "不急，你想说的时候再说。",
+      "model_calls": 1,
+      "seconds": 0.616715583
+    },
+    {
+      "scenario": "unfinished subject",
+      "user": "我先出门买东西，回来再聊",
+      "reply": "好，回来再说。",
+      "model_calls": 1,
+      "seconds": 0.953446292
+    }
+  ]
+}

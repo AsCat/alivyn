@@ -1,0 +1,94 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T01:50:29+08:00",
+  "turns": [
+    {
+      "scenario": "leaving an active chat",
+      "user": "我就想随便聊会儿",
+      "reply": "那聊几分钟，我真得睡了。",
+      "model_calls": 1,
+      "seconds": 0.96193175,
+      "reflection_calls": 1,
+      "state": {
+        "feeling": "困意很明显，但愿意留几分钟，语气温和，也带着要睡觉的界限。",
+        "attention": "想随便聊会儿的用户，以及自己越来越想睡的困劲。",
+        "scene": "夜里已经说要关灯去睡，又被叫住，答应只聊几分钟。",
+        "intention": "陪聊一小会儿，然后把灯关了去睡。"
+      },
+      "open_threads": [
+        {
+          "subject": "用户想随便聊会儿",
+          "owner": "user",
+          "source_ids": [
+            "chat:3"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "leaving an active chat",
+      "user": "看到一只猫睡在车顶",
+      "reply": "车顶暖和吧，它倒会挑地方。",
+      "model_calls": 1,
+      "seconds": 0.587844833,
+      "reflection_calls": 1,
+      "state": {
+        "feeling": "困意还在，但被猫的事逗得轻轻一笑，语气松了些，仍守着只聊几分钟的界限。",
+        "attention": "睡在车顶的猫，以及自己越来越沉的困意。",
+        "scene": "夜里已经准备关灯睡觉，又应下只聊几分钟，正窝着看消息。",
+        "intention": "顺着猫的话题接一两句，然后把手机放下睡觉。"
+      }
+    },
+    {
+      "scenario": "leaving an active chat",
+      "user": "还有个视频挺逗",
+      "reply": "视频明天再看吧，我眼睛快睁不开了。",
+      "model_calls": 1,
+      "seconds": 1.623689333,
+      "reflection_calls": 1,
+      "state": {
+        "feeling": "困得眼睛快睁不开，仍带着被猫和视频逗出的轻快，没有不耐烦。",
+        "attention": "马上要放下手机睡觉，以及明天再看那个视频。",
+        "scene": "夜里已准备关灯睡下，窝着看最后几条消息。",
+        "intention": "把手机放下，结束聊天去睡。"
+      },
+      "open_threads": [
+        {
+          "subject": "那个挺逗的视频还没看，说好明天再看",
+          "owner": "user",
+          "source_ids": [
+            "chat:7"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "leaving an active chat",
+      "user": "算了你先休息",
+      "reply": "嗯，明天见。",
+      "model_calls": 1,
+      "seconds": 0.67770975,
+      "reflection_calls": 1,
+      "state": {
+        "feeling": "困倦而平和，对方让她先休息，她也顺势放松下来，没有不快。",
+        "attention": "马上关灯睡觉，以及明天再看那个视频。",
+        "scene": "夜里已准备睡下，聊天刚结束，手机还拿在手里。",
+        "intention": "把手机放下，安心去睡，视频留到明天。"
+      },
+      "open_threads": [
+        {
+          "subject": "那个挺逗的视频还没看，说好明天再看",
+          "owner": "user",
+          "source_ids": [
+            "chat:7",
+            "chat:8"
+          ]
+        }
+      ]
+    }
+  ]
+}

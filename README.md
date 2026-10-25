@@ -63,6 +63,8 @@ go run ./cmd/alivyn replay scenarios/pause-stops-outbound.json
 
 The interview replay extracts its dates from the same user-message parser used by the TUI and plain chat. Replay still does not send messages, and the extractor currently covers only a narrow set of interview phrases.
 
+Send `/reset` (or `/清除记忆`) as a separate message in Feishu or terminal chat to immediately clear local conversation, memories, relationship and simulated life progress. The initial character settings, model configuration and connection remain. The command is handled locally without a model call. See [reset scope and character choices](docs/character-dialogue.md#reset-to-the-initial-character).
+
 ## Run the local contact loop
 
 After setup, Alivyn stores a follow-up intent when you mention a supported future interview. Run the contact loop in a separate terminal or under a process supervisor:

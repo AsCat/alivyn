@@ -24,11 +24,29 @@ flowchart LR
 - **Actual conversation:** up to 40 recent messages retain their user/assistant roles and source order, including when Feishu messages queue. Existing sourced facts and a small selection of older episodes supplement the transcript. This is bounded retrieval, not unlimited memory.
 - **Fictional life:** the Tidehaven world ledger retains major events and object continuity. The character can author ordinary activities inside that setting. Those activities are not evidence of real encounters, user facts or device actions.
 - **Speech:** one plain-text generation, with no action-label planner, per-message reviewer, JSON state contract or greeting/punctuation branches. Invalid/empty output remains an error for channel retry; the explicit `[[wait]]` choice commits a quiet turn without sending text. No fixed conversational substitute is inserted.
-- **Reflection:** a separate worker summarizes the character's own feeling, attention and current scene after delivery. It starts after a 20-second quiet age, then coalesces updates to every four committed exchanges or ten minutes between source turns. It never edits an utterance or invents user facts. Malformed reflection leaves the earlier snapshot intact and backs off for a minute.
-- **Time:** feeling expires after two hours, scene after six, attention after 72. These are simple expiration rules, not a validated psychological model. The ordinary transcript remains available after a snapshot expires.
+- **Reflection:** a separate worker summarizes the character's own feeling, attention and current scene after delivery. It starts after a 20-second quiet age, normally coalescing updates to every four committed exchanges or ten minutes between source turns. A remaining completed exchange, including a deliberate quiet turn, also qualifies after 90 seconds, so its ending can be recorded without another incoming message. It never edits an utterance or invents user facts. Malformed reflection leaves the earlier snapshot intact and backs off for a minute.
+- **Time:** feeling and the immediate intention expire after two hours, scene after six, attention and unfinished subjects after 72. These are simple expiration rules, not a validated psychological model. The ordinary transcript remains available after a snapshot expires.
 - **Delivery:** prepared replies are reused on retry. Reflection ignores Feishu replies awaiting delivery. Forgetting clears derived character state; a reflection already in flight cannot recreate a deleted source. Existing quiet hours, contact limits and reply pacing remain in charge of contact.
 
 The model sees concise authored state, not hidden chain-of-thought. No claim of consciousness is required for the character experience.
+
+## A character with her own choices
+
+The stable card and fictional setting establish who this person is. The current `moment` records feeling, attention, scene and an `intention`: what she has expressed wanting to do next. A separate list of up to three `open_threads` preserves concrete unfinished subjects, with an owner and actual chat-source IDs. A subject can remain unresolved while attention shifts elsewhere.
+
+Both ordinary dialogue and spontaneous-contact judgment use this same state. The character can introduce a subject, continue briefly, return to her own activity, or bring the exchange to a close. Local time supplies context; no production branch says that a particular hour must produce a sleep message. Curiosity or a significant concern may justify changing an earlier intention. Brief replies alone are not treated as evidence of anger, and an old disagreement should not become a permanent interpretation of ordinary questions.
+
+Background reflection updates these small authored snapshots after the exchange. It can retain an unfinished subject, remove one that was resolved or withdrawn, and let an earlier mood soften. It receives the source of the delivered reply too, so the character's own expressed intention need not be attributed to the user. Source IDs are checked for existence; semantic accuracy remains model-dependent. Unfinished subjects are optional context, not obligations or automatic reminders. There is no additional planning model call before each reply, and no claim that these snapshots constitute consciousness.
+
+## Reset to the initial character
+
+Send **`/reset`** or **`/清除记忆`** as a separate, complete message in Feishu, the TUI or plain terminal chat. The command runs locally and immediately, without calling the model. It is not a request to pretend to forget.
+
+One transaction removes the current conversation, extracted memories, relationship, character state, unfinished subjects, authored world progress and queued contact/delivery records. The selected initial persona, name/world configuration, model credentials, channel connection and contact restrictions remain. The fixed acknowledgement is excluded from subsequent model context; the next exchange starts with the initial relationship.
+
+Old Feishu event IDs remain as content-free retry receipts, and database IDs are not reused. Generation results whose source was cleared are discarded; prepared sends are rechecked. Within the channel process, reset is synchronized with the final transport operation: an already-started send finishes before reset, and a cleared queued message cannot be sent afterward. This does not provide a lock across multiple independent processes; run one channel worker per local database.
+
+The reset covers the active local database. Existing Feishu chat messages, provider-side records and separate backups have their own retention. The command does not create a backup of the memories it clears. Operational API consideration counters are retained to prevent repeated resets from increasing background call volume.
 
 ## Conversation rhythm
 
@@ -79,7 +97,7 @@ ALIVYN_AUDITION_REPORT=/tmp/character.json alivyn actor audition character_v2 al
 ALIVYN_AUDITION_REPORT=/tmp/actor.json alivyn actor audition actor_v1 all
 ```
 
-Auditions use isolated databases and the configured provider/key. They do not send Feishu messages or modify the installed character. They make paid API calls. Each report preserves errors, replies, generation latency, generation call count and separate reflection results. Optional environment variables `ALIVYN_AUDITION_MODEL`, `ALIVYN_AUDITION_THINKING` and `ALIVYN_AUDITION_EFFORT` support provider comparisons; these do not change live configuration. The nine fixed scenarios cover introductions, frustration, teasing, everyday continuity, hesitation, memory correction, reality/capability boundaries, ordinary pacing and changes in interest. They are inspectable examples, not a quantitative proof of humanlike behavior.
+Auditions use isolated databases and the configured provider/key. They do not send Feishu messages or modify the installed character. They make paid API calls. Each report preserves errors, replies, generation latency, generation call count and separate reflection results. Optional environment variables `ALIVYN_AUDITION_MODEL`, `ALIVYN_AUDITION_THINKING` and `ALIVYN_AUDITION_EFFORT` support provider comparisons; these do not change live configuration. The fixed scenarios cover introductions, frustration, teasing, everyday continuity, hesitation, memory correction, reality/capability boundaries, pacing, changes in interest, independent plans, unfinished subjects and reset. The `leaving an active chat` case starts from an explicitly seeded prior intention; it checks continuity, not whether every late conversation ends identically. They are inspectable examples, not a quantitative proof of humanlike behavior.
 
 `alivyn actor set actor_v1` restores the previous experiment after restart; `legacy` restores the original engine. New installations still default to `legacy` during evaluation.
 

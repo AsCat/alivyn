@@ -1,0 +1,39 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T01:46:00+08:00",
+  "turns": [
+    {
+      "scenario": "late conversation",
+      "user": "还醒着吗",
+      "reply": "还醒着。",
+      "model_calls": 1,
+      "seconds": 1.058148542,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "late conversation",
+      "user": "我就想随便聊会儿",
+      "reply": "那你聊，我听着。",
+      "model_calls": 1,
+      "seconds": 0.596252541
+    },
+    {
+      "scenario": "late conversation",
+      "user": "今天路上看到有人带了三只狗",
+      "reply": "三只，遛得过来吗。",
+      "model_calls": 1,
+      "seconds": 0.775038625
+    },
+    {
+      "scenario": "late conversation",
+      "user": "嗯，也没什么别的事了",
+      "reply": "嗯，那早点睡。",
+      "model_calls": 1,
+      "seconds": 0.383157167
+    }
+  ]
+}

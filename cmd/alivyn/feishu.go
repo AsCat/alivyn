@@ -263,7 +263,7 @@ func workFeishu(ctx context.Context, h *store.History, s session.Session, ch fei
 	nextAttempt := time.Time{}
 	for {
 		if !time.Now().Before(nextAttempt) {
-			if err := processFeishuOnce(ctx, h, s, ch); err != nil && ctx.Err() == nil {
+			if err := processFeishuOnce(ctx, h, s, ch); err != nil && !errors.Is(err, store.ErrTurnSuperseded) && ctx.Err() == nil {
 				fmt.Fprintf(out, "Feishu delivery pending; will retry: %v\n", err)
 				nextAttempt = time.Now().Add(15 * time.Second)
 			} else {
@@ -310,8 +310,8 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 	if err := waitForReplyPace(ctx, item.ReceivedAt, item.EventID, item.Reply); err != nil {
 		return err
 	}
-	if _, err := sender.Send(ctx, &types.SendInput{ChatID: item.ChatID, Text: display.Clean(item.Reply), ReplyMessageID: item.MessageID}); err != nil {
+	return h.DeliverFeishu(ctx, item.EventID, func() error {
+		_, err := sender.Send(ctx, &types.SendInput{ChatID: item.ChatID, Text: display.Clean(item.Reply), ReplyMessageID: item.MessageID})
 		return err
-	}
-	return h.MarkFeishuSent(ctx, item.EventID)
+	})
 }

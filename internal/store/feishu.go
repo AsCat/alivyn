@@ -24,13 +24,17 @@ func (h *History) EnqueueFeishu(ctx context.Context, eventID, chatID, messageID,
 	if eventID == "" || chatID == "" || messageID == "" || strings.TrimSpace(text) == "" || len(text) > 65536 {
 		return false, errors.New("invalid Feishu message")
 	}
+	if IsResetCommand(text) {
+		h.deliveryMu.Lock()
+		defer h.deliveryMu.Unlock()
+	}
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback()
 	var existing int
-	err = tx.QueryRowContext(ctx, "SELECT 1 FROM feishu_inbox WHERE event_id = ?", eventID).Scan(&existing)
+	err = tx.QueryRowContext(ctx, "SELECT 1 FROM feishu_inbox WHERE event_id = ? UNION SELECT 1 FROM inbox_receipts WHERE event_id = ?", eventID, eventID).Scan(&existing)
 	if err == nil {
 		return false, nil
 	}
@@ -84,7 +88,7 @@ func (h *History) SetFeishuReply(ctx context.Context, eventID, reply string, at 
 		return err
 	}
 	if rows != 1 {
-		return errors.New("Feishu event is not pending")
+		return ErrTurnSuperseded
 	}
 	var sourceID int64
 	if err := tx.QueryRowContext(ctx, "SELECT user_message_id FROM feishu_inbox WHERE event_id = ?", eventID).Scan(&sourceID); err != nil {
@@ -126,7 +130,7 @@ func (h *History) SkipFeishuReply(ctx context.Context, eventID string) error {
 		return err
 	}
 	if rows != 1 {
-		return errors.New("Feishu event is not pending")
+		return ErrTurnSuperseded
 	}
 	var sourceID int64
 	if err := tx.QueryRowContext(ctx, "SELECT user_message_id FROM feishu_inbox WHERE event_id = ?", eventID).Scan(&sourceID); err != nil {

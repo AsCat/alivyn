@@ -170,9 +170,9 @@ func chat(ctx context.Context, in io.Reader, out io.Writer) error {
 	s := session.Session{Config: c, History: h, Client: client}
 	defer s.StartCharacterReflection(ctx)()
 	if c.Language == "zh-CN" {
-		fmt.Fprintf(out, "%s 是 AI。输入 /exit 退出；对话会保存在这台设备。\n", c.Name)
+		fmt.Fprintf(out, "%s 是 AI。输入 /exit 退出，/清除记忆 恢复初始人物状态；对话会保存在这台设备。\n", c.Name)
 	} else {
-		fmt.Fprintf(out, "%s is AI. Type /exit to leave; your conversation will remain on this device.\n", c.Name)
+		fmt.Fprintf(out, "%s is AI. Type /exit to leave, /reset to reset character memory; your conversation will remain on this device.\n", c.Name)
 	}
 	scanner := bufio.NewScanner(in)
 	scanner.Buffer(make([]byte, 4096), 1024*1024)

@@ -7,13 +7,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
 
 type History struct {
-	db *sql.DB
+	db         *sql.DB
+	deliveryMu sync.RWMutex
 }
 
 type Entry struct {
@@ -58,6 +60,13 @@ CREATE TABLE IF NOT EXISTS messages (
   role TEXT NOT NULL CHECK(role IN ('user','assistant')),
   content TEXT NOT NULL,
   created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS local_commands (
+  source_message_id INTEGER PRIMARY KEY REFERENCES messages(id),
+  command TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS inbox_receipts (
+  event_id TEXT PRIMARY KEY
 );
 CREATE TABLE IF NOT EXISTS memory_revisions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -284,7 +293,7 @@ func (h *History) PriorUserTurns(ctx context.Context, beforeID int64) (int, erro
 	}
 	var count int
 	err := h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages
-WHERE role = 'user' AND id < ? AND content != '[forgotten memory]'`, beforeID).Scan(&count)
+WHERE role = 'user' AND id < ? AND content != '[forgotten memory]' AND NOT EXISTS(SELECT 1 FROM local_commands c WHERE c.source_message_id=messages.id)`, beforeID).Scan(&count)
 	return count, err
 }
 

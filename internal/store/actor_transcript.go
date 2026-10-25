@@ -19,7 +19,7 @@ func (h *History) ActorTranscriptThrough(ctx context.Context, limit int, through
 	}
 	rows, err := h.db.QueryContext(ctx, `SELECT t.source_message_id, m.id, m.role, m.content, m.created_at
 FROM assistant_turns t JOIN messages m ON m.id = t.assistant_message_id
-WHERE t.source_message_id < ? AND (t.source_message_id >= ? OR m.id >= ?)`, throughID, entries[0].ID, entries[0].ID)
+WHERE NOT EXISTS(SELECT 1 FROM local_commands c WHERE c.source_message_id=t.source_message_id) AND t.source_message_id < ? AND (t.source_message_id >= ? OR m.id >= ?)`, throughID, entries[0].ID, entries[0].ID)
 	if err != nil {
 		return nil, err
 	}

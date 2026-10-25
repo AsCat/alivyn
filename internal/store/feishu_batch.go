@@ -19,6 +19,7 @@ func (h *History) NextFeishuBatch(ctx context.Context, now time.Time) (FeishuInb
 COALESCE(f.reply,''),f.state,f.received_ns,
 EXISTS(SELECT 1 FROM feishu_reply_groups g WHERE g.event_id=f.event_id)
 OR EXISTS(SELECT 1 FROM character_turns c WHERE c.source_message_id=f.user_message_id)
+OR EXISTS(SELECT 1 FROM local_commands c WHERE c.source_message_id=f.user_message_id)
 FROM feishu_inbox f WHERE f.state IN ('pending','ready') ORDER BY f.received_ns,f.rowid LIMIT 8`)
 	if err != nil {
 		return FeishuInboxItem{}, false, err

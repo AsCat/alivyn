@@ -75,6 +75,10 @@ func (h *History) AddUserMessage(ctx context.Context, text string, at time.Time,
 	if strings.TrimSpace(text) == "" {
 		return errors.New("message cannot be empty")
 	}
+	if IsResetCommand(text) {
+		h.deliveryMu.Lock()
+		defer h.deliveryMu.Unlock()
+	}
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -87,6 +91,9 @@ func (h *History) AddUserMessage(ctx context.Context, text string, at time.Time,
 }
 
 func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time, zone *time.Location) (int64, error) {
+	if IsResetCommand(text) {
+		return resetCharacterTx(ctx, tx, text, at)
+	}
 	change, recognized := memory.Extract(text, at, zone)
 	personal, personalRecognized := memory.ExtractPersonal(text)
 	result, err := tx.ExecContext(ctx, "INSERT INTO messages(role, content, created_at) VALUES('user', ?, ?)", text, at.UTC().Format(time.RFC3339Nano))
@@ -283,6 +290,31 @@ func (h *History) recentForModel(ctx context.Context, limit int, throughID int64
 	if err != nil {
 		return nil, err
 	}
+	commandRows, err := h.db.QueryContext(ctx, `SELECT source_message_id FROM local_commands UNION SELECT a.assistant_message_id FROM assistant_turns a JOIN local_commands c ON c.source_message_id=a.source_message_id`)
+	if err != nil {
+		return nil, err
+	}
+	commandIDs := map[int64]bool{}
+	for commandRows.Next() {
+		var id int64
+		if err := commandRows.Scan(&id); err != nil {
+			commandRows.Close()
+			return nil, err
+		}
+		commandIDs[id] = true
+	}
+	err = commandRows.Err()
+	commandRows.Close()
+	if err != nil {
+		return nil, err
+	}
+	commandFiltered := entries[:0]
+	for _, e := range entries {
+		if !commandIDs[e.ID] {
+			commandFiltered = append(commandFiltered, e)
+		}
+	}
+	entries = commandFiltered
 	rows, err := h.db.QueryContext(ctx, `SELECT source_message_id, topic, action,
   r.id = (SELECT MAX(n.id) FROM memory_revisions n WHERE n.topic = r.topic)
   FROM memory_revisions r`)

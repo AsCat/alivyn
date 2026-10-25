@@ -84,19 +84,10 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 					fmt.Fprintf(out, "Contact composition failed; using fallback: %v\n", err)
 				}
 			}
-			allowed, err := h.FinalizeChannelContact(ctx, item.IntentID, item.Body, time.Now(), zone)
-			if err != nil && ctx.Err() == nil {
-				fmt.Fprintf(out, "Contact recheck failed: %v\n", err)
-			}
-			if !allowed || err != nil {
-				continue
-			}
-			if err := send(ctx, item.Body, item.Key); err != nil {
-				if ctx.Err() == nil {
-					fmt.Fprintf(out, "Contact delivery pending; will retry: %v\n", err)
-				}
-			} else if err := h.MarkChannelContactSent(ctx, item.IntentID, time.Now()); err != nil && ctx.Err() == nil {
-				fmt.Fprintf(out, "Contact delivery confirmed, local record pending: %v\n", err)
+			if err := h.DeliverContact(ctx, item.IntentID, time.Now(), zone, item.Body, func() error {
+				return send(ctx, item.Body, item.Key)
+			}); err != nil && ctx.Err() == nil {
+				fmt.Fprintf(out, "Contact delivery pending; will retry: %v\n", err)
 			}
 		}
 		select {

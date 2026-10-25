@@ -17,6 +17,34 @@ type characterScript struct {
 	calls   [][]model.Message
 }
 
+func TestResetCommandBypassesEveryModelAndRemovesOldContext(t *testing.T) {
+	for _, engine := range []string{"legacy", "actor_v1", "character_v2"} {
+		t.Run(engine, func(t *testing.T) {
+			ctx := context.Background()
+			h, err := store.OpenHistory(ctx, t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer h.Close()
+			client := &characterScript{}
+			s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Engine: engine, WorldPack: "none", Background: "a private, thoughtful character"}, History: h, Client: client}
+			if err := s.AddUser(ctx, "我叫林晓"); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.AddUser(ctx, "/清除记忆"); err != nil {
+				t.Fatal(err)
+			}
+			reply, err := s.GenerateReply(ctx)
+			if err != nil || !strings.Contains(reply, "记忆已清除") || len(client.calls) != 0 {
+				t.Fatalf("command delegated to model: %s %v", reply, err)
+			}
+			if entries, err := h.RecentForModel(ctx, 100); err != nil || len(entries) != 0 {
+				t.Fatal(entries, err)
+			}
+		})
+	}
+}
+
 func (s *characterScript) Complete(_ context.Context, _ string, messages []model.Message) (string, error) {
 	s.calls = append(s.calls, append([]model.Message(nil), messages...))
 	if len(s.replies) == 0 {

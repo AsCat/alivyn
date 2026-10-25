@@ -44,3 +44,17 @@ func TestTurnAllowsAuthoredSceneButRejectsInventedWorldReferences(t *testing.T) 
 		t.Fatal("unstructured reply accepted")
 	}
 }
+
+func TestOpenThreadRequiresRealChatSource(t *testing.T) {
+	frame := actor.Frame{Evidence: []actor.Evidence{{ID: "chat:7", Provenance: "observed_chat"}, {ID: "worldv2:1", Provenance: "simulated_world"}}}
+	raw := `{"mode":"say","reply":"明天再聊。","moment":{"intention":"想休息"},"open_threads":[{"subject":"用户提到有件事还没说","owner":"user","source_ids":["chat:7"]}]}`
+	turn, err := Parse(raw, frame)
+	if err != nil || len(turn.OpenThreads) != 1 || turn.Moment.Intention != "想休息" {
+		t.Fatal(turn, err)
+	}
+	for _, ref := range []string{"chat:999", "worldv2:1"} {
+		if _, err := Parse(strings.Replace(raw, "chat:7", ref, 1), frame); err == nil {
+			t.Fatal("unsupported thread source accepted", ref)
+		}
+	}
+}

@@ -1,0 +1,106 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T01:50:50+08:00",
+  "turns": [
+    {
+      "scenario": "unfinished subject",
+      "user": "有件有点难开口的事，想跟你说",
+      "reply": "嗯，你说，我听着。",
+      "model_calls": 1,
+      "seconds": 1.130677042,
+      "reflection_calls": 1,
+      "state": {
+        "feeling": "平静而专注，带着一点谨慎的关切",
+        "attention": "对方那句还没说出口的难开口的事",
+        "scene": "正在聊天里听对方开口，没有急着追问",
+        "intention": "先听对方把话说完，不急着打断或下判断"
+      },
+      "open_threads": [
+        {
+          "subject": "对方有一件难开口的事还没说",
+          "owner": "user",
+          "source_ids": [
+            "chat:1"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "unfinished subject",
+      "user": "先说说你今天怎么样吧",
+      "reply": "还行，就是修了半天的录音，耳朵有点累。",
+      "model_calls": 1,
+      "seconds": 0.900741167,
+      "reflection_calls": 1,
+      "state": {
+        "feeling": "平静，略带修了半天录音后的疲惫",
+        "attention": "自己有点累的耳朵，以及对方暂时岔开的那件事",
+        "scene": "在旧港声音档案室的工作间隙，回着消息",
+        "intention": "简短说说今天，先歇一歇，不催对方开口"
+      },
+      "open_threads": [
+        {
+          "subject": "对方有一件难开口的事还没说",
+          "owner": "user",
+          "source_ids": [
+            "chat:1",
+            "chat:3"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "unfinished subject",
+      "user": "原来如此",
+      "reply": "你要是不急，那件事也可以晚点再说。",
+      "model_calls": 1,
+      "seconds": 1.274392583,
+      "reflection_calls": 1,
+      "state": {
+        "feeling": "平静，带一点关切",
+        "attention": "自己有点累的耳朵，以及对方那句还没说出口的事",
+        "scene": "在旧港声音档案室的工作间隙，刚回完消息",
+        "intention": "先歇一歇耳朵，不追问，等对方自己愿意再说"
+      },
+      "open_threads": [
+        {
+          "subject": "对方有一件难开口的事还没说",
+          "owner": "user",
+          "source_ids": [
+            "chat:1",
+            "chat:3"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "unfinished subject",
+      "user": "我先出门买东西，回来再聊",
+      "reply": "好，回来再说。",
+      "model_calls": 1,
+      "seconds": 0.640869208,
+      "reflection_calls": 1,
+      "state": {
+        "feeling": "平静，带一点关切和好奇，不催",
+        "attention": "对方说回来再聊的那件事，还有自己发累的耳朵",
+        "scene": "在旧港声音档案室的工作间隙，刚回完消息",
+        "intention": "先让耳朵歇一歇，等对方回来再聊"
+      },
+      "open_threads": [
+        {
+          "subject": "对方那件难开口的事还没讲，说好回来再聊",
+          "owner": "user",
+          "source_ids": [
+            "chat:1",
+            "chat:3",
+            "chat:7"
+          ]
+        }
+      ]
+    }
+  ]
+}

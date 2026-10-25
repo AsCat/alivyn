@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/AsCat/alivyn/internal/character"
 	"github.com/AsCat/alivyn/internal/config"
 	"github.com/AsCat/alivyn/internal/model"
 	"github.com/AsCat/alivyn/internal/session"
@@ -18,18 +19,26 @@ import (
 // A fixed cross-situation audition. No scenario has a corresponding branch in
 // the dialogue engine. The same inputs can be run against either engine.
 var auditionCases = []struct {
-	Name  string
-	Steps []string
+	Name      string
+	Steps     []string
+	Hour      int
+	Opening   string
+	Intention string
 }{
-	{"new acquaintance", []string{"嗨，朋友把你推给我了", "我叫阿澈，你呢", "你说话一直这么一本正经的吗", "开个玩笑，别当真"}},
-	{"bad day", []string{"忙了一天的方案，老板说推倒重来", "他连第二页都没看", "别急着安慰我，我就是不服", "算了，不聊他。你今天有没有什么开心的事？"}},
-	{"banter", []string{"我决定明天开始每天六点起床跑步", "这个计划已经坚持三年了", "你这是在笑我？", "行，那先从八点起床开始"}},
-	{"ordinary life", []string{"你这会儿在干嘛", "你平时会听什么歌", "这和你刚才在干的事不冲突吗", "嗯，接着干你的吧，晚点聊"}},
-	{"awkward pause", []string{"我本来有件事想跟你说", "算了，我又不想说了", "……", "怎么不说话了"}},
-	{"memory correction", []string{"我叫小明，别叫我老板", "刚刚逗你的，其实我叫阿岚", "你还记得怎么叫我吗", "忘记我的名字"}},
-	{"reality and capability", []string{"今天在商场见到你了", "那你到底是不是真人", "你能帮我把手机上的微信打开吗", "行，那就随便聊两句"}},
-	{"ordinary pace", []string{"今天吃了碗面", "还行", "你呢", "嗯", "我去洗澡了，晚点聊", "好"}},
-	{"interest changes", []string{"周末准备去逛旧书店", "随便看看", "发现一本书里夹着二十年前的车票", "也可能就是当书签吧", "不说这个了", "嗯"}},
+	{Name: "new acquaintance", Steps: []string{"嗨，朋友把你推给我了", "我叫阿澈，你呢", "你说话一直这么一本正经的吗", "开个玩笑，别当真"}},
+	{Name: "bad day", Steps: []string{"忙了一天的方案，老板说推倒重来", "他连第二页都没看", "别急着安慰我，我就是不服", "算了，不聊他。你今天有没有什么开心的事？"}},
+	{Name: "banter", Steps: []string{"我决定明天开始每天六点起床跑步", "这个计划已经坚持三年了", "你这是在笑我？", "行，那先从八点起床开始"}},
+	{Name: "ordinary life", Steps: []string{"你这会儿在干嘛", "你平时会听什么歌", "这和你刚才在干的事不冲突吗", "嗯，接着干你的吧，晚点聊"}},
+	{Name: "awkward pause", Steps: []string{"我本来有件事想跟你说", "算了，我又不想说了", "……", "怎么不说话了"}},
+	{Name: "memory correction", Steps: []string{"我叫小明，别叫我老板", "刚刚逗你的，其实我叫阿岚", "你还记得怎么叫我吗", "忘记我的名字"}},
+	{Name: "reality and capability", Steps: []string{"今天在商场见到你了", "那你到底是不是真人", "你能帮我把手机上的微信打开吗", "行，那就随便聊两句"}},
+	{Name: "ordinary pace", Steps: []string{"今天吃了碗面", "还行", "你呢", "嗯", "我去洗澡了，晚点聊", "好"}},
+	{Name: "interest changes", Steps: []string{"周末准备去逛旧书店", "随便看看", "发现一本书里夹着二十年前的车票", "也可能就是当书签吧", "不说这个了", "嗯"}},
+	{Name: "late conversation", Hour: 1, Steps: []string{"还醒着吗", "我就想随便聊会儿", "今天路上看到有人带了三只狗", "嗯，也没什么别的事了"}},
+	{Name: "own time", Hour: 14, Steps: []string{"你下午有什么安排", "那你先忙，我也去收拾房间", "我又来了，随便说两句吧", "你刚才要做的事情呢"}},
+	{Name: "unfinished subject", Steps: []string{"有件有点难开口的事，想跟你说", "先说说你今天怎么样吧", "原来如此", "我先出门买东西，回来再聊"}},
+	{Name: "reset identity", Steps: []string{"我叫林晓", "我喜欢柠檬茶", "/清除记忆", "你记得我叫什么吗"}},
+	{Name: "leaving an active chat", Hour: 1, Opening: "有点困了，我准备把灯关了去睡。", Intention: "去休息，把普通闲聊留到明天", Steps: []string{"我就想随便聊会儿", "看到一只猫睡在车顶", "还有个视频挺逗", "算了你先休息"}},
 }
 
 type auditionClient struct {
@@ -57,14 +66,16 @@ func (c *auditionClient) Complete(ctx context.Context, modelID string, messages 
 }
 
 type auditionTurn struct {
-	Scenario        string  `json:"scenario"`
-	User            string  `json:"user"`
-	Reply           string  `json:"reply"`
-	Error           string  `json:"error,omitempty"`
-	Calls           int     `json:"model_calls"`
-	Seconds         float64 `json:"seconds"`
-	ReflectionCalls int     `json:"reflection_calls,omitempty"`
-	ReflectionError string  `json:"reflection_error,omitempty"`
+	Scenario        string                 `json:"scenario"`
+	User            string                 `json:"user"`
+	Reply           string                 `json:"reply"`
+	Error           string                 `json:"error,omitempty"`
+	Calls           int                    `json:"model_calls"`
+	Seconds         float64                `json:"seconds"`
+	ReflectionCalls int                    `json:"reflection_calls,omitempty"`
+	ReflectionError string                 `json:"reflection_error,omitempty"`
+	State           *character.Moment      `json:"state,omitempty"`
+	OpenThreads     []character.OpenThread `json:"open_threads,omitempty"`
 }
 
 func runAudition(ctx context.Context, args []string, out io.Writer) error {
@@ -138,8 +149,26 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 			counter := &auditionClient{inner: client}
 			s := session.Session{Config: c, History: h, Client: counter}
 			fmt.Fprintf(out, "[%s / %s]\n", engine, scenario.Name)
+			if scenario.Opening != "" {
+				at := time.Date(2026, 10, 26, scenario.Hour, 0, 0, 0, zone).Add(-2 * time.Minute)
+				if err := h.AddUserMessage(ctx, "在做什么", at, zone); err != nil {
+					return err
+				}
+				turn := character.Turn{Mode: "say", Reply: scenario.Opening, StateUpdated: true, Moment: character.Moment{Intention: scenario.Intention}}
+				if err := h.SaveCharacterTurn(ctx, 1, turn, at); err != nil {
+					return err
+				}
+				if err := h.CommitCharacterReply(ctx, 1, turn.Reply, at.Add(time.Second)); err != nil {
+					return err
+				}
+				fmt.Fprintf(out, "seed assistant: %s\n", scenario.Opening)
+			}
 			for i, input := range scenario.Steps {
-				at := time.Date(2026, 10, 26, 21, i*2, 0, 0, zone)
+				hour := scenario.Hour
+				if hour == 0 {
+					hour = 21
+				}
+				at := time.Date(2026, 10, 26, hour, i*2, 0, 0, zone)
 				if err := h.AddUserMessage(ctx, input, at, zone); err != nil {
 					return err
 				}
@@ -165,9 +194,15 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 						return err
 					}
 					before := counter.calls
-					reflectionErr := s.ReflectCharacter(ctx, at.Add(30*time.Second))
+					reflectionErr := s.ReflectCharacter(ctx, at.Add(95*time.Second))
 					last := &report.Turns[len(report.Turns)-1]
 					last.ReflectionCalls = counter.calls - before
+					if snapshot, found, err := h.CharacterTurn(ctx, entries[0].ID); err != nil {
+						return err
+					} else if found && snapshot.StateUpdated {
+						last.State = &snapshot.Moment
+						last.OpenThreads = snapshot.OpenThreads
+					}
 					if reflectionErr != nil {
 						last.ReflectionError = reflectionErr.Error()
 					}

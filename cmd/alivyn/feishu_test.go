@@ -157,6 +157,78 @@ func (f *burstCompleter) Complete(_ context.Context, _ string, messages []model.
 	return f.reply, nil
 }
 
+func TestPauseAndWakeDuringGenerationDiscardOldReply(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Now().Add(-time.Minute)
+	if _, err := h.EnqueueFeishu(ctx, "old", "chat", "m1", "接着聊", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &heldCompleter{started: make(chan struct{}), release: make(chan struct{})}
+	s := session.Session{Config: config.Config{Name: "意续", Language: "zh-CN", Engine: "character_v2", Model: "mock", WorldPack: "none"}, History: h, Client: client}
+	sender := &flakySender{}
+	done := make(chan error, 1)
+	go func() { done <- processFeishuOnce(ctx, h, s, sender) }()
+	select {
+	case <-client.started:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	for _, cmd := range []string{"/暂停", "/唤醒"} {
+		if _, err := h.EnqueueFeishu(ctx, cmd, "chat", cmd, cmd, at.Add(time.Second), time.UTC); err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(client.release)
+	if err := <-done; !errors.Is(err, store.ErrTurnSuperseded) {
+		t.Fatal("old generation survived wake", err)
+	}
+	if sender.calls != 0 {
+		t.Fatal("old message sent")
+	}
+	for range 2 {
+		if err := processFeishuOnce(ctx, h, s, sender); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if sender.calls != 2 || client.calls != 1 {
+		t.Fatal(sender.calls, client.calls)
+	}
+}
+
+func TestWorkerDefersWithoutSendingOrConsumingMessage(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Now().Add(-time.Minute)
+	if _, err := h.EnqueueFeishu(ctx, "sleep", "chat", "m1", "还醒着吗", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &burstCompleter{reply: fmt.Sprintf(`[[away:{"kind":"sleep","until":%q,"reason":"休息"}]]`, time.Now().Add(time.Hour).Format(time.RFC3339))}
+	s := session.Session{Config: config.Config{Name: "意续", Language: "zh-CN", Engine: "character_v2", Model: "mock"}, History: h, Client: client}
+	sender := &flakySender{}
+	for range 2 {
+		if err := processFeishuOnce(ctx, h, s, sender); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if sender.calls != 0 || client.calls != 1 {
+		t.Fatal(sender.calls, client.calls)
+	}
+	item, ok, err := h.NextFeishu(ctx)
+	if err != nil || !ok || item.State != "pending" {
+		t.Fatal(item, ok, err)
+	}
+}
+
 func TestCharacterBurstHasOneReplyOrDeliberateSilence(t *testing.T) {
 	for _, reply := range []string{"有一点", "[[wait]]"} {
 		t.Run(reply, func(t *testing.T) {

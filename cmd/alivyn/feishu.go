@@ -300,6 +300,9 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 			return err
 		}
 		if strings.TrimSpace(reply) == "" {
+			if deferred, err := h.DeferFeishuReply(ctx, item.EventID); err != nil || deferred {
+				return err
+			}
 			return h.SkipFeishuReply(ctx, item.EventID)
 		}
 		if err := h.SetFeishuReply(ctx, item.EventID, reply, time.Now()); err != nil {

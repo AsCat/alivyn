@@ -15,12 +15,18 @@ func (h *History) NextFeishuBatch(ctx context.Context, now time.Time) (FeishuInb
 		return FeishuInboxItem{}, false, err
 	}
 	defer tx.Rollback()
+	if err := releaseDeferredTx(ctx, tx, now); err != nil {
+		return FeishuInboxItem{}, false, err
+	}
 	rows, err := tx.QueryContext(ctx, `SELECT f.event_id,f.chat_id,f.message_id,f.user_message_id,
 COALESCE(f.reply,''),f.state,f.received_ns,
 EXISTS(SELECT 1 FROM feishu_reply_groups g WHERE g.event_id=f.event_id)
 OR EXISTS(SELECT 1 FROM character_turns c WHERE c.source_message_id=f.user_message_id)
 OR EXISTS(SELECT 1 FROM local_commands c WHERE c.source_message_id=f.user_message_id)
-FROM feishu_inbox f WHERE f.state IN ('pending','ready') ORDER BY f.received_ns,f.rowid LIMIT 8`)
+FROM feishu_inbox f WHERE f.state IN ('pending','ready')
+AND (f.state='ready' OR EXISTS(SELECT 1 FROM local_commands c WHERE c.source_message_id=f.user_message_id)
+OR NOT EXISTS(SELECT 1 FROM character_absence WHERE until_ns>?))
+ORDER BY f.received_ns,f.rowid LIMIT 8`, now.UnixNano())
 	if err != nil {
 		return FeishuInboxItem{}, false, err
 	}
@@ -35,7 +41,8 @@ FROM feishu_inbox f WHERE f.state IN ('pending','ready') ORDER BY f.received_ns,
 			return FeishuInboxItem{}, false, err
 		}
 		item.ReceivedAt = time.Unix(0, ns)
-		if len(batch) > 0 && (item.ChatID != batch[0].ChatID || item.State == "ready" || claimed || item.ReceivedAt.Sub(batch[len(batch)-1].ReceivedAt) > 4*time.Second || item.ReceivedAt.Sub(batch[0].ReceivedAt) > 12*time.Second) {
+		backlog := len(batch) > 0 && !item.ReceivedAt.After(now) && now.Sub(batch[0].ReceivedAt) > time.Minute
+		if len(batch) > 0 && (item.ChatID != batch[0].ChatID || item.State == "ready" || claimed || (!backlog && (item.ReceivedAt.Sub(batch[len(batch)-1].ReceivedAt) > 4*time.Second || item.ReceivedAt.Sub(batch[0].ReceivedAt) > 12*time.Second))) {
 			break
 		}
 		batch = append(batch, item)
@@ -50,11 +57,11 @@ FROM feishu_inbox f WHERE f.state IN ('pending','ready') ORDER BY f.received_ns,
 		return FeishuInboxItem{}, false, readErr
 	}
 	if len(batch) == 0 {
-		return FeishuInboxItem{}, false, nil
+		return FeishuInboxItem{}, false, tx.Commit()
 	}
 	anchor := batch[len(batch)-1]
 	if locked {
-		return anchor, true, nil
+		return anchor, true, tx.Commit()
 	}
 	// Bound the wait even when someone keeps typing. No sleep or model call
 	// holds the database transaction open.

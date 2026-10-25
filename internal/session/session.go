@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AsCat/alivyn/internal/character"
 	"github.com/AsCat/alivyn/internal/config"
 	"github.com/AsCat/alivyn/internal/model"
 	"github.com/AsCat/alivyn/internal/relationship"
@@ -23,6 +24,22 @@ type Session struct {
 	Config  config.Config
 	History *store.History
 	Client  Completer
+}
+
+func (s Session) commandReply(ctx context.Context, id int64) (string, bool, error) {
+	persona := s.Config.Background
+	if strings.TrimSpace(persona) == "" {
+		persona = character.DefaultPersona(s.Config.Language)
+	}
+	card := s.Config.Name + "\n" + persona
+	if s.Config.EffectiveWorldPack() == "tidehaven" {
+		card += "\n" + character.Setting(s.Config.Language)
+	}
+	routine := s.Config.Routine
+	if strings.TrimSpace(routine) == "" {
+		routine = character.DefaultRoutine(s.Config.Language)
+	}
+	return s.History.CommandReply(ctx, id, s.Config.Language, card, routine)
 }
 
 // AddUser persists the user's words before an outbound model request begins.
@@ -64,7 +81,7 @@ func (s Session) ComposeReply(ctx context.Context) (string, error) {
 // ComposeReplyAt uses the same engine with an injected clock for isolated
 // timeline evaluations. Production callers use ComposeReply.
 func (s Session) ComposeReplyAt(ctx context.Context, now time.Time) (string, error) {
-	if reply, found, err := s.History.CommandReply(ctx, 0, s.Config.Language); err != nil || found {
+	if reply, found, err := s.commandReply(ctx, 0); err != nil || found {
 		return reply, err
 	}
 	if s.Config.EffectiveEngine() == "character_v2" {
@@ -136,16 +153,21 @@ func (s Session) ComposeReplyAt(ctx context.Context, now time.Time) (string, err
 // ComposeReplyFor answers a specific persisted user turn. Channel workers use
 // it when several incoming messages have already been queued.
 func (s Session) ComposeReplyFor(ctx context.Context, userMessageID int64) (string, error) {
-	if reply, found, err := s.History.CommandReply(ctx, userMessageID, s.Config.Language); err != nil || found {
+	return s.ComposeReplyForAt(ctx, userMessageID, time.Now())
+}
+
+// ComposeReplyForAt keeps source binding when evaluating a virtual timeline.
+func (s Session) ComposeReplyForAt(ctx context.Context, userMessageID int64, now time.Time) (string, error) {
+	if reply, found, err := s.commandReply(ctx, userMessageID); err != nil || found {
 		return reply, err
 	}
 	if s.Config.EffectiveEngine() == "character_v2" {
-		return s.composeCharacterReply(ctx, time.Now(), userMessageID)
+		return s.composeCharacterReply(ctx, now, userMessageID)
 	}
 	if s.Config.EffectiveEngine() != "actor_v1" {
-		return s.ComposeReply(ctx)
+		return s.ComposeReplyAt(ctx, now)
 	}
-	return s.composeActorReply(ctx, time.Now(), userMessageID)
+	return s.composeActorReply(ctx, now, userMessageID)
 }
 
 func bareGreeting(text string) bool {

@@ -65,6 +65,30 @@ CREATE TABLE IF NOT EXISTS local_commands (
   source_message_id INTEGER PRIMARY KEY REFERENCES messages(id),
   command TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS command_results (
+  source_message_id INTEGER PRIMARY KEY REFERENCES local_commands(source_message_id),
+  zh TEXT NOT NULL,
+  en TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS character_control (
+  id INTEGER PRIMARY KEY CHECK(id=1),
+  mode TEXT NOT NULL DEFAULT 'running' CHECK(mode IN ('running','paused','diagnostic')),
+  return_mode TEXT NOT NULL DEFAULT 'running',
+  confirm_until_ns INTEGER NOT NULL DEFAULT 0,
+  blocked_through_id INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO character_control(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS character_absence (
+  id INTEGER PRIMARY KEY CHECK(id=1),
+  source_message_id INTEGER NOT NULL REFERENCES messages(id),
+  kind TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  until_ns INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS reply_deferrals (
+  source_message_id INTEGER PRIMARY KEY REFERENCES messages(id),
+  until_ns INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS inbox_receipts (
   event_id TEXT PRIMARY KEY
 );

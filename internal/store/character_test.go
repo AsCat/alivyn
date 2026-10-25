@@ -37,7 +37,7 @@ func TestCharacterStateCommitsWithReplyExpiresAndForgets(t *testing.T) {
 		age                       time.Duration
 		feeling, scene, attention bool
 	}{
-		{time.Hour, true, true, true}, {3 * time.Hour, false, true, true}, {7 * time.Hour, false, false, true}, {73 * time.Hour, false, false, false},
+		{time.Hour, true, true, true}, {3 * time.Hour, true, true, true}, {7 * time.Hour, true, false, true}, {9 * time.Hour, false, false, true}, {73 * time.Hour, false, false, false},
 	} {
 		m, _, err := h.CharacterMomentBefore(ctx, 2, at.Add(tc.age))
 		if err != nil || (m.Feeling != "") != tc.feeling || (m.Scene != "") != tc.scene || (m.Attention != "") != tc.attention {

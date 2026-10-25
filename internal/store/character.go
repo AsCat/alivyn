@@ -72,19 +72,32 @@ JOIN messages m ON m.id=a.assistant_message_id WHERE a.source_message_id=?`, sou
 }
 
 func (h *History) SaveCharacterTurn(ctx context.Context, sourceID int64, t character.Turn, at time.Time) error {
+	if t.Absence != nil {
+		if err := t.Absence.Validate(at.Truncate(time.Second)); err != nil {
+			return err
+		}
+	}
 	raw, err := json.Marshal(t)
 	if err != nil {
 		return err
 	}
 	r, err := h.db.ExecContext(ctx, `INSERT INTO character_turns(source_message_id,turn_json,created_at)
 SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM messages WHERE id=? AND role='user')
-ON CONFLICT(source_message_id) DO NOTHING`, sourceID, string(raw), at.UTC().Format(time.RFC3339Nano), sourceID)
+AND EXISTS(SELECT 1 FROM character_control WHERE mode='running' AND blocked_through_id<?)
+ON CONFLICT(source_message_id) DO NOTHING`, sourceID, string(raw), at.UTC().Format(time.RFC3339Nano), sourceID, sourceID)
 	if err != nil {
 		return err
 	}
 	if count, err := r.RowsAffected(); err != nil {
 		return err
 	} else if count == 0 {
+		var allowed bool
+		if err := h.db.QueryRowContext(ctx, "SELECT mode='running' AND blocked_through_id<? FROM character_control WHERE id=1", sourceID).Scan(&allowed); err != nil {
+			return err
+		}
+		if !allowed {
+			return ErrTurnSuperseded
+		}
 		if _, found, err := h.CharacterTurn(ctx, sourceID); err != nil {
 			return err
 		} else if !found {
@@ -124,9 +137,14 @@ ORDER BY source_message_id DESC LIMIT 1`, sourceID).Scan(&raw, &stamp)
 	if age < 0 || age > 72*time.Hour {
 		return character.Turn{}, time.Time{}, nil
 	}
-	if age > 2*time.Hour {
+	if age > 8*time.Hour {
 		t.Moment.Feeling = ""
+		t.Moment.Cause = ""
+	}
+	if age > 2*time.Hour {
 		t.Moment.Intention = ""
+		t.Moment.Energy = ""
+		t.Moment.Engagement = ""
 	}
 	if age > 6*time.Hour {
 		t.Moment.Scene = ""
@@ -155,6 +173,9 @@ func commitCharacterTurnTx(ctx context.Context, tx *sql.Tx, sourceID int64, repl
 	}
 	if committed {
 		return nil
+	}
+	if err := saveAbsenceTx(ctx, tx, sourceID, t); err != nil {
+		return err
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE character_turns SET committed = 1 WHERE source_message_id = ?", sourceID); err != nil {
 		return err
@@ -201,7 +222,8 @@ func (h *History) NextCharacterReflection(ctx context.Context, now time.Time) (i
 	var id int64
 	var raw, stamp string
 	err := h.db.QueryRowContext(ctx, `SELECT c.source_message_id,c.turn_json,c.created_at FROM character_turns c
-WHERE c.committed=1 AND NOT EXISTS (SELECT 1 FROM feishu_inbox f WHERE f.state!='sent')
+WHERE c.committed=1 AND EXISTS(SELECT 1 FROM character_control WHERE mode='running' AND blocked_through_id<c.source_message_id)
+AND NOT EXISTS (SELECT 1 FROM feishu_inbox f WHERE f.state!='sent')
 ORDER BY c.source_message_id DESC LIMIT 1`).Scan(&id, &raw, &stamp)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, character.Turn{}, false, nil
@@ -249,7 +271,7 @@ func (h *History) SaveCharacterReflection(ctx context.Context, sourceID int64, t
 	}
 	defer tx.Rollback()
 	var raw, stamp string
-	err = tx.QueryRowContext(ctx, "SELECT turn_json,created_at FROM character_turns WHERE source_message_id=? AND committed=1", sourceID).Scan(&raw, &stamp)
+	err = tx.QueryRowContext(ctx, "SELECT turn_json,created_at FROM character_turns WHERE source_message_id=? AND committed=1 AND EXISTS(SELECT 1 FROM character_control WHERE mode='running' AND blocked_through_id<?)", sourceID, sourceID).Scan(&raw, &stamp)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -266,6 +288,7 @@ func (h *History) SaveCharacterReflection(ctx context.Context, sourceID int64, t
 	if old.Reply != t.Reply || !t.StateUpdated {
 		return errors.New("reflection must preserve its delivered reply")
 	}
+	t.Absence = old.Absence // Reflection cannot rewrite an executed availability action.
 	data, err := json.Marshal(t)
 	if err != nil {
 		return err
@@ -287,7 +310,9 @@ func (h *History) CommitCharacterReply(ctx context.Context, sourceID int64, repl
 	}
 	defer tx.Rollback()
 	var exists bool
-	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM messages WHERE id=? AND role='user')", sourceID).Scan(&exists); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM messages WHERE id=? AND role='user'
+AND (EXISTS(SELECT 1 FROM local_commands WHERE source_message_id=messages.id)
+OR EXISTS(SELECT 1 FROM character_control WHERE mode='running' AND blocked_through_id<messages.id)))`, sourceID).Scan(&exists); err != nil {
 		return err
 	}
 	if !exists {

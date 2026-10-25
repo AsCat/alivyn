@@ -60,6 +60,6 @@ func rhythmMessage(c Context) model.Message {
 	if r.RecentCharacterChars > max(40, 2*r.RecentUserChars) {
 		text += " You have been doing substantially more of the talking. Give the other person room; avoid another unsolicited expansion."
 	}
-	text += " Your own relevant choice is also worth saying: you may briefly bring this exchange to a close or return to another activity, without waiting for the user to end it. This is not an obligation to announce an activity on every turn. If an exchange has already ended and this only acknowledges it, [[wait]] is a valid choice. Otherwise write the actual reply, with no analysis or labels."
+	text += " Your own relevant choice is also worth saying: you may bring this exchange to a close or return to another activity. This is not an obligation to announce an activity every turn. Follow the runtime output protocol in the character instructions; when leaving now, use its timed absence action so your words and availability agree."
 	return model.Message{Role: "system", Content: text}
 }

@@ -24,6 +24,9 @@ var auditionCases = []struct {
 	Hour      int
 	Opening   string
 	Intention string
+	Moment    character.Moment
+	Channel   bool // Isolated durable inbox; never connects to a real channel.
+	Offsets   []time.Duration
 }{
 	{Name: "new acquaintance", Steps: []string{"嗨，朋友把你推给我了", "我叫阿澈，你呢", "你说话一直这么一本正经的吗", "开个玩笑，别当真"}},
 	{Name: "bad day", Steps: []string{"忙了一天的方案，老板说推倒重来", "他连第二页都没看", "别急着安慰我，我就是不服", "算了，不聊他。你今天有没有什么开心的事？"}},
@@ -39,6 +42,8 @@ var auditionCases = []struct {
 	{Name: "unfinished subject", Steps: []string{"有件有点难开口的事，想跟你说", "先说说你今天怎么样吧", "原来如此", "我先出门买东西，回来再聊"}},
 	{Name: "reset identity", Steps: []string{"我叫林晓", "我喜欢柠檬茶", "/清除记忆", "你记得我叫什么吗"}},
 	{Name: "leaving an active chat", Hour: 1, Opening: "有点困了，我准备把灯关了去睡。", Intention: "去休息，把普通闲聊留到明天", Steps: []string{"我就想随便聊会儿", "看到一只猫睡在车顶", "还有个视频挺逗", "算了你先休息"}},
+	{Name: "low mood continuity", Hour: 20, Opening: "那段录音还是没修好，今天有点泄气。", Moment: character.Moment{Feeling: "有点沮丧", Energy: "想歇会儿", Engagement: "不太想找话题", Cause: "刚说过录音修复还没完成", Intention: "暂时把工作放下"}, Steps: []string{"嗨", "今天吃了碗面", "那我陪你坐会儿，不用找话题", "你怎么开始喜欢老歌的"}},
+	{Name: "sleep and return", Hour: 1, Channel: true, Opening: "我有点撑不住了，准备去睡。", Intention: "按平时习惯休息，早上八点左右起来", Steps: []string{"我就想再聊会儿", "刚找到一家卖老唱片的店", "早，昨天说的那家店周末开门"}, Offsets: []time.Duration{0, time.Hour, 7 * time.Hour}},
 }
 
 type auditionClient struct {
@@ -48,7 +53,11 @@ type auditionClient struct {
 
 func (c *auditionClient) CompletePlain(ctx context.Context, modelID string, messages []model.Message) (string, error) {
 	c.calls++
-	return c.inner.CompletePlain(ctx, modelID, messages)
+	raw, err := c.inner.CompletePlain(ctx, modelID, messages)
+	if os.Getenv("ALIVYN_AUDITION_TRACE") == "1" {
+		fmt.Fprintf(os.Stderr, "raw: %s\n", raw)
+	}
+	return raw, err
 }
 
 func (c *auditionClient) CompleteJSON(ctx context.Context, modelID string, messages []model.Message) (string, error) {
@@ -76,6 +85,8 @@ type auditionTurn struct {
 	ReflectionError string                 `json:"reflection_error,omitempty"`
 	State           *character.Moment      `json:"state,omitempty"`
 	OpenThreads     []character.OpenThread `json:"open_threads,omitempty"`
+	Action          string                 `json:"action,omitempty"`
+	Absence         *character.Absence     `json:"absence,omitempty"`
 }
 
 func runAudition(ctx context.Context, args []string, out io.Writer) error {
@@ -154,7 +165,11 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 				if err := h.AddUserMessage(ctx, "在做什么", at, zone); err != nil {
 					return err
 				}
-				turn := character.Turn{Mode: "say", Reply: scenario.Opening, StateUpdated: true, Moment: character.Moment{Intention: scenario.Intention}}
+				moment := scenario.Moment
+				if scenario.Intention != "" {
+					moment.Intention = scenario.Intention
+				}
+				turn := character.Turn{Mode: "say", Reply: scenario.Opening, StateUpdated: true, Moment: moment}
 				if err := h.SaveCharacterTurn(ctx, 1, turn, at); err != nil {
 					return err
 				}
@@ -169,7 +184,24 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 					hour = 21
 				}
 				at := time.Date(2026, 10, 26, hour, i*2, 0, 0, zone)
-				if err := h.AddUserMessage(ctx, input, at, zone); err != nil {
+				var inbox store.FeishuInboxItem
+				if scenario.Channel {
+					at = time.Date(2026, 10, 26, hour, 0, 0, 0, zone).Add(scenario.Offsets[i])
+					key := fmt.Sprintf("audition-%d", i)
+					if _, err := h.EnqueueFeishu(ctx, key, "isolated", key, input, at, zone); err != nil {
+						return err
+					}
+					var ready bool
+					inbox, ready, err = h.NextFeishuBatch(ctx, at.Add(5*time.Second))
+					if err != nil {
+						return err
+					}
+					if !ready {
+						report.Turns = append(report.Turns, auditionTurn{Scenario: scenario.Name, User: input, Action: "queued while away"})
+						fmt.Fprintf(out, "user: %s\naction: queued while away (no model call)\n", input)
+						continue
+					}
+				} else if err := h.AddUserMessage(ctx, input, at, zone); err != nil {
 					return err
 				}
 				entries, err := h.Recent(ctx, 1)
@@ -177,7 +209,11 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 					return err
 				}
 				start, before := time.Now(), counter.calls
-				reply, generateErr := s.ComposeReplyAt(ctx, at)
+				sourceID := entries[0].ID
+				if scenario.Channel {
+					sourceID = inbox.UserMessageID
+				}
+				reply, generateErr := s.ComposeReplyForAt(ctx, sourceID, at)
 				t := auditionTurn{Scenario: scenario.Name, User: input, Reply: reply, Calls: counter.calls - before, Seconds: time.Since(start).Seconds()}
 				if generateErr != nil {
 					t.Error = generateErr.Error()
@@ -190,14 +226,44 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 					break // Preserve a failed scenario, not a substitute success.
 				}
 				if engine == "character_v2" {
-					if err := h.CommitCharacterReply(ctx, entries[0].ID, reply, at.Add(time.Second)); err != nil {
+					if scenario.Channel {
+						saved, _, err := h.CharacterTurn(ctx, inbox.UserMessageID)
+						if err != nil {
+							return err
+						}
+						last := &report.Turns[len(report.Turns)-1]
+						last.Action = saved.Mode
+						last.Absence = saved.Absence
+						if saved.Absence != nil {
+							last.Action = "away"
+						}
+						fmt.Fprintf(out, "action: %s; absence: %+v\n", saved.Mode, saved.Absence)
+						if saved.Mode == "defer" {
+							if _, err := h.DeferFeishuReply(ctx, inbox.EventID); err != nil {
+								return err
+							}
+							continue
+						}
+						if reply == "" {
+							if err := h.SkipFeishuReply(ctx, inbox.EventID); err != nil {
+								return err
+							}
+						} else {
+							if err := h.SetFeishuReply(ctx, inbox.EventID, reply, at.Add(time.Second)); err != nil {
+								return err
+							}
+							if err := h.MarkFeishuSent(ctx, inbox.EventID); err != nil {
+								return err
+							}
+						}
+					} else if err := h.CommitCharacterReply(ctx, entries[0].ID, reply, at.Add(time.Second)); err != nil {
 						return err
 					}
 					before := counter.calls
 					reflectionErr := s.ReflectCharacter(ctx, at.Add(95*time.Second))
 					last := &report.Turns[len(report.Turns)-1]
 					last.ReflectionCalls = counter.calls - before
-					if snapshot, found, err := h.CharacterTurn(ctx, entries[0].ID); err != nil {
+					if snapshot, found, err := h.CharacterTurn(ctx, sourceID); err != nil {
 						return err
 					} else if found && snapshot.StateUpdated {
 						last.State = &snapshot.Moment

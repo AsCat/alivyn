@@ -23,6 +23,7 @@ type Config struct {
 	Language      string `json:"language"`
 	Style         string `json:"style,omitempty"`
 	Background    string `json:"background,omitempty"`
+	Routine       string `json:"routine,omitempty"`
 	WorldPack     string `json:"world_pack,omitempty"`
 	Engine        string `json:"engine,omitempty"`
 	Provider      string `json:"provider"`
@@ -65,6 +66,9 @@ func (c Config) Validate() error {
 	}
 	if len([]rune(c.Background)) > 500 || strings.IndexFunc(c.Background, unicode.IsControl) >= 0 {
 		return errors.New("background must be single-line and at most 500 characters")
+	}
+	if len([]rune(c.Routine)) > 500 || strings.IndexFunc(c.Routine, unicode.IsControl) >= 0 {
+		return errors.New("routine must be single-line and at most 500 characters")
 	}
 	if c.WorldPack != "" && c.WorldPack != "tidehaven" && c.WorldPack != "none" {
 		return errors.New("world pack must be tidehaven or none")
@@ -168,6 +172,15 @@ func SaveBackground(background string) error {
 		return err
 	}
 	c.Background = background
+	return saveExisting(c)
+}
+
+func SaveRoutine(routine string) error {
+	c, err := Load()
+	if err != nil {
+		return err
+	}
+	c.Routine = routine
 	return saveExisting(c)
 }
 

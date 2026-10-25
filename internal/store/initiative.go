@@ -26,6 +26,22 @@ type InitiativeCheck struct {
 // No model call can override these checks.
 func initiativeWindowTx(ctx context.Context, tx *sql.Tx, now time.Time, zone *time.Location, excludeIntent int64) (InitiativeCheck, error) {
 	var check InitiativeCheck
+	var running bool
+	if err := tx.QueryRowContext(ctx, "SELECT mode='running' FROM character_control WHERE id=1").Scan(&running); err != nil {
+		return check, err
+	}
+	if !running {
+		check.Reason = "character suspended"
+		return check, nil
+	}
+	var away bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM character_absence WHERE until_ns>?)", now.UnixNano()).Scan(&away); err != nil {
+		return check, err
+	}
+	if away {
+		check.Reason = "character away"
+		return check, nil
+	}
 	if zone == nil {
 		return check, errors.New("initiative timezone is required")
 	}

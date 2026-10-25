@@ -1,0 +1,307 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/AsCat/alivyn/internal/character"
+)
+
+// Controls are transport-independent, explicit user input. Model output never
+// enters this interpreter. Responses are snapshotted in the same transaction
+// as the action, so queued commands and transport retries cannot replay it.
+func isControlInput(text string) bool { return strings.HasPrefix(strings.TrimSpace(text), "/") }
+
+func commandName(text string) string {
+	switch strings.TrimSpace(text) {
+	case "/帮助", "/help":
+		return "help"
+	case "/状态", "/status":
+		return "status"
+	case "/暂停", "/freeze":
+		return "freeze"
+	case "/唤醒", "/wake":
+		return "wake"
+	case "/勿扰", "/quiet":
+		return "quiet"
+	case "/允许主动", "/contact on":
+		return "contact_on"
+	case "/诊断", "/diagnostics":
+		return "diagnostics"
+	case "/确认诊断", "/diagnostics confirm":
+		return "confirm"
+	case "/取消", "/cancel":
+		return "cancel"
+	case "/人物", "/persona":
+		return "persona"
+	case "/作息", "/routine":
+		return "routine"
+	case "/记忆", "/memories":
+		return "memories"
+	case "/心境", "/state":
+		return "state"
+	case "/挂念", "/threads":
+		return "threads"
+	case "/返回角色", "/resume":
+		return "resume"
+	}
+	return "unknown"
+}
+
+const helpZH = `【控制台】
+/状态 — 查看运行状态和联系限制
+/暂停 · /唤醒 — 暂停或恢复人物对话，保留记忆
+/勿扰 · /允许主动 — 关闭或允许主动联系，仍遵守安静时段
+/诊断 — 申请进入诊断；60 秒内 /确认诊断，或 /取消
+诊断内：/人物 · /作息 · /记忆 · /心境 · /挂念
+/返回角色 — 退出诊断，恢复进入前的状态
+/清除记忆 — 立即清除本机人物经历和关系，恢复初始人物状态
+命令需单独发送。诊断不会进入人物记忆；/帮助 随时查看。`
+
+const helpEN = `Control console
+/status — runtime and contact limits
+/freeze · /wake — pause or resume character dialogue, preserving memory
+/quiet · /contact on — disable or allow proactive contact, respecting quiet hours
+/diagnostics — request inspection; /diagnostics confirm within 60s, or /cancel
+Inside diagnostics: /persona · /routine · /memories · /state · /threads
+/resume — leave diagnostics and restore the previous mode
+/reset — immediately erase local character experiences and relationship
+Send commands separately. Diagnostic exchanges stay outside character memory. /help shows this list.`
+
+func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time) (int64, bool, error) {
+	var mode, returnMode string
+	var deadline int64
+	if err := tx.QueryRowContext(ctx, "SELECT mode,return_mode,confirm_until_ns FROM character_control WHERE id=1").Scan(&mode, &returnMode, &deadline); err != nil {
+		return 0, false, err
+	}
+	if !isControlInput(text) && mode == "running" {
+		return 0, false, nil
+	}
+	name := commandName(text)
+	zh, en := "", ""
+	exec := func(query string, args ...any) error { _, err := tx.ExecContext(ctx, query, args...); return err }
+	var err error
+	if !isControlInput(text) {
+		name = "blocked"
+		zh, en = "【控制台】人物对话已暂停。这条消息不会进入人物记忆；可用 /唤醒 恢复，或 /返回角色 退出诊断。", "Character dialogue is paused. This message will not enter character memory. Use /wake to resume or /resume to leave diagnostics."
+	} else {
+		switch name {
+		case "help":
+			zh, en = helpZH, helpEN
+		case "status":
+			var paused bool
+			var start, end string
+			var limit int
+			err = tx.QueryRowContext(ctx, "SELECT paused,quiet_start,quiet_end,daily_limit FROM contact_settings WHERE id=1").Scan(&paused, &start, &end, &limit)
+			labels := map[string]string{"running": "人物运行中", "paused": "人物已暂停", "diagnostic": "诊断中"}
+			contactZH := "允许（由人物决定是否联系）"
+			if paused {
+				contactZH = "已关闭"
+			}
+			zh = fmt.Sprintf("【控制台】%s\n主动联系：%s\n安静时段：%s–%s（配置时区）；每日上限：%d\n暂停和诊断期间不会主动联系。", labels[mode], contactZH, start, end, limit)
+			en = fmt.Sprintf("Mode: %s\nProactive contact disabled: %t\nQuiet hours: %s–%s (configured timezone); daily limit: %d\nPaused and diagnostic modes block proactive contact.", mode, paused, start, end, limit)
+			if err == nil {
+				var kind string
+				var until int64
+				e := tx.QueryRowContext(ctx, "SELECT kind,until_ns FROM character_absence WHERE until_ns>?", at.UnixNano()).Scan(&kind, &until)
+				if e == nil {
+					labels := map[string]string{"sleep": "休息", "busy": "忙碌", "alone": "独处"}
+					stamp := time.Unix(0, until).In(at.Location()).Format(time.RFC3339)
+					zh += "\n人物暂离：" + labels[kind] + "；预计返回：" + stamp + "。期间普通消息会等待，可用 /唤醒 提前恢复。"
+					en += "\nAway: " + kind + "; expected return: " + stamp + ". Ordinary messages wait; /wake returns early."
+				} else if !errors.Is(e, sql.ErrNoRows) {
+					err = e
+				}
+			}
+		case "freeze":
+			err = suspendCharacterTx(ctx, tx, at)
+			if err == nil {
+				err = exec("UPDATE character_control SET mode='paused',return_mode='paused',confirm_until_ns=0 WHERE id=1")
+			}
+			zh, en = "【控制台】已暂停人物对话和主动联系，记忆保留。输入 /唤醒 恢复。", "Character dialogue and proactive contact paused; memory preserved. Use /wake to resume."
+		case "wake":
+			err = exec("UPDATE character_control SET mode='running',return_mode='running',confirm_until_ns=0 WHERE id=1")
+			if err == nil {
+				err = exec("UPDATE character_absence SET until_ns=MIN(until_ns,?)", at.UnixNano())
+			}
+			if err == nil {
+				err = exec("UPDATE reply_deferrals SET until_ns=MIN(until_ns,?)", at.UnixNano())
+			}
+			zh, en = "【控制台】人物已唤醒，记忆保留；原有勿扰和联系限制继续生效。", "Character awake; memory preserved. Existing contact restrictions still apply."
+		case "quiet", "contact_on":
+			err = exec("UPDATE contact_settings SET paused=? WHERE id=1", name == "quiet")
+			if name == "quiet" {
+				zh, en = "【控制台】已关闭主动联系，你仍可以正常找她聊天。", "Proactive contact disabled. You can still start a conversation."
+			} else {
+				zh, en = "【控制台】已允许主动联系，仍遵守安静时段、每日上限和人物当前状态；不会强制立即发消息。", "Proactive contact allowed, subject to quiet hours, daily limits and character mode. This does not force an immediate message."
+			}
+		case "diagnostics":
+			if mode == "diagnostic" {
+				zh, en = "【诊断】已在诊断中。/人物 /记忆 /心境 /挂念；/返回角色 退出。", "Already in diagnostics. /persona /memories /state /threads; /resume to leave."
+				break
+			}
+			err = exec("UPDATE character_control SET confirm_until_ns=? WHERE id=1", at.Add(time.Minute).UnixNano())
+			zh, en = "【诊断入口】进入后将暂停人物对话与主动联系，查看已保存的内部记录。请在 60 秒内单独发送 /确认诊断，或 /取消。", "Entering diagnostics pauses character dialogue and proactive contact and exposes saved internal records. Send /diagnostics confirm within 60 seconds, or /cancel."
+		case "confirm":
+			if mode == "diagnostic" {
+				zh, en = "【诊断】已在诊断中。", "Already in diagnostics."
+				break
+			}
+			if deadline == 0 || at.UnixNano() >= deadline || at.UnixNano() < deadline-int64(time.Minute) {
+				zh, en = "【控制台】没有有效的诊断申请。请先发送 /诊断。", "No active diagnostic request. Send /diagnostics first."
+				break
+			}
+			err = suspendCharacterTx(ctx, tx, at)
+			if err == nil {
+				err = exec("UPDATE character_control SET mode='diagnostic',return_mode=?,confirm_until_ns=0 WHERE id=1", mode)
+			}
+			zh, en = "【诊断已开启】人物对话与主动联系已暂停。\n/人物 /记忆 /心境 /挂念\n这些是已保存的设定与状态，不是实时思维链。/返回角色 退出。", "Diagnostics active; character dialogue and proactive contact paused.\n/persona /memories /state /threads\nThese are saved settings and state, not a live chain of thought. /resume to leave."
+		case "cancel":
+			err = exec("UPDATE character_control SET confirm_until_ns=0 WHERE id=1")
+			zh, en = "【控制台】诊断申请已取消。若已进入诊断，用 /返回角色 退出。", "Diagnostic request canceled. If already in diagnostics, use /resume to leave."
+		case "resume":
+			if mode == "diagnostic" {
+				err = exec("UPDATE character_control SET mode=return_mode,confirm_until_ns=0 WHERE id=1")
+				zh, en = "【控制台】已退出诊断，返回人物。", "Diagnostics closed; character resumed."
+				if returnMode == "paused" {
+					zh, en = "【控制台】已退出诊断。人物恢复为进入前的暂停状态；/唤醒 可恢复对话。", "Diagnostics closed. Character remains paused as before inspection; /wake resumes dialogue."
+				}
+			} else {
+				err = exec("UPDATE character_control SET confirm_until_ns=0 WHERE id=1")
+				zh, en = "【控制台】当前不在诊断中。若人物已暂停，请用 /唤醒。", "Not in diagnostics. Use /wake if the character is paused."
+			}
+		case "persona", "routine", "memories", "state", "threads":
+			if mode != "diagnostic" {
+				name = "locked"
+				zh, en = "【控制台】内部记录需先进入诊断：/诊断，然后 /确认诊断。", "Internal records require diagnostics: /diagnostics, then /diagnostics confirm."
+			} else {
+				zh, en, err = diagnosticSnapshotTx(ctx, tx, name)
+			}
+		default:
+			zh, en = "【控制台】未识别此命令，请用 /帮助 查看。命令需单独发送。", "Unknown command. Use /help. Send commands separately."
+		}
+	}
+	if err != nil {
+		return 0, true, err
+	}
+	r, err := tx.ExecContext(ctx, "INSERT INTO messages(role,content,created_at) VALUES('user',?,?)", text, at.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return 0, true, err
+	}
+	id, err := r.LastInsertId()
+	if err != nil {
+		return 0, true, err
+	}
+	if err = exec("INSERT INTO local_commands(source_message_id,command) VALUES(?,?)", id, name); err == nil {
+		err = exec("INSERT INTO command_results(source_message_id,zh,en) VALUES(?,?,?)", id, zh, en)
+	}
+	return id, true, err
+}
+
+// The watermark survives wake: an in-flight result from the old generation
+// cannot become valid again when the user resumes quickly.
+func suspendCharacterTx(ctx context.Context, tx *sql.Tx, at time.Time) error {
+	for _, q := range []string{
+		"UPDATE character_control SET blocked_through_id=(SELECT COALESCE(MAX(id),0) FROM messages) WHERE id=1",
+		// Prepared replies have a transcript receipt before transport. Redact
+		// only unsent character replies, retaining previously delivered history.
+		`UPDATE messages SET content='[forgotten memory]' WHERE id IN (
+SELECT a.assistant_message_id FROM assistant_turns a JOIN feishu_inbox f ON f.user_message_id=a.source_message_id
+WHERE f.state!='sent' AND NOT EXISTS(SELECT 1 FROM local_commands c WHERE c.source_message_id=f.user_message_id))`,
+		`DELETE FROM character_turns WHERE source_message_id IN (SELECT user_message_id FROM feishu_inbox WHERE state!='sent')`,
+		`UPDATE feishu_inbox SET state='sent',reply=NULL WHERE state!='sent' AND NOT EXISTS(SELECT 1 FROM local_commands c WHERE c.source_message_id=feishu_inbox.user_message_id)`,
+		"UPDATE initiative_checks SET outcome='superseded',reason='character suspended' WHERE outcome='considering'",
+	} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO contact_events(intent_id,outcome,reason,at_ns) SELECT id,'canceled','character suspended',? FROM contact_intents WHERE state='pending'", at.UnixNano()); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, "UPDATE contact_intents SET state='canceled',reason='character suspended',updated_ns=? WHERE state='pending'", at.UnixNano())
+	return err
+}
+
+func diagnosticSnapshotTx(ctx context.Context, tx *sql.Tx, name string) (string, string, error) {
+	if name == "routine" {
+		return "【作息 · 人物习惯，可随情境调整】", "Routine · character habits, adaptable to context", nil
+	}
+	if name == "persona" {
+		return "【人物卡 · 虚构设定】", "Character card · fictional setting", nil
+	}
+	if name == "memories" {
+		rows, err := tx.QueryContext(ctx, `SELECT memory_key || ': ' || value,source_message_id FROM personal_memory p
+WHERE action='upsert' AND id=(SELECT MAX(id) FROM personal_memory WHERE memory_key=p.memory_key)
+UNION ALL SELECT topic || ': ' || COALESCE(happens_at,''),source_message_id FROM memory_revisions r
+WHERE action='upsert' AND id=(SELECT MAX(id) FROM memory_revisions WHERE topic=r.topic)
+ORDER BY source_message_id DESC LIMIT 20`)
+		if err != nil {
+			return "", "", err
+		}
+		defer rows.Close()
+		var lines []string
+		for rows.Next() {
+			var value string
+			var id int64
+			if err := rows.Scan(&value, &id); err != nil {
+				return "", "", err
+			}
+			lines = append(lines, fmt.Sprintf("• %s [chat:%d]", value, id))
+		}
+		if err := rows.Err(); err != nil {
+			return "", "", err
+		}
+		if len(lines) == 0 {
+			return "【记忆】暂无已提取的有效事实。完整对话另行保存在本机。", "No active extracted facts. The full conversation is stored separately on this device.", nil
+		}
+		body := strings.Join(lines, "\n")
+		return "【记忆 · 最近 20 条有效事实；非完整对话】\n" + body, "Memory · up to 20 active facts, not the full transcript\n" + body, nil
+	}
+	var raw, stamp string
+	err := tx.QueryRowContext(ctx, `SELECT turn_json,created_at FROM character_turns WHERE committed=1 AND json_extract(turn_json,'$.state_updated')=1 ORDER BY source_message_id DESC LIMIT 1`).Scan(&raw, &stamp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "【诊断】暂无已保存的人物状态；不会临时生成。", "No saved character state. Nothing is generated for this inspection.", nil
+	}
+	if err != nil {
+		return "", "", err
+	}
+	var t character.Turn
+	if err := json.Unmarshal([]byte(raw), &t); err != nil {
+		return "", "", err
+	}
+	if name == "threads" {
+		var lines []string
+		for _, th := range t.OpenThreads {
+			lines = append(lines, fmt.Sprintf("• %s (%s) [%s]", th.Subject, th.Owner, strings.Join(th.SourceIDs, ", ")))
+		}
+		if len(lines) == 0 {
+			return "【挂念】该快照没有未完的话题。记录时间：" + stamp, "No open threads in this snapshot. Recorded: " + stamp, nil
+		}
+		body := strings.Join(lines, "\n")
+		return "【挂念 · 历史快照】" + stamp + "\n" + body, "Open threads · saved snapshot " + stamp + "\n" + body, nil
+	}
+	m := t.Moment
+	return fmt.Sprintf("【心境 · 历史快照】%s\n感受：%s\n精力：%s\n交谈兴致：%s\n缘由：%s\n注意：%s\n场景：%s\n意向：%s\n这是已保存的叙事状态，可能已过期。", stamp, m.Feeling, m.Energy, m.Engagement, m.Cause, m.Attention, m.Scene, m.Intention), fmt.Sprintf("State · saved snapshot %s\nFeeling: %s\nEnergy: %s\nEngagement: %s\nCause: %s\nAttention: %s\nScene: %s\nIntention: %s\nStored narrative state; may be stale.", stamp, m.Feeling, m.Energy, m.Engagement, m.Cause, m.Attention, m.Scene, m.Intention), nil
+}
+
+// Inspections can repeat a forgotten fact. Clear these derived copies along
+// with character state instead of leaving it in an old command result.
+func clearDiagnosticCopiesTx(ctx context.Context, tx *sql.Tx) error {
+	for _, q := range []string{
+		"DELETE FROM character_absence",
+		`UPDATE messages SET content='[forgotten memory]' WHERE id IN (SELECT a.assistant_message_id FROM assistant_turns a JOIN local_commands c ON c.source_message_id=a.source_message_id WHERE c.command IN ('memories','state','threads'))`,
+		`UPDATE feishu_inbox SET reply=NULL,state='sent' WHERE state!='sent' AND user_message_id IN (SELECT source_message_id FROM local_commands WHERE command IN ('memories','state','threads'))`,
+		`UPDATE command_results SET zh='【诊断】该历史快照已随遗忘操作清除。',en='This historical snapshot was cleared by a forgetting operation.' WHERE source_message_id IN (SELECT source_message_id FROM local_commands WHERE command IN ('memories','state','threads'))`,
+	} {
+		if _, err := tx.ExecContext(ctx, q); err != nil {
+			return err
+		}
+	}
+	return nil
+}

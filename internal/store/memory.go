@@ -75,7 +75,7 @@ func (h *History) AddUserMessage(ctx context.Context, text string, at time.Time,
 	if strings.TrimSpace(text) == "" {
 		return errors.New("message cannot be empty")
 	}
-	if IsResetCommand(text) {
+	if isControlInput(text) {
 		h.deliveryMu.Lock()
 		defer h.deliveryMu.Unlock()
 	}
@@ -93,6 +93,9 @@ func (h *History) AddUserMessage(ctx context.Context, text string, at time.Time,
 func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time, zone *time.Location) (int64, error) {
 	if IsResetCommand(text) {
 		return resetCharacterTx(ctx, tx, text, at)
+	}
+	if id, handled, err := controlMessageTx(ctx, tx, text, at); handled || err != nil {
+		return id, err
 	}
 	change, recognized := memory.Extract(text, at, zone)
 	personal, personalRecognized := memory.ExtractPersonal(text)
@@ -161,6 +164,9 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			}
 		}
 		if change.Action == memory.Forget && change.Topic == "interview" {
+			if err := clearDiagnosticCopiesTx(ctx, tx); err != nil {
+				return 0, err
+			}
 			if err := clearInitiativesTx(ctx, tx); err != nil {
 				return 0, err
 			}

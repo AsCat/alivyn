@@ -83,6 +83,14 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 	}
 	sources = append(sources, threadSources...)
 	c := character.Context{Frame: f, Persona: persona, Moment: state.Moment, LastChatAt: lastChat, OpenThreads: state.OpenThreads, Sources: sources}
+	c.Routine = s.Config.Routine
+	if strings.TrimSpace(c.Routine) == "" {
+		c.Routine = character.DefaultRoutine(s.Config.Language)
+	}
+	c.CanLeave, c.Availability, c.ReceivedAt, err = s.History.AvailabilityContext(ctx, f.SourceMessageID, now)
+	if err != nil {
+		return character.Context{}, err
+	}
 	if !at.IsZero() {
 		c.MomentAt = at.Format(time.RFC3339)
 	}

@@ -11,6 +11,25 @@ import (
 )
 
 func runPersona(args []string, out io.Writer) error {
+	if len(args) == 2 && args[0] == "routine" && args[1] == "show" {
+		c, err := config.Load()
+		if err != nil {
+			return err
+		}
+		routine := c.Routine
+		if strings.TrimSpace(routine) == "" {
+			routine = character.DefaultRoutine(c.Language)
+		}
+		fmt.Fprintln(out, routine)
+		return nil
+	}
+	if len(args) >= 3 && args[0] == "routine" && args[1] == "set" {
+		if err := config.SaveRoutine(strings.Join(args[2:], " ")); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "Routine saved. Restart a running channel to apply it.")
+		return nil
+	}
 	if len(args) == 1 && args[0] == "show" {
 		c, err := config.Load()
 		if err != nil {
@@ -41,7 +60,7 @@ func runPersona(args []string, out io.Writer) error {
 		fmt.Fprintf(out, "Persona style set to %s. Restart a running channel to apply it.\n", args[1])
 		return nil
 	}
-	return errors.New("usage: alivyn persona show|set natural|romantic|companion|background show|background set <text>")
+	return errors.New("usage: alivyn persona show|set natural|romantic|companion|background show|background set <text>|routine show|routine set <text>")
 }
 
 func displayPersonaBackground(c config.Config) string {

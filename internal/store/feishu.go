@@ -24,7 +24,7 @@ func (h *History) EnqueueFeishu(ctx context.Context, eventID, chatID, messageID,
 	if eventID == "" || chatID == "" || messageID == "" || strings.TrimSpace(text) == "" || len(text) > 65536 {
 		return false, errors.New("invalid Feishu message")
 	}
-	if IsResetCommand(text) {
+	if isControlInput(text) {
 		h.deliveryMu.Lock()
 		defer h.deliveryMu.Unlock()
 	}

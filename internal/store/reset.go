@@ -26,14 +26,18 @@ func resetCharacterTx(ctx context.Context, tx *sql.Tx, command string, at time.T
 		return 0, err
 	}
 	for _, table := range []string{
+		"character_absence", "reply_deferrals",
 		"feishu_reply_groups", "feishu_inbox", "initiative_checks", "contact_events", "contact_outbox", "contact_delivery", "contact_intents",
-		"goal_world_engagements", "actor_decisions", "actor_continuity", "character_turns", "assistant_turns", "local_commands",
+		"goal_world_engagements", "actor_decisions", "actor_continuity", "character_turns", "assistant_turns", "command_results", "local_commands",
 		"personal_memory", "memory_revisions", "relationship_snapshots", "relationship_state",
 		"goal_world_events", "goal_world_state", "world_events", "world_state", "messages",
 	} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			return 0, err
 		}
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE character_control SET mode='running',return_mode='running',confirm_until_ns=0,blocked_through_id=0 WHERE id=1"); err != nil {
+		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE runtime_state SET last_active_ns=?,last_gap_created_ns=NULL WHERE id=1", at.UnixNano()); err != nil {
 		return 0, err
@@ -52,7 +56,7 @@ func resetCharacterTx(ctx context.Context, tx *sql.Tx, command string, at time.T
 	return id, err
 }
 
-func (h *History) CommandReply(ctx context.Context, sourceID int64, language string) (string, bool, error) {
+func (h *History) CommandReply(ctx context.Context, sourceID int64, language string, persona ...string) (string, bool, error) {
 	if sourceID == 0 {
 		if err := h.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(id),0) FROM messages").Scan(&sourceID); err != nil {
 			return "", false, err
@@ -65,6 +69,24 @@ func (h *History) CommandReply(ctx context.Context, sourceID int64, language str
 	}
 	if err != nil {
 		return "", false, err
+	}
+	if command != "reset" {
+		var zh, en string
+		err := h.db.QueryRowContext(ctx, "SELECT zh,en FROM command_results WHERE source_message_id=?", sourceID).Scan(&zh, &en)
+		if err != nil {
+			return "", true, err
+		}
+		reply := en
+		if language == "zh-CN" {
+			reply = zh
+		}
+		if command == "persona" && len(persona) > 0 {
+			reply += "\n" + persona[0]
+		}
+		if command == "routine" && len(persona) > 1 {
+			reply += "\n" + persona[1]
+		}
+		return reply, true, nil
 	}
 	if language == "zh-CN" {
 		return "记忆已清除，已恢复初始人物状态。人物设定、模型配置和飞书连接已保留。", true, nil

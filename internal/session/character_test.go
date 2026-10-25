@@ -17,6 +17,39 @@ type characterScript struct {
 	calls   [][]model.Message
 }
 
+func TestControlConsoleNeverCallsModelOrEntersCharacterMemory(t *testing.T) {
+	for _, engine := range []string{"legacy", "actor_v1", "character_v2"} {
+		t.Run(engine, func(t *testing.T) {
+			ctx := context.Background()
+			h, err := store.OpenHistory(ctx, t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer h.Close()
+			client := &characterScript{}
+			s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Engine: engine, Background: "喜欢旧唱片", WorldPack: "tidehaven"}, History: h, Client: client}
+			for _, text := range []string{"/帮助", "/暂停", "我叫不应该记住", "/唤醒", "/勿扰", "/允许主动", "/诊断", "/确认诊断", "/人物", "/记忆", "/心境", "/挂念", "/返回角色", "/unknown", "/取消"} {
+				if err := s.AddUser(ctx, text); err != nil {
+					t.Fatal(err)
+				}
+				r, err := s.GenerateReply(ctx)
+				if err != nil || r == "" {
+					t.Fatal(text, r, err)
+				}
+				if text == "/人物" && (!strings.Contains(r, "喜欢旧唱片") || !strings.Contains(r, "汐湾")) {
+					t.Fatal(r)
+				}
+			}
+			if len(client.calls) != 0 {
+				t.Fatal("model used for controls")
+			}
+			if entries, err := h.RecentForModel(ctx, 100); err != nil || len(entries) != 0 {
+				t.Fatal(entries, err)
+			}
+		})
+	}
+}
+
 func TestResetCommandBypassesEveryModelAndRemovesOldContext(t *testing.T) {
 	for _, engine := range []string{"legacy", "actor_v1", "character_v2"} {
 		t.Run(engine, func(t *testing.T) {

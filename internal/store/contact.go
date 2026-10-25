@@ -431,6 +431,20 @@ func evaluateIntentTx(ctx context.Context, tx *sql.Tx, item ContactIntent, at ti
 }
 
 func evaluateIntentTxExcluding(ctx context.Context, tx *sql.Tx, item ContactIntent, at time.Time, zone *time.Location, excludedDeliveryID int64) (contact.Decision, error) {
+	var running bool
+	if err := tx.QueryRowContext(ctx, "SELECT mode='running' FROM character_control WHERE id=1").Scan(&running); err != nil {
+		return contact.Decision{}, err
+	}
+	if !running {
+		return contact.Decision{Reason: "character suspended"}, nil
+	}
+	var away bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM character_absence WHERE until_ns>?)", at.UnixNano()).Scan(&away); err != nil {
+		return contact.Decision{}, err
+	}
+	if away {
+		return contact.Decision{Reason: "character away"}, nil
+	}
 	current := true
 	if item.Topic == "initiative" && at.Before(item.Expires) {
 		decision, err := initiativeCurrentTx(ctx, tx, item, at, zone)

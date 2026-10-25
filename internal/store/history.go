@@ -78,6 +78,13 @@ CREATE TABLE IF NOT EXISTS contact_settings (
   daily_limit INTEGER NOT NULL DEFAULT 2
 );
 INSERT OR IGNORE INTO contact_settings(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS initiative_clock (
+  id INTEGER PRIMARY KEY CHECK(id=1),
+  next_check_ns INTEGER NOT NULL DEFAULT 0,
+  budget_day TEXT NOT NULL DEFAULT '',
+  checks INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO initiative_clock(id) VALUES(1);
 CREATE TABLE IF NOT EXISTS contact_intents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   topic TEXT NOT NULL,
@@ -91,6 +98,17 @@ CREATE TABLE IF NOT EXISTS contact_intents (
   updated_ns INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS contact_intents_due ON contact_intents(state, due_ns);
+CREATE TABLE IF NOT EXISTS initiative_checks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_message_id INTEGER NOT NULL REFERENCES messages(id),
+  through_message_id INTEGER NOT NULL REFERENCES messages(id),
+  at_ns INTEGER NOT NULL,
+  outcome TEXT NOT NULL DEFAULT 'considering',
+  reason TEXT NOT NULL DEFAULT '',
+  proposal_json TEXT NOT NULL DEFAULT '',
+  topic_key TEXT NOT NULL DEFAULT '',
+  intent_id INTEGER REFERENCES contact_intents(id)
+);
 CREATE TABLE IF NOT EXISTS contact_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   intent_id INTEGER NOT NULL REFERENCES contact_intents(id),
@@ -132,6 +150,10 @@ CREATE TABLE IF NOT EXISTS feishu_inbox (
   received_ns INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS feishu_inbox_work ON feishu_inbox(state, received_ns);
+CREATE TABLE IF NOT EXISTS feishu_reply_groups (
+  event_id TEXT PRIMARY KEY REFERENCES feishu_inbox(event_id) ON DELETE CASCADE,
+  anchor_event_id TEXT NOT NULL REFERENCES feishu_inbox(event_id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS personal_memory (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   memory_key TEXT NOT NULL,

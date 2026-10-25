@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -21,6 +22,7 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 	defer ticker.Stop()
 	lastHeartbeat := time.Time{}
 	nextCompositionAttempt := time.Time{}
+	nextInitiativeCheck := time.Time{}
 	for ctx.Err() == nil {
 		now := time.Now()
 		if now.Sub(lastHeartbeat) >= time.Minute {
@@ -48,6 +50,12 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 				continue
 			}
 		}
+		if !now.Before(nextInitiativeCheck) {
+			if _, err := s.ConsiderInitiative(ctx, now); err != nil && ctx.Err() == nil {
+				fmt.Fprintf(out, "Initiative consideration deferred: %v\n", err)
+			}
+			nextInitiativeCheck = time.Now().Add(time.Minute)
+		}
 		item, ready, err := h.NextChannelContact(ctx, now, zone, language)
 		if err != nil && ctx.Err() == nil {
 			fmt.Fprintf(out, "Contact decision failed: %v\n", err)
@@ -58,6 +66,11 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 					if clean := strings.TrimSpace(display.Clean(generated)); clean != "" {
 						item.Body = clean
 					}
+				} else if errors.Is(err, session.ErrContactWait) {
+					if err := h.CancelChannelContact(ctx, item.IntentID, time.Now()); err != nil {
+						fmt.Fprintf(out, "Contact cancellation failed: %v\n", err)
+					}
+					continue
 				} else if ctx.Err() == nil {
 					if item.Topic == "world_update" || s.Config.EffectiveEngine() == "character_v2" {
 						fmt.Fprintf(out, "Contact composition delayed: %v\n", err)

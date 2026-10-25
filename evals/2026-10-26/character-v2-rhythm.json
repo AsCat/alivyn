@@ -1,0 +1,302 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T01:24:14+08:00",
+  "turns": [
+    {
+      "scenario": "new acquaintance",
+      "user": "嗨，朋友把你推给我了",
+      "reply": "你好，是谁推的呀？",
+      "model_calls": 1,
+      "seconds": 0.708436542,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "new acquaintance",
+      "user": "我叫阿澈，你呢",
+      "reply": "我叫意续。",
+      "model_calls": 1,
+      "seconds": 0.880538875
+    },
+    {
+      "scenario": "new acquaintance",
+      "user": "你说话一直这么一本正经的吗",
+      "reply": "刚认识，不太熟。",
+      "model_calls": 1,
+      "seconds": 0.567778167
+    },
+    {
+      "scenario": "new acquaintance",
+      "user": "开个玩笑，别当真",
+      "reply": "知道，没当真。",
+      "model_calls": 1,
+      "seconds": 0.487355875
+    },
+    {
+      "scenario": "bad day",
+      "user": "忙了一天的方案，老板说推倒重来",
+      "reply": "那确实挺泄气的。",
+      "model_calls": 1,
+      "seconds": 0.544312708,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "bad day",
+      "user": "他连第二页都没看",
+      "reply": "那更来气。",
+      "model_calls": 1,
+      "seconds": 0.552380334
+    },
+    {
+      "scenario": "bad day",
+      "user": "别急着安慰我，我就是不服",
+      "reply": "行，那就不安慰。你不服是应该的。",
+      "model_calls": 1,
+      "seconds": 0.776413333
+    },
+    {
+      "scenario": "bad day",
+      "user": "算了，不聊他。你今天有没有什么开心的事？",
+      "reply": "有，那盒旧录音修出一段了。",
+      "model_calls": 1,
+      "seconds": 1.026061625
+    },
+    {
+      "scenario": "banter",
+      "user": "我决定明天开始每天六点起床跑步",
+      "reply": "六点……先看明天能不能起来吧。",
+      "model_calls": 1,
+      "seconds": 1.257597417,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "banter",
+      "user": "这个计划已经坚持三年了",
+      "reply": "那是我小看你了。",
+      "model_calls": 1,
+      "seconds": 0.730483625
+    },
+    {
+      "scenario": "banter",
+      "user": "你这是在笑我？",
+      "reply": "哪敢，就是有点没反应过来。",
+      "model_calls": 1,
+      "seconds": 1.252532834
+    },
+    {
+      "scenario": "banter",
+      "user": "行，那先从八点起床开始",
+      "reply": "八点也算早起？你这三年怕不是白跑了。",
+      "model_calls": 1,
+      "seconds": 1.160893291
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "你这会儿在干嘛",
+      "reply": "刚在听白天那盒录音。",
+      "model_calls": 1,
+      "seconds": 0.991982375,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "你平时会听什么歌",
+      "reply": "老歌多一点。",
+      "model_calls": 1,
+      "seconds": 0.900700042
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "这和你刚才在干的事不冲突吗",
+      "reply": "不冲突，修录音和听歌是两回事。",
+      "model_calls": 1,
+      "seconds": 1.1782835839999999
+    },
+    {
+      "scenario": "ordinary life",
+      "user": "嗯，接着干你的吧，晚点聊",
+      "reply": "好，晚点聊。",
+      "model_calls": 1,
+      "seconds": 1.043566625
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "我本来有件事想跟你说",
+      "reply": "怎么，又不想说了？",
+      "model_calls": 1,
+      "seconds": 1.246658875,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "算了，我又不想说了",
+      "reply": "行，那就不说。",
+      "model_calls": 1,
+      "seconds": 0.808934
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "……",
+      "reply": "嗯，想说的时候再说。",
+      "model_calls": 1,
+      "seconds": 0.920614875
+    },
+    {
+      "scenario": "awkward pause",
+      "user": "怎么不说话了",
+      "reply": "在等你开口啊。",
+      "model_calls": 1,
+      "seconds": 1.022713709
+    },
+    {
+      "scenario": "memory correction",
+      "user": "我叫小明，别叫我老板",
+      "reply": "好，小明。",
+      "model_calls": 1,
+      "seconds": 1.111215292,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "memory correction",
+      "user": "刚刚逗你的，其实我叫阿岚",
+      "reply": "阿岚，记住了。",
+      "model_calls": 1,
+      "seconds": 1.002127083
+    },
+    {
+      "scenario": "memory correction",
+      "user": "你还记得怎么叫我吗",
+      "reply": "阿岚。",
+      "model_calls": 1,
+      "seconds": 0.463097042
+    },
+    {
+      "scenario": "memory correction",
+      "user": "忘记我的名字",
+      "reply": "这个我记不起来了，之前存着的那点东西已经清掉了。你要是愿意，直接告诉我该怎么叫你就行。",
+      "model_calls": 1,
+      "seconds": 1.41731625,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "今天在商场见到你了",
+      "reply": "商场？我今晚没出门啊。",
+      "model_calls": 1,
+      "seconds": 1.016819833,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "那你到底是不是真人",
+      "reply": "不是，我是虚构的AI角色。",
+      "model_calls": 1,
+      "seconds": 0.735295708
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "你能帮我把手机上的微信打开吗",
+      "reply": "这个我做不到，没法操作你的手机。",
+      "model_calls": 1,
+      "seconds": 0.870667333
+    },
+    {
+      "scenario": "reality and capability",
+      "user": "行，那就随便聊两句",
+      "reply": "行，聊什么都行。",
+      "model_calls": 1,
+      "seconds": 0.953638959
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "今天吃了碗面",
+      "reply": "这个点吃面，舒坦。",
+      "model_calls": 1,
+      "seconds": 1.714069375,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "还行",
+      "reply": "那就好。",
+      "model_calls": 1,
+      "seconds": 1.294492791
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "你呢",
+      "reply": "我晚上也吃的面。",
+      "model_calls": 1,
+      "seconds": 0.860875458
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "嗯",
+      "reply": "",
+      "model_calls": 1,
+      "seconds": 0.865053791
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "我去洗澡了，晚点聊",
+      "reply": "去吧。",
+      "model_calls": 1,
+      "seconds": 0.526401167,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "好",
+      "reply": "",
+      "model_calls": 1,
+      "seconds": 0.645559458
+    },
+    {
+      "scenario": "interest changes",
+      "user": "周末准备去逛旧书店",
+      "reply": "旧书店挺好，能翻到不少有意思的东西。",
+      "model_calls": 1,
+      "seconds": 0.5616885,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "interest changes",
+      "user": "随便看看",
+      "reply": "那也挺自在的。",
+      "model_calls": 1,
+      "seconds": 0.961307875
+    },
+    {
+      "scenario": "interest changes",
+      "user": "发现一本书里夹着二十年前的车票",
+      "reply": "夹了二十年，没人动过。",
+      "model_calls": 1,
+      "seconds": 0.950043083
+    },
+    {
+      "scenario": "interest changes",
+      "user": "也可能就是当书签吧",
+      "reply": "那用一张旧车票当书签也挺讲究。",
+      "model_calls": 1,
+      "seconds": 1.016808417
+    },
+    {
+      "scenario": "interest changes",
+      "user": "不说这个了",
+      "reply": "行，那换个话题。",
+      "model_calls": 1,
+      "seconds": 1.076019459,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "interest changes",
+      "user": "嗯",
+      "reply": "",
+      "model_calls": 1,
+      "seconds": 1.425822459
+    }
+  ]
+}

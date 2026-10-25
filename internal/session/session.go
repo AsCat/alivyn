@@ -173,8 +173,21 @@ func (s Session) ComposeContact(ctx context.Context, topic string) (string, erro
 // ComposeContactFor binds a spontaneous world update to the exact event that
 // made it relevant, even when the character's world has progressed again.
 func (s Session) ComposeContactFor(ctx context.Context, topic, key string) (string, error) {
+	return s.ComposeContactForAt(ctx, topic, key, time.Now())
+}
+
+func (s Session) ComposeContactForAt(ctx context.Context, topic, key string, now time.Time) (string, error) {
 	var occasion string
 	switch topic {
+	case "initiative":
+		if s.Config.EffectiveEngine() != "character_v2" {
+			return "", ErrContactWait
+		}
+		proposal, err := s.History.InitiativeProposal(ctx, key)
+		if err != nil {
+			return "", err
+		}
+		occasion = store.InitiativeOccasion(proposal)
 	case "time_gap":
 		occasion = "The runtime has resumed after a long gap. Acknowledge the gap gently if useful; do not pretend you lived through events while offline."
 	case "interview":
@@ -197,7 +210,7 @@ func (s Session) ComposeContactFor(ctx context.Context, topic, key string) (stri
 		return "", errors.New("unknown contact topic")
 	}
 	if s.Config.EffectiveEngine() == "character_v2" {
-		return s.composeCharacterContact(ctx, occasion)
+		return s.composeCharacterContactAt(ctx, occasion, now)
 	}
 	messages, _, err := s.contextMessages(ctx, time.Now())
 	if err != nil {

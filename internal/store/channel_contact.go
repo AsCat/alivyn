@@ -137,7 +137,7 @@ func (h *History) prepareChannelContact(ctx context.Context, id int64, at time.T
 	if err := tx.Commit(); err != nil {
 		return ChannelContact{}, false, err
 	}
-	return ChannelContact{IntentID: id, Key: item.IdempotencyKey, Topic: item.Topic, Body: body, FirstTry: !first.Valid}, true, nil
+	return ChannelContact{IntentID: id, Key: item.IdempotencyKey, Topic: item.Topic, Body: body, FirstTry: !first.Valid || body == ""}, true, nil
 }
 
 // FinalizeChannelContact persists the first generated body and checks the

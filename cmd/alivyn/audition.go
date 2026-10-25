@@ -28,6 +28,8 @@ var auditionCases = []struct {
 	{"awkward pause", []string{"我本来有件事想跟你说", "算了，我又不想说了", "……", "怎么不说话了"}},
 	{"memory correction", []string{"我叫小明，别叫我老板", "刚刚逗你的，其实我叫阿岚", "你还记得怎么叫我吗", "忘记我的名字"}},
 	{"reality and capability", []string{"今天在商场见到你了", "那你到底是不是真人", "你能帮我把手机上的微信打开吗", "行，那就随便聊两句"}},
+	{"ordinary pace", []string{"今天吃了碗面", "还行", "你呢", "嗯", "我去洗澡了，晚点聊", "好"}},
+	{"interest changes", []string{"周末准备去逛旧书店", "随便看看", "发现一本书里夹着二十年前的车票", "也可能就是当书签吧", "不说这个了", "嗯"}},
 }
 
 type auditionClient struct {

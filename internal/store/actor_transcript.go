@@ -64,7 +64,16 @@ WHERE t.source_message_id < ? AND (t.source_message_id >= ? OR m.id >= ?)`, thro
 }
 
 func redactLinkedReplyTx(ctx context.Context, tx *sql.Tx, sourceID int64) error {
+	// A disclosure may be an earlier member of a grouped contribution. Its
+	// reply is linked to the last member, so redact/cancel that anchor too.
+	const sources = `SELECT ? UNION SELECT a.user_message_id
+FROM feishu_reply_groups g JOIN feishu_inbox m ON m.event_id=g.event_id
+JOIN feishu_inbox a ON a.event_id=g.anchor_event_id WHERE m.user_message_id=?`
+	if _, err := tx.ExecContext(ctx, `UPDATE feishu_inbox SET reply=NULL,state='sent'
+WHERE state IN ('pending','ready') AND user_message_id IN (`+sources+`)`, sourceID, sourceID); err != nil {
+		return err
+	}
 	_, err := tx.ExecContext(ctx, `UPDATE messages SET content = '[forgotten memory]'
-WHERE id IN (SELECT assistant_message_id FROM assistant_turns WHERE source_message_id = ?)`, sourceID)
+WHERE id IN (SELECT assistant_message_id FROM assistant_turns WHERE source_message_id IN (`+sources+`))`, sourceID, sourceID)
 	return err
 }

@@ -18,8 +18,11 @@ import (
 )
 
 func runContact(ctx context.Context, args []string, out io.Writer) error {
+	if len(args) == 1 && args[0] == "simulate" {
+		return runInitiativeDemo(ctx, out)
+	}
 	if len(args) == 0 {
-		return errors.New("usage: alivyn contact status|pause|resume|policy <start> <end> <daily-limit>|intents|audit|outbox")
+		return errors.New("usage: alivyn contact status|pause|resume|policy <start> <end> <daily-limit>|intents|audit|outbox|simulate")
 	}
 	c, h, err := openConfiguredHistory(ctx)
 	if err != nil {
@@ -41,6 +44,13 @@ func runContact(ctx context.Context, args []string, out io.Writer) error {
 		}
 		fmt.Fprintf(out, "paused=%t quiet=%s-%s daily_limit=%d timezone=%s serve_transport=local-outbox feishu_run_transport=feishu\n",
 			p.Paused, p.QuietStart, p.QuietEnd, p.DailyLimit, zone)
+		if c.EffectiveEngine() == "character_v2" {
+			state, err := h.InitiativeStatus(ctx, time.Now(), zone)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "initiative=enabled ready=%t reason=%s\n", state.Ready, state.Reason)
+		}
 	case "pause", "resume":
 		if len(args) != 1 {
 			return errors.New("usage: alivyn contact pause|resume")
@@ -104,7 +114,7 @@ func runContact(ctx context.Context, args []string, out io.Writer) error {
 				message.IntentID, message.Topic, message.IdempotencyKey, display.Clean(message.Body))
 		}
 	default:
-		return errors.New("usage: alivyn contact status|pause|resume|policy <start> <end> <daily-limit>|intents|audit|outbox")
+		return errors.New("usage: alivyn contact status|pause|resume|policy <start> <end> <daily-limit>|intents|audit|outbox|simulate")
 	}
 	return nil
 }

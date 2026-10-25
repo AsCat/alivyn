@@ -1,0 +1,54 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T01:21:56+08:00",
+  "turns": [
+    {
+      "scenario": "ordinary pace",
+      "user": "今天吃了碗面",
+      "reply": "什么面？我晚上还在想煮不煮东西。",
+      "model_calls": 1,
+      "seconds": 0.948865333,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "还行",
+      "reply": "听着不太像值得再吃一碗的样子。",
+      "model_calls": 1,
+      "seconds": 0.911135667
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "你呢",
+      "reply": "还在犹豫。冰箱里有东西，就是懒得动。",
+      "model_calls": 1,
+      "seconds": 1.3001440419999999
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "嗯",
+      "reply": "可能随便煮点。",
+      "model_calls": 1,
+      "seconds": 1.487401875
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "我去洗澡了，晚点聊",
+      "reply": "好，去吧。",
+      "model_calls": 1,
+      "seconds": 0.994167541,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "ordinary pace",
+      "user": "好",
+      "reply": "",
+      "model_calls": 1,
+      "seconds": 0.685876042
+    }
+  ]
+}

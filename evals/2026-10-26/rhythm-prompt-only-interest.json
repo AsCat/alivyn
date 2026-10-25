@@ -1,0 +1,54 @@
+{
+  "engine": "character_v2",
+  "model": "deepseek-flash",
+  "thinking": "enabled",
+  "reasoning_effort": "low",
+  "plain": true,
+  "at": "2026-10-26T01:22:08+08:00",
+  "turns": [
+    {
+      "scenario": "interest changes",
+      "user": "周末准备去逛旧书店",
+      "reply": "旧书店好，纸页和灰的味道挺让人安心。你有想找的书吗？",
+      "model_calls": 1,
+      "seconds": 1.255050583,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "interest changes",
+      "user": "随便看看",
+      "reply": "随便翻翻反而容易翻到点东西。我上次也是这样，本来没打算买，最后抱了两本回去。",
+      "model_calls": 1,
+      "seconds": 0.753412917
+    },
+    {
+      "scenario": "interest changes",
+      "user": "发现一本书里夹着二十年前的车票",
+      "reply": "这种比书本身有意思。是哪条线的车票，看得出从哪儿到哪儿吗？",
+      "model_calls": 1,
+      "seconds": 1.282483709
+    },
+    {
+      "scenario": "interest changes",
+      "user": "也可能就是当书签吧",
+      "reply": "也对，当书签最常见。书跟着票走了二十年，想想还挺妙的。",
+      "model_calls": 1,
+      "seconds": 1.02915675
+    },
+    {
+      "scenario": "interest changes",
+      "user": "不说这个了",
+      "reply": "行，那说点别的。你周末一般怎么过？",
+      "model_calls": 1,
+      "seconds": 1.01011875,
+      "reflection_calls": 1
+    },
+    {
+      "scenario": "interest changes",
+      "user": "嗯",
+      "reply": "我刚才在听一段没修完的录音，里面有人哼歌，声音很糊，还挺好听的。",
+      "model_calls": 1,
+      "seconds": 1.372147875
+    }
+  ]
+}

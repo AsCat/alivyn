@@ -1,0 +1,3 @@
+{"calls":2,"message":"你提旧招牌，我这两天正好在弄一盒没标签的老录音，壳子都磨白了。","outcome":"queued","proposal":{"action":"contact","kind":"follow_up","reason":"阿岚提过想画旧书店和掉漆招牌；旧港档案室那盒无标签老录音有具体的旧痕迹可说，可作前话跟进。","evidence_ids":["worldv2:1","chat:3"],"after_minutes":10},"scenario":"share a detail"}
+{"calls":1,"outcome":"wait","scenario":"respect concentration"}
+{"calls":1,"outcome":"wait","scenario":"closed subject"}

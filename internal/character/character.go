@@ -90,6 +90,8 @@ func messagesFor(c Context) ([]model.Message, error) {
 	messages = append(messages, c.Frame.Recent...)
 	if c.Occasion != "" {
 		messages = append(messages, model.Message{Role: "system", Content: "Policy has approved one spontaneous message for this reason: " + c.Occasion + ". Continue in the same personal voice. This is not a new user utterance. Keep it brief; no obligation to reply."})
+	} else {
+		messages = append(messages, rhythmMessage(c))
 	}
 	return messages, nil
 }
@@ -111,6 +113,9 @@ func Generate(ctx context.Context, client actor.Completer, modelID string, c Con
 		return Turn{}, err
 	}
 	reply = strings.TrimSpace(reply)
+	if reply == "[[wait]]" {
+		return Turn{Mode: "wait"}, nil
+	}
 	if reply == "" || len([]rune(reply)) > 1000 || strings.HasPrefix(reply, "{") || strings.HasPrefix(reply, "```") {
 		return Turn{}, errors.New("invalid plain dialogue reply")
 	}

@@ -72,7 +72,7 @@ func TestCharacterCarriesStateAndRoleHistoryAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	last := client.calls[2]
-	if len(last) != 4 || last[2].Role != "assistant" || last[2].Content != "怎么啦？" || !strings.Contains(last[0].Content, `"scene":"听歌"`) {
+	if len(last) != 5 || last[2].Role != "assistant" || last[2].Content != "怎么啦？" || !strings.Contains(last[0].Content, `"scene":"听歌"`) {
 		t.Fatalf("continuity missing after restart: %+v", last)
 	}
 }

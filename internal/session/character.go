@@ -113,9 +113,38 @@ func (s Session) composeCharacterReply(ctx context.Context, now time.Time, sourc
 }
 
 func (s Session) composeCharacterContact(ctx context.Context, occasion string) (string, error) {
-	entries, err := s.History.RecentForModel(ctx, 40)
+	return s.composeCharacterContactAt(ctx, occasion, time.Now())
+}
+
+func (s Session) composeCharacterContactAt(ctx context.Context, occasion string, now time.Time) (string, error) {
+	c, _, err := s.characterContactContext(ctx, now)
 	if err != nil {
 		return "", err
+	}
+	c.Occasion = occasion
+	t, err := character.Generate(ctx, s.Client, s.Config.Model, c)
+	if err != nil {
+		return "", err
+	}
+	if t.Mode == "wait" {
+		return "", ErrContactWait
+	}
+	if len([]rune(t.Reply)) > 180 {
+		return "", errors.New("character contact is too long")
+	}
+	return t.Reply, nil
+}
+
+func (s Session) characterContactContext(ctx context.Context, now time.Time) (character.Context, []actor.Evidence, error) {
+	entries, err := s.History.RecentForModel(ctx, 40)
+	if err != nil {
+		return character.Context{}, nil, err
+	}
+	if len(entries) > 0 {
+		entries, err = s.History.ActorTranscriptThrough(ctx, 40, entries[len(entries)-1].ID)
+		if err != nil {
+			return character.Context{}, nil, err
+		}
 	}
 	var sourceID int64
 	for i := len(entries) - 1; i >= 0; i-- {
@@ -125,32 +154,34 @@ func (s Session) composeCharacterContact(ctx context.Context, occasion string) (
 		}
 	}
 	if sourceID == 0 {
-		return "", errors.New("proactive character contact needs prior conversation")
+		return character.Context{}, nil, errors.New("proactive character contact needs prior conversation")
 	}
-	c, err := s.characterContext(ctx, time.Now(), sourceID)
+	c, err := s.characterContext(ctx, now, sourceID)
 	if err != nil {
-		return "", err
+		return character.Context{}, nil, err
 	}
 	// Proactive contact includes the last response, unlike a source-bound reply.
 	c.Frame.Recent = nil
-	for _, e := range entries {
+	references := append([]actor.Evidence(nil), c.Frame.Evidence...)
+	for i, e := range entries {
 		if e.Content != "[forgotten memory]" {
-			c.Frame.Recent = append(c.Frame.Recent, model.Message{Role: e.Role, Content: e.Content})
+			content := e.Content
+			if runes := []rune(content); len(runes) > 2000 {
+				content = string(runes[:2000]) + "…"
+			}
+			c.Frame.Recent = append(c.Frame.Recent, model.Message{Role: e.Role, Content: content})
+			c.LastChatAt = e.CreatedAt.Format(time.RFC3339)
+			if i >= len(entries)-12 {
+				references = append(references, actor.Evidence{ID: fmt.Sprintf("chat:%d", e.ID), Provenance: "observed_chat", At: e.CreatedAt.Format(time.RFC3339), Text: e.Role + ": " + content})
+			}
 		}
 	}
-	c.Moment, _, err = s.History.CharacterMomentBefore(ctx, sourceID+1, time.Now())
-	if err != nil {
-		return "", err
+	var momentAt time.Time
+	c.Moment, momentAt, err = s.History.CharacterMomentBefore(ctx, sourceID+1, now)
+	if !momentAt.IsZero() {
+		c.MomentAt = momentAt.Format(time.RFC3339)
 	}
-	c.Occasion = occasion
-	t, err := character.Generate(ctx, s.Client, s.Config.Model, c)
-	if err != nil {
-		return "", err
-	}
-	if t.Mode == "wait" || len([]rune(t.Reply)) > 180 {
-		return "", errors.New("character chose no brief proactive message")
-	}
-	return t.Reply, nil
+	return c, references, err
 }
 
 // ReflectCharacter maintains continuity independently of message generation.

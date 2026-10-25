@@ -283,7 +283,14 @@ type feishuSender interface {
 }
 
 func processFeishuOnce(ctx context.Context, h *store.History, s session.Session, sender feishuSender) error {
-	item, ok, err := h.NextFeishu(ctx)
+	var item store.FeishuInboxItem
+	var ok bool
+	var err error
+	if s.Config.EffectiveEngine() == "character_v2" {
+		item, ok, err = h.NextFeishuBatch(ctx, time.Now())
+	} else {
+		item, ok, err = h.NextFeishu(ctx)
+	}
 	if err != nil || !ok {
 		return err
 	}

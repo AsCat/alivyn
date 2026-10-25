@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -83,6 +84,66 @@ func TestFeishuActorAnswersQueuedMessagesInOrder(t *testing.T) {
 }
 
 type fakeCompleter struct{ calls int }
+
+type burstCompleter struct {
+	calls    int
+	messages []model.Message
+	reply    string
+}
+
+func (f *burstCompleter) Complete(_ context.Context, _ string, messages []model.Message) (string, error) {
+	f.calls++
+	f.messages = messages
+	return f.reply, nil
+}
+
+func TestCharacterBurstHasOneReplyOrDeliberateSilence(t *testing.T) {
+	for _, reply := range []string{"有一点", "[[wait]]"} {
+		t.Run(reply, func(t *testing.T) {
+			ctx := context.Background()
+			h, err := store.OpenHistory(ctx, t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer h.Close()
+			at := time.Now().Add(-time.Minute)
+			for i, text := range []string{"今天把画翻出来了", "也没那么差", "就是颜色淡了一点"} {
+				id := fmt.Sprint(i)
+				if _, err := h.EnqueueFeishu(ctx, id, "chat", id, text, at.Add(time.Duration(i)*3*time.Second), time.UTC); err != nil {
+					t.Fatal(err)
+				}
+			}
+			client := &burstCompleter{reply: reply}
+			s := session.Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", WorldPack: "none"}, History: h, Client: client}
+			sender := &flakySender{}
+			for range 3 {
+				if err := processFeishuOnce(ctx, h, s, sender); err != nil {
+					t.Fatal(err)
+				}
+			}
+			wantSends := 1
+			if reply == "[[wait]]" {
+				wantSends = 0
+			}
+			if client.calls != 1 || sender.calls != wantSends {
+				t.Fatalf("burst split or silence sent: calls=%d sends=%d", client.calls, sender.calls)
+			}
+			var users int
+			for _, m := range client.messages {
+				if m.Role == "user" {
+					users++
+				}
+			}
+			if users != 3 {
+				t.Fatalf("missing input: %+v", client.messages)
+			}
+			entries, err := h.RecentForModel(ctx, 10)
+			if err != nil || len(entries) != 3+wantSends {
+				t.Fatalf("wrong transcript length: %d %v", len(entries), err)
+			}
+		})
+	}
+}
 
 func (f *fakeCompleter) Complete(_ context.Context, _ string, _ []model.Message) (string, error) {
 	f.calls++

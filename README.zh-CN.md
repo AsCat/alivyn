@@ -53,6 +53,8 @@ go run ./cmd/alivyn
 
 实验版 `character_v2` 使用稳定人物卡、按真实顺序排列的对话和一次直接生成；独立后台任务维护短期人物状态。架构、限制和比较方法见[持续人物对话 v2](docs/character-dialogue.zh-CN.md)。使用 `alivyn actor set character_v2` 启用后重启渠道；`alivyn actor audition character_v2 all` 使用当前模型密钥运行隔离的多轮场景，不发送真实消息。原有 `actor_v1` 保留用于比较，评估期间新安装仍默认使用 `legacy`。
 
+v2 还支持飞书连续消息合并、话题结束后自然留白，以及后台判断是否有具体理由主动联系。`alivyn contact simulate` 使用当前模型与密钥，在隔离历史中检查主动联系，不发送真实消息。详见[持续人物对话 v2](docs/character-dialogue.zh-CN.md)。
+
 无需模型密钥或聊天账号即可复演联系决策：
 
 ```sh

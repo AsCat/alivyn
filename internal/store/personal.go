@@ -19,6 +19,9 @@ type PersonalFact struct {
 
 func recordPersonalTx(ctx context.Context, tx *sql.Tx, change memory.PersonalChange, sourceID int64, at time.Time) error {
 	if change.Forget {
+		if err := clearInitiativesTx(ctx, tx); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM character_turns"); err != nil {
 			return err
 		}

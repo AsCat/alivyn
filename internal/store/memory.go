@@ -106,6 +106,12 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 	if err := cancelPendingTopicTx(ctx, tx, "world_update", at, "user resumed the conversation"); err != nil {
 		return 0, err
 	}
+	if err := cancelPendingTopicTx(ctx, tx, "initiative", at, "user resumed the conversation"); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE initiative_checks SET outcome='superseded',reason='conversation changed' WHERE outcome='considering'"); err != nil {
+		return 0, err
+	}
 	if personalRecognized {
 		if err := recordPersonalTx(ctx, tx, personal, messageID, at); err != nil {
 			return 0, err
@@ -148,6 +154,9 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			}
 		}
 		if change.Action == memory.Forget && change.Topic == "interview" {
+			if err := clearInitiativesTx(ctx, tx); err != nil {
+				return 0, err
+			}
 			if _, err := tx.ExecContext(ctx, "DELETE FROM character_turns"); err != nil {
 				return 0, err
 			}

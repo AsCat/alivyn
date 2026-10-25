@@ -264,7 +264,7 @@ func (h *History) processDue(ctx context.Context, at time.Time, zone *time.Locat
 		return nil, errors.New("contact timezone is required")
 	}
 	rows, err := h.db.QueryContext(ctx, `SELECT id FROM contact_intents
-WHERE state = 'pending' AND due_ns <= ? AND NOT EXISTS
+WHERE state = 'pending' AND topic != 'initiative' AND due_ns <= ? AND NOT EXISTS
   (SELECT 1 FROM contact_delivery WHERE contact_delivery.intent_id = contact_intents.id)
 ORDER BY due_ns, id`, at.UnixNano())
 	if err != nil {
@@ -432,6 +432,12 @@ func evaluateIntentTx(ctx context.Context, tx *sql.Tx, item ContactIntent, at ti
 
 func evaluateIntentTxExcluding(ctx context.Context, tx *sql.Tx, item ContactIntent, at time.Time, zone *time.Location, excludedDeliveryID int64) (contact.Decision, error) {
 	current := true
+	if item.Topic == "initiative" && at.Before(item.Expires) {
+		decision, err := initiativeCurrentTx(ctx, tx, item, at, zone)
+		if err != nil || !decision.Ready {
+			return decision, err
+		}
+	}
 	if item.Topic == "world_update" {
 		// An unsolicited update must never overtake a direct reply that is still
 		// queued for the same person.
@@ -490,6 +496,9 @@ func updateIntentAndLog(ctx context.Context, tx *sql.Tx, id int64, state, reason
 }
 
 func contactBody(topic, language string) string {
+	if topic == "initiative" {
+		return ""
+	} // A personal initiative always needs composed text.
 	if language == "zh-CN" {
 		if topic == "time_gap" {
 			return "好像过了一段时间。现在想聊聊吗？"

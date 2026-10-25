@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AsCat/alivyn/internal/actor"
 	"github.com/AsCat/alivyn/internal/config"
 	"github.com/AsCat/alivyn/internal/model"
 	"github.com/AsCat/alivyn/internal/store"
@@ -54,6 +55,48 @@ func (c *scriptedClient) Complete(_ context.Context, _ string, messages []model.
 	reply := c.replies[0]
 	c.replies = c.replies[1:]
 	return reply, nil
+}
+
+func TestWorldContactUsesExactSourcedEvent(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	start := time.Now().AddDate(0, 0, 1)
+	if _, err := h.AdvanceGoalWorld(ctx, start, time.Local); err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"那盒录音怎么处理？", "没授权前别公开。"} {
+		if err := h.AddUserMessage(ctx, text, start.Add(time.Hour), time.Local); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decision := actor.Decision{Act: "answer", Focus: "recording", EvidenceIDs: []string{"worldv2:1"}, Brevity: "short"}
+	if err := h.SaveActorDecision(ctx, 2, decision, start.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.ConfirmActorDecision(ctx, 2, decision, actor.Review{Pass: true, UsedWorldIDs: []string{"worldv2:1"}}, start.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.AdvanceGoalWorld(ctx, start.AddDate(0, 0, 1), time.Local); err != nil {
+		t.Fatal(err)
+	}
+	client := &capturingClient{}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", WorldPack: "none"}, History: h, Client: client}
+	if _, err := s.ComposeContactFor(ctx, "world_update", "world:2"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(flatten(client.messages), "采访年份") {
+		t.Fatalf("contact did not include its exact source event: %s", flatten(client.messages))
+	}
+	if _, err := s.ComposeContactFor(ctx, "world_update", "world:1"); err == nil {
+		t.Fatal("unrelated world event was accepted as a contact source")
+	}
+	if _, err := s.ComposeContactFor(ctx, "world_update", "world:bogus"); err == nil {
+		t.Fatal("invalid world event key was accepted")
+	}
 }
 
 func TestReplyUsesCurrentMemoryAndRespectsForget(t *testing.T) {

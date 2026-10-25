@@ -1,12 +1,12 @@
 # Affective life and behavioral continuity (RFC 03)
 
-Status: partially implemented. `actor_v1` now records short, sourced posture and unfinished threads with expiry and forgetting, and passes Tidehaven's social habits into decision and expression. Evolving long-term views, affect from world events, and proactive integration remain design goals.
+Status: partially implemented. `actor_v1` now passes the chosen focus, the character's own desire and feeling, ordered recent dialogue, and sourced unfinished threads into expression. Short-lived continuity expires or is removed on forgetting. New world events arising from a topic the user actually discussed can create one proactive contact candidate, subject to the existing contact policy. Evolving long-term views and general device capabilities remain design goals.
 
 ## Why this layer exists
 
 Alivyn persists memories, relationship stages, Tidehaven events, and a decision before language generation. Familiarity still mostly advances with meaningful turns and shared days. There is no durable account of how an event changes the character's outlook and later choices. A reply can therefore be factually sound yet sound like a scripted check-in.
 
-Related projects show a useful principle: [better-dsh-pet](https://github.com/ysppwn721/better-dsh-pet) persists mood, energy, anxiety, and boredom and maps them to idle behavior; [DS-Local-Pet](https://github.com/QCYTSN/ds-local-pet) schedules activities and responses from state; [deepseek-desktop-pet](https://github.com/sjmsltx/deepseek-desktop-pet) separates memory, proactive care, and affection growth. **Internal state should change behavior.** A score increment for every chat or an emotion tag is too shallow for Alivyn's long conversation arcs.
+Related projects show a useful principle: [AstrBot's group-chat enhancement plugin](https://github.com/Him666233/astrbot_plugin_group_chat_plus) separates reply decisions, context, mood hints, proactive messages, and typing delay; [better-dsh-pet](https://github.com/ysppwn721/better-dsh-pet) maps mood to idle movement and speech bubbles. Alivyn borrows the principle that **internal state should change behavior**, without copying these projects' code or equating turn counts with affection.
 
 ## Model
 
@@ -45,8 +45,8 @@ All three use the same appraisal and decision path, without special reply templa
 ## Implementation and acceptance
 
 1. Add versioned appraisal events and a replayable projection alongside the existing ledger, with restart recovery and event deduplication. Use existing relationship stages as input without inventing retrospective feelings.
-2. Pass relevant affect, open loops, and source IDs into `actor.Frame`. Record how they affect the **action** in `Decision`; realize language after that choice. Run in an isolated database before changing the paired Feishu character.
-3. Feed the same state into world and proactive loops while consent, quiet hours, rate limits, and reality boundaries retain precedence. “Missing” or “worrying about” a user cannot override contact policy.
+2. `actor.Frame` now carries recent dialogue and sourced unfinished threads. `Decision` records action, focus, the character's own desire, and feeling. Realization receives those short cues and ordered dialogue, while factual claims still require selected evidence. Durable, replayable long-term view changes remain open work.
+3. The world loop now creates a contact candidate when a real shared topic receives a new event. It skips strangers, catch-up events, and explicit distance requests, and cancels the candidate when the user resumes the conversation. Pausing, quiet hours, rate limits, and reality boundaries still govern delivery. “Missing” or “worrying about” a user cannot override contact policy.
 4. Evaluate full arcs: repeated greetings, a character mistake, user correction, disagreement, a world event, days offline, changed boundaries, and a model swap. Verify sourced transitions, changed later choices, and expiry. Use human blind review for naturalness and identity consistency. Roll out to the paired Feishu instance only after acceptance, with a rollback path.
 
 The acceptance test is whether we can explain why she chose an action and observe a durable difference afterward. A nicer single line, random delay, expressive animation, or a larger prompt does not complete this layer.

@@ -259,12 +259,22 @@ func (s Session) actorFrame(ctx context.Context, now time.Time, sourceMessageID 
 		}
 		frame.Evidence = append(frame.Evidence, actor.Evidence{ID: fmt.Sprintf("chat:%d", entry.ID), Provenance: "observed_chat", At: entry.CreatedAt.In(zone).Format(time.RFC3339), Text: content})
 	}
-	start := len(all) - 6
+	// A longer, ordered dialogue lets the character react to a developing
+	// exchange instead of treating each message as an isolated request.
+	// The source-bound transcript above excludes later queued Feishu turns.
+	start := len(all) - 12
 	if start < 0 {
 		start = 0
 	}
 	for _, entry := range all[start:] {
-		frame.Recent = append(frame.Recent, model.Message{Role: entry.Role, Content: entry.Content})
+		if entry.Content == "[forgotten memory]" {
+			continue
+		}
+		content := entry.Content
+		if runes := []rune(content); len(runes) > 320 {
+			content = string(runes[:320]) + "…"
+		}
+		frame.Recent = append(frame.Recent, model.Message{Role: entry.Role, Content: content})
 	}
 	return frame, nil
 }

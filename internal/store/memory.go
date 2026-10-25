@@ -103,6 +103,9 @@ func addUserMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 	if err := cancelPendingTopicTx(ctx, tx, "time_gap", at, "user already active"); err != nil {
 		return 0, err
 	}
+	if err := cancelPendingTopicTx(ctx, tx, "world_update", at, "user resumed the conversation"); err != nil {
+		return 0, err
+	}
 	if personalRecognized {
 		if err := recordPersonalTx(ctx, tx, personal, messageID, at); err != nil {
 			return 0, err

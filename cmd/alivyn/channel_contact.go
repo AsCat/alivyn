@@ -20,6 +20,7 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	lastHeartbeat := time.Time{}
+	nextCompositionAttempt := time.Time{}
 	for ctx.Err() == nil {
 		now := time.Now()
 		if now.Sub(lastHeartbeat) >= time.Minute {
@@ -39,17 +40,30 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 				continue
 			}
 		}
+		if now.Before(nextCompositionAttempt) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				continue
+			}
+		}
 		item, ready, err := h.NextChannelContact(ctx, now, zone, language)
 		if err != nil && ctx.Err() == nil {
 			fmt.Fprintf(out, "Contact decision failed: %v\n", err)
 		}
 		if ready {
 			if item.FirstTry {
-				if generated, err := s.ComposeContact(ctx, item.Topic); err == nil {
+				if generated, err := s.ComposeContactFor(ctx, item.Topic, item.Key); err == nil {
 					if clean := strings.TrimSpace(display.Clean(generated)); clean != "" {
 						item.Body = clean
 					}
 				} else if ctx.Err() == nil {
+					if item.Topic == "world_update" {
+						fmt.Fprintf(out, "World contact composition delayed: %v\n", err)
+						nextCompositionAttempt = time.Now().Add(2 * time.Minute)
+						continue // A generic fallback would lose the source event.
+					}
 					fmt.Fprintf(out, "Contact composition failed; using fallback: %v\n", err)
 				}
 			}

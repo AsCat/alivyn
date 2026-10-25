@@ -432,6 +432,17 @@ func evaluateIntentTx(ctx context.Context, tx *sql.Tx, item ContactIntent, at ti
 
 func evaluateIntentTxExcluding(ctx context.Context, tx *sql.Tx, item ContactIntent, at time.Time, zone *time.Location, excludedDeliveryID int64) (contact.Decision, error) {
 	current := true
+	if item.Topic == "world_update" {
+		// An unsolicited update must never overtake a direct reply that is still
+		// queued for the same person.
+		var pendingReplies int
+		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM feishu_inbox WHERE state IN ('pending','ready')").Scan(&pendingReplies); err != nil {
+			return contact.Decision{}, err
+		}
+		if pendingReplies > 0 {
+			return contact.Decision{Reason: "private reply pending"}, nil
+		}
+	}
 	if item.SourceRevision.Valid {
 		var latest int64
 		var action, provenance string
@@ -483,10 +494,16 @@ func contactBody(topic, language string) string {
 		if topic == "time_gap" {
 			return "好像过了一段时间。现在想聊聊吗？"
 		}
+		if topic == "world_update" {
+			return "之前聊过的那盒录音，有了点新进展。"
+		}
 		return "面试怎么样？如果你想聊，我在。"
 	}
 	if topic == "time_gap" {
 		return "Some time seems to have passed. Would you like to talk?"
+	}
+	if topic == "world_update" {
+		return "There's an update on that recording we talked about."
 	}
 	return "How did your interview go? I'm here if you want to talk."
 }

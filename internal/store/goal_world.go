@@ -118,6 +118,25 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, event.Day, event.Date, event.Action,
 		if err != nil {
 			return state, err
 		}
+		// A new event that follows an actual shared conversation may be worth
+		// mentioning later. This is only a candidate: contact policy, quiet
+		// hours, user activity and delivery checks still decide whether it sends.
+		if event.RelatedToUser && !event.Catchup && event.Action != "reflect" {
+			relation, err := relationshipFrom(ctx, tx)
+			if err != nil {
+				return state, err
+			}
+			if relation.Stage != "stranger" && !relation.Reserved {
+				due := now.Add(45 * time.Minute)
+				_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO contact_intents
+(topic, due_ns, expires_ns, idempotency_key, created_ns, updated_ns)
+VALUES ('world_update', ?, ?, ?, ?, ?)`, due.UnixNano(), now.Add(8*time.Hour).UnixNano(),
+					fmt.Sprintf("world:%d", next.LastEventID), now.UnixNano(), now.UnixNano())
+				if err != nil {
+					return state, err
+				}
+			}
+		}
 		state = next
 	}
 	encoded, err := json.Marshal(state)
@@ -129,6 +148,19 @@ ON CONFLICT(id) DO UPDATE SET state_json = excluded.state_json`, string(encoded)
 		return state, err
 	}
 	return state, tx.Commit()
+}
+
+// GoalWorldEvent returns the exact event behind a contact candidate. A newer
+// event must not silently replace the one that motivated the message.
+func (h *History) GoalWorldEvent(ctx context.Context, id int64) (world.GoalEvent, error) {
+	var event world.GoalEvent
+	var related, catchup int
+	err := h.db.QueryRowContext(ctx, `SELECT id, day, local_date, action, object_id,
+COALESCE(parent_event_id, 0), provenance, zh, en, related_to_user, catchup
+FROM goal_world_events WHERE id = ?`, id).Scan(&event.ID, &event.Day, &event.Date, &event.Action,
+		&event.ObjectID, &event.ParentID, &event.Provenance, &event.Zh, &event.En, &related, &catchup)
+	event.RelatedToUser, event.Catchup = related == 1, catchup == 1
+	return event, err
 }
 
 // Existing authored events become sourced history, not rewritten fiction. The

@@ -43,8 +43,8 @@ func TestRealizationOnlyReceivesRelevantWorldContext(t *testing.T) {
 	if strings.Contains(private, "internal world biography") || strings.Contains(private, "internal competence notes") || strings.Contains(private, "internal project goal") || strings.Contains(private, "修复了一盒录音") || strings.Contains(private, "world_state") {
 		t.Fatalf("unrelated internal context reached greeting realization: %s", private)
 	}
-	if strings.Contains(private, "greeting") || strings.Contains(private, "focus") {
-		t.Fatalf("planner wording reached realization: %s", private)
+	if !strings.Contains(private, `"focus":"greeting"`) {
+		t.Fatalf("chosen conversational focus was lost before realization: %s", private)
 	}
 	if _, err := Realize(context.Background(), client, "mock", frame,
 		Decision{Act: "answer", Focus: "recording", Brevity: "short", EvidenceIDs: []string{"worldv2:1"}}, ""); err != nil {
@@ -86,6 +86,33 @@ func TestRealizationTreatsPreviousReplyAsContinuityNotExample(t *testing.T) {
 	private := client.messages[1].Content
 	if !strings.Contains(private, `"recall_incomplete":true`) || !strings.Contains(private, `"previous_reply":"在，想说什么就说。"`) {
 		t.Fatalf("continuity or recall limit missing from private context: %s", private)
+	}
+}
+
+func TestRealizationReceivesEmotionalMoveAndOrderedDialogue(t *testing.T) {
+	frame := Frame{
+		Name: "意续", Language: "zh-CN", Relationship: "acquaintance",
+		Latest:     Evidence{ID: "chat:5", Provenance: "observed_chat", Text: "……"},
+		Continuity: &Continuity{Posture: "unsettled", Concern: "She wants to finish saying why the recording matters", SourceIDs: []string{"chat:3"}, Lifetime: "hours"},
+		Recent: []model.Message{
+			{Role: "user", Content: "那盒录音还在吗？"},
+			{Role: "assistant", Content: "在。我还没想好要不要交出去。"},
+			{Role: "user", Content: "……"},
+		},
+	}
+	decision := Decision{Act: "pause", Focus: "leave room after the unresolved recording question", Want: "finish explaining the recording, but give the other person space", Feeling: "a little unsure", Brevity: "short", Posture: "unsettled"}
+	client := &captureCompleter{}
+	if _, err := Realize(context.Background(), client, "mock", frame, decision, ""); err != nil {
+		t.Fatal(err)
+	}
+	private := client.messages[1].Content
+	for _, want := range []string{`"focus":"leave room`, `"want":"finish explaining`, `"feeling":"a little unsure"`, `"unfinished_reaction":`, `"recent_dialogue":`, "那盒录音还在吗？", "我还没想好要不要交出去。"} {
+		if !strings.Contains(private, want) {
+			t.Fatalf("realization lost %q: %s", want, private)
+		}
+	}
+	if len(client.messages) != 3 || client.messages[2].Role != "user" {
+		t.Fatalf("dialogue was replayed as assistant-role style examples: %+v", client.messages)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -143,6 +144,12 @@ func bareGreeting(text string) bool {
 // ComposeContact writes one reasoned opening for a policy-approved intent.
 // The caller must recheck policy after this model request, before delivery.
 func (s Session) ComposeContact(ctx context.Context, topic string) (string, error) {
+	return s.ComposeContactFor(ctx, topic, "")
+}
+
+// ComposeContactFor binds a spontaneous world update to the exact event that
+// made it relevant, even when the character's world has progressed again.
+func (s Session) ComposeContactFor(ctx context.Context, topic, key string) (string, error) {
 	messages, _, err := s.contextMessages(ctx, time.Now())
 	if err != nil {
 		return "", err
@@ -153,10 +160,24 @@ func (s Session) ComposeContact(ctx context.Context, topic string) (string, erro
 		occasion = "The runtime has resumed after a long gap. Acknowledge the gap gently if useful; do not pretend you lived through events while offline."
 	case "interview":
 		occasion = "The user's previously mentioned interview time has passed. Check in about that interview without treating approximate time as an exact appointment."
+	case "world_update":
+		id, err := strconv.ParseInt(strings.TrimPrefix(key, "world:"), 10, 64)
+		if !strings.HasPrefix(key, "world:") || err != nil || id < 1 {
+			return "", errors.New("world contact has no valid source event")
+		}
+		event, err := s.History.GoalWorldEvent(ctx, id)
+		if err != nil || !event.RelatedToUser || event.Catchup {
+			return "", errors.New("world contact source event is unavailable")
+		}
+		content := event.En
+		if s.Config.Language == "zh-CN" {
+			content = event.Zh
+		}
+		occasion = "A fictional event in your own ongoing life became relevant to a topic the user previously discussed with you. Share one specific new detail from this exact sourced event, in your own voice: " + content + ". You need no reply from the user. Do not say they ignored you, and do not invent another event."
 	default:
 		return "", errors.New("unknown contact topic")
 	}
-	messages = append(messages, model.Message{Role: "system", Content: "Write exactly one short message to initiate contact. " + occasion + " Make it sound like your established character and shared conversation. Do not make up a new event or ask several questions. No explanation, label, or quotation marks."})
+	messages = append(messages, model.Message{Role: "system", Content: "Write exactly one short message to initiate contact. " + occasion + " Make it sound like your established character and shared conversation. Start with the substance; skip formal preambles and any service offer. Do not make up a new event, demand attention or ask several questions. No explanation, label, or quotation marks."})
 	reply, err := s.Client.Complete(ctx, s.Config.Model, messages)
 	if err != nil {
 		return "", err

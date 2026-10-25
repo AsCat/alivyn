@@ -56,6 +56,55 @@ func TestGoalWorldPersistsCausalChainAndCatchup(t *testing.T) {
 	}
 }
 
+func TestSharedWorldProgressCreatesOneCancellableContactCandidate(t *testing.T) {
+	ctx := context.Background()
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	start := time.Date(2026, 10, 24, 10, 0, 0, 0, time.UTC)
+	if _, err := h.AdvanceGoalWorld(ctx, start, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"那盒录音是谁留下的？", "我觉得先核对出处比较好。"} {
+		if err := h.AddUserMessage(ctx, text, start.Add(time.Hour), time.UTC); err != nil {
+			t.Fatal(err)
+		}
+	}
+	decision := actor.Decision{Act: "answer", Focus: "recording source", EvidenceIDs: []string{"worldv2:1"}, Brevity: "short"}
+	if err := h.SaveActorDecision(ctx, 2, decision, start.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.ConfirmActorDecision(ctx, 2, decision, actor.Review{Pass: true, UsedWorldIDs: []string{"worldv2:1"}}, start.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	next := start.AddDate(0, 0, 1)
+	if _, err := h.AdvanceGoalWorld(ctx, next, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	intents, err := h.ContactIntents(ctx, 10)
+	if err != nil || len(intents) != 1 || intents[0].Topic != "world_update" || intents[0].IdempotencyKey != "world:2" || !intents[0].Due.Equal(next.Add(45*time.Minute)) {
+		t.Fatalf("world progress did not create one sourced candidate: %+v %v", intents, err)
+	}
+	if _, err := h.AdvanceGoalWorld(ctx, next, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if intents, err = h.ContactIntents(ctx, 10); err != nil || len(intents) != 1 {
+		t.Fatalf("same-day progress duplicated contact: %+v %v", intents, err)
+	}
+	if err := h.AddUserMessage(ctx, "那盒录音现在怎么样了？", next.Add(10*time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if _, ready, err := h.NextChannelContact(ctx, next.Add(time.Hour), time.UTC, "zh-CN"); err != nil || ready {
+		t.Fatalf("user resumed before world contact but it remained sendable: %t %v", ready, err)
+	}
+	intents, err = h.ContactIntents(ctx, 10)
+	if err != nil || intents[0].State != "canceled" {
+		t.Fatalf("world contact cancellation was not durable: %+v %v", intents, err)
+	}
+}
+
 func TestGoalWorldSeedsOldStoryWithoutRepeatingDayOne(t *testing.T) {
 	ctx := context.Background()
 	h, err := OpenHistory(ctx, t.TempDir())

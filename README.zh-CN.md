@@ -51,7 +51,7 @@ go run ./cmd/alivyn
 
 当前记忆提取器识别明确的面试表述，也识别“我叫阿意”“我喜欢咖啡”等简短、明确的个人陈述。个人记忆保留来源，长对话后仍能调用；后来说“我不喜欢咖啡”会修正旧偏好，说“忘记我喜欢咖啡”或“忘记我的名字”会删除对应记忆并遮盖原始消息。面试记忆保留改期和 `memory forget interview` 的机制。用 `memory list` 查看当前事实，或用 `memory export` 导出包含 `events` 和 `personal` 的 JSON。较长或含糊的说法不会自动变成长期个人记忆；这里也不是完整账号数据导出。
 
-实验中的“持续角色”回应引擎按[顶层架构](docs/actor-architecture.zh-CN.md)检索有来源的经历，先记录简短的对话决定，再用与当前回复有关的经历生成语言，并在发送前审查事实和关系边界。若修改措辞仍不通过审查，她会换一种对话动作。现在，对话决定还可以把有来源的短期姿态和未完话题带到后续相遇；它们会过期，也会随遗忘请求清除。已实现范围和后续设计见[情感生活 RFC](docs/affective-life.zh-CN.md)。目标驱动世界账本保持事件对象与因果链，并继承原有故事；只有实际写进通过审查的回复的世界经历，才影响下一步行动。`alivyn actor eval all` 使用当前模型在隔离数据库里运行多轮场景；`alivyn actor status` 查看引擎，`alivyn actor set actor_v1` 可启用实验版，渠道重启后生效，`alivyn actor set legacy` 可恢复默认版。实验版每条回复通常调用模型三次，重写和重新规划时最多九次。开放式事件提议和完整主动联系仍在开发中；新安装默认仍使用旧引擎。
+实验中的“持续角色”回应引擎按[顶层架构](docs/actor-architecture.zh-CN.md)检索有来源的经历，先记录简短的对话决定，再把关注点、角色自己的愿望与情绪、近期连续对话和未完话题带入表达，并在发送前审查事实和关系边界。短期状态会过期，也会随遗忘请求清除；详见[情感生活 RFC](docs/affective-life.zh-CN.md)。目标驱动世界账本保持事件对象与因果链；真实聊过的世界话题取得新进展后，可产生一次受联系策略约束的主动消息候选。`alivyn actor eval all` 使用当前模型在隔离数据库里运行多轮场景；`alivyn actor status` 查看引擎，`alivyn actor set actor_v1` 可启用实验版，渠道重启后生效，`alivyn actor set legacy` 可恢复默认版。实验版每条回复通常调用模型三次，重写和重新规划时最多九次。开放式事件提议和长期观点演化仍在开发中；新安装默认仍使用旧引擎。
 
 无需模型密钥或聊天账号即可复演联系决策：
 
@@ -73,7 +73,7 @@ go run ./cmd/alivyn contact policy 22:00 08:00 2
 go run ./cmd/alivyn serve
 ```
 
-`serve once` 只处理一次并退出。`contact pause` 和 `contact resume` 控制所有主动联系；`contact intents` 查看意图状态，`contact audit` 查看发送、跳过、取消、失败的原因，`contact outbox` 查看测试投递。`alivyn serve` 只写入本地 SQLite 测试投递箱；`alivyn channel feishu run` 可以按同一策略向已配对的私聊主动发送。首次投递时，模型会根据当前人格与具体联系缘由写一句简短开场；生成失败则使用固定备用文案。生成后、发送前再次复核打扰策略；文案、重试和结果都会跨重启保存。电脑睡眠时本机循环会暂停；如需持续运行，可部署在始终在线的服务器。
+`serve once` 只处理一次并退出。`contact pause` 和 `contact resume` 控制所有主动联系；`contact intents` 查看意图状态，`contact audit` 查看发送、跳过、取消、失败的原因，`contact outbox` 查看测试投递。`alivyn serve` 只写入本地 SQLite 测试投递箱；`alivyn channel feishu run` 可以按同一策略向已配对的私聊主动发送。首次投递时，模型会根据当前人格与具体联系缘由写一句简短开场；世界进展消息还会绑定确切的事件来源，生成失败时不会改发无关的备用文案。生成后、发送前再次复核打扰策略；文案、重试和结果都会跨重启保存。电脑睡眠时本机循环会暂停；如需持续运行，可部署在始终在线的服务器。
 
 ## 飞书扫码接入（开发预览）
 

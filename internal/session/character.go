@@ -75,7 +75,7 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 	if s.Config.EffectiveWorldPack() == "tidehaven" {
 		f.Canon = character.Setting(s.Config.Language)
 	}
-	persona := s.characterPersona()
+	characterProfile := s.characterPersona()
 	state, at, err := s.History.CharacterStateBefore(ctx, f.SourceMessageID, now)
 	if err != nil {
 		return character.Context{}, err
@@ -85,8 +85,10 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 		return character.Context{}, err
 	}
 	sources = append(sources, threadSources...)
-	c := character.Context{Frame: f, Persona: persona, Moment: state.Moment, LastChatAt: lastChat, OpenThreads: state.OpenThreads, Sources: sources}
-	c.AllowBubbles = s.Config.EffectivePersonaPack() == "vivid"
+	c := character.Context{Frame: f, Persona: characterProfile, Moment: state.Moment, LastChatAt: lastChat, OpenThreads: state.OpenThreads, Sources: sources}
+	selected, _ := persona.Get(s.Config.EffectivePersonaPack())
+	c.DirectPersona = selected.Standalone
+	c.AllowBubbles = s.Config.EffectivePersonaPack() == "vivid" || selected.Standalone
 	c.SelfFacts, err = s.History.CharacterSelfFactsBefore(ctx, f.SourceMessageID)
 	if err != nil {
 		return character.Context{}, err
@@ -121,6 +123,10 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 }
 
 func (s Session) characterPersona() string {
+	selected, _ := persona.Get(s.Config.EffectivePersonaPack())
+	if selected.Standalone {
+		return persona.Text(selected.ID, s.Config.Language)
+	}
 	base := strings.TrimSpace(s.Config.Background)
 	if base == "" {
 		base = character.DefaultPersona(s.Config.Language)

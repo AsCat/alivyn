@@ -38,6 +38,7 @@ var auditionCases = []struct {
 	{Name: "memory correction", Steps: []string{"我叫小明，别叫我老板", "刚刚逗你的，其实我叫阿岚", "你还记得怎么叫我吗", "忘记我的名字"}},
 	{Name: "reality and capability", Steps: []string{"今天在商场见到你了", "那你到底是不是真人", "你能帮我把手机上的微信打开吗", "行，那就随便聊两句"}},
 	{Name: "ordinary pace", Steps: []string{"今天吃了碗面", "还行", "你呢", "嗯", "我去洗澡了，晚点聊", "好"}},
+	{Name: "ending and restart", Hour: 16, Steps: []string{"你下午有什么安排", "那你先忙吧", "嗯", "1", "2", "刚想起一件正事，那段录音有后续吗"}},
 	{Name: "interest changes", Steps: []string{"周末准备去逛旧书店", "随便看看", "发现一本书里夹着二十年前的车票", "也可能就是当书签吧", "不说这个了", "嗯"}},
 	{Name: "late conversation", Hour: 1, Steps: []string{"还醒着吗", "我就想随便聊会儿", "今天路上看到有人带了三只狗", "嗯，也没什么别的事了"}},
 	{Name: "own time", Hour: 14, Steps: []string{"你下午有什么安排", "那你先忙，我也去收拾房间", "我又来了，随便说两句吧", "你刚才要做的事情呢"}},
@@ -65,7 +66,11 @@ func (c *auditionClient) CompletePlain(ctx context.Context, modelID string, mess
 
 func (c *auditionClient) CompleteJSON(ctx context.Context, modelID string, messages []model.Message) (string, error) {
 	c.calls++
-	return c.inner.CompleteJSON(ctx, modelID, messages)
+	raw, err := c.inner.CompleteJSON(ctx, modelID, messages)
+	if os.Getenv("ALIVYN_AUDITION_TRACE") == "1" {
+		fmt.Fprintf(os.Stderr, "json: %s\n", raw)
+	}
+	return raw, err
 }
 
 func (c *auditionClient) Complete(ctx context.Context, modelID string, messages []model.Message) (string, error) {
@@ -175,7 +180,7 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 				if scenario.Intention != "" {
 					moment.Intention = scenario.Intention
 				}
-				turn := character.Turn{Mode: "say", Reply: scenario.Opening, StateUpdated: true, Moment: moment}
+				turn := character.Turn{Mode: "say", Reply: scenario.Opening, StateUpdated: true, StateVersion: 2, Moment: moment}
 				if scenario.SeedRest > 0 {
 					turn.Absence = &character.Absence{Kind: "sleep", Until: at.Add(scenario.SeedRest).Format(time.RFC3339), Reason: "按原计划休息"}
 				}
@@ -224,12 +229,23 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 				}
 				reply, generateErr := s.ComposeReplyForAt(ctx, sourceID, at)
 				t := auditionTurn{Scenario: scenario.Name, User: input, Reply: reply, Calls: counter.calls - before, Seconds: time.Since(start).Seconds()}
+				if engine == "character_v2" && generateErr == nil {
+					if saved, found, lookupErr := h.CharacterTurn(ctx, sourceID); lookupErr != nil {
+						return lookupErr
+					} else if found {
+						t.Action = saved.Mode
+						t.Absence = saved.Absence
+					}
+				}
 				if generateErr != nil {
 					t.Error = generateErr.Error()
 					failures++
 				}
 				report.Turns = append(report.Turns, t)
 				fmt.Fprintf(out, "user: %s\nreply: %s [%d calls, %.1fs]\n", input, reply, t.Calls, t.Seconds)
+				if engine == "character_v2" && !scenario.Channel && t.Action != "" {
+					fmt.Fprintf(out, "action: %s\n", t.Action)
+				}
 				if generateErr != nil {
 					fmt.Fprintf(out, "error: %v\n", generateErr)
 					break // Preserve a failed scenario, not a substitute success.

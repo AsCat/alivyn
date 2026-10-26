@@ -20,7 +20,7 @@ func TestCharacterStateCommitsWithReplyExpiresAndForgets(t *testing.T) {
 	if _, err := h.EnqueueFeishu(ctx, "one", "chat", "m1", "我叫小明", at, time.UTC); err != nil {
 		t.Fatal(err)
 	}
-	turn := character.Turn{Mode: "say", Reply: "小明，记住了。", StateUpdated: true, Moment: character.Moment{Feeling: "好奇", Attention: "小明刚才说的事", Scene: "在听歌"}}
+	turn := character.Turn{Mode: "say", Reply: "小明，记住了。", StateUpdated: true, StateVersion: 2, Moment: character.Moment{Feeling: "好奇", Attention: "小明刚才说的事", Scene: "在听歌"}}
 	if err := h.SaveCharacterTurn(ctx, 1, turn, at); err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestIntentionAndOpenThreadsSurviveRestartAndQuietTurnGetsReflected(t *testi
 	if err := h.AddUserMessage(ctx, "有件事还没说", at, time.UTC); err != nil {
 		t.Fatal(err)
 	}
-	t1 := character.Turn{Mode: "say", Reply: "明天再聊，我想歇会儿。", StateUpdated: true, Moment: character.Moment{Intention: "休息"}, OpenThreads: []character.OpenThread{{Subject: "用户有件事尚未说", Owner: "user", SourceIDs: []string{"chat:1"}}}}
+	t1 := character.Turn{Mode: "say", Reply: "明天再聊，我想歇会儿。", StateUpdated: true, StateVersion: 2, Moment: character.Moment{Intention: "休息"}, OpenThreads: []character.OpenThread{{Subject: "用户有件事尚未说", Owner: "user", SourceIDs: []string{"chat:1"}}}}
 	if err := h.SaveCharacterTurn(ctx, 1, t1, at); err != nil {
 		t.Fatal(err)
 	}
@@ -202,5 +202,136 @@ func TestForgetNameRedactsLaterRecallsAndCorrections(t *testing.T) {
 		if strings.Contains(e.Content, "小明") || strings.Contains(e.Content, "阿岚") {
 			t.Fatalf("name echo survived forgetting: %+v", e)
 		}
+	}
+}
+
+func TestConversationalClosePersistsThroughReflectionAndExpires(t *testing.T) {
+	ctx := context.Background()
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 26, 16, 0, 0, 0, time.UTC)
+	if err := h.AddUserMessage(ctx, "先这样吧", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SaveCharacterTurn(ctx, 1, character.Turn{Mode: "close", Reply: "嗯，回头聊。"}, at); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.CommitCharacterReply(ctx, 1, "嗯，回头聊。", at.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SaveCharacterReflection(ctx, 1, character.Turn{Mode: "say", Reply: "嗯，回头聊。", StateUpdated: true, Moment: character.Moment{Feeling: "平静"}}); err != nil {
+		t.Fatal(err)
+	}
+	if saved, found, err := h.CharacterTurn(ctx, 1); err != nil || !found || saved.Mode != "close" {
+		t.Fatalf("reflection rewrote the executed boundary: %+v %t %v", saved, found, err)
+	}
+	if closed, err := h.RecentClosedExchange(ctx, 3, at.Add(time.Minute)); err != nil || closed.IsZero() {
+		t.Fatalf("the next contribution lost the boundary: %v %v", closed, err)
+	}
+	if err := h.AddUserMessage(ctx, "嗯", at.Add(time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SaveCharacterTurn(ctx, 3, character.Turn{Mode: "wait"}, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.CommitCharacterReply(ctx, 3, "", at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if closed, err := h.RecentClosedExchange(ctx, 4, at.Add(2*time.Minute)); err != nil || closed.IsZero() {
+		t.Fatalf("quiet continuation erased the earlier closure: %v %v", closed, err)
+	}
+	if closed, err := h.RecentClosedExchange(ctx, 4, at.Add(5*time.Hour)); err != nil || !closed.IsZero() {
+		t.Fatalf("old boundary did not expire: %v %v", closed, err)
+	}
+}
+
+func TestCharacterSelfFactsRequireDeliveredSourceAndSurviveRestart(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	h, err := OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 26, 16, 0, 0, 0, time.UTC)
+	if err := h.AddUserMessage(ctx, "你是哪里人？", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	spoken := character.Turn{Mode: "say", Reply: "我在汐湾长大。"}
+	if err := h.SaveCharacterTurn(ctx, 1, spoken, at); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := spoken
+	snapshot.StateUpdated = true
+	snapshot.SelfFacts = []character.SelfFact{{Key: "hometown", Value: "汐湾"}}
+	if err := h.SaveCharacterReflection(ctx, 1, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if facts, err := h.CharacterSelfFactsBefore(ctx, 2); err != nil || len(facts) != 0 {
+		t.Fatalf("uncommitted self facts leaked: %+v %v", facts, err)
+	}
+	if err := h.CommitCharacterReply(ctx, 1, spoken.Reply, at); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SaveCharacterReflection(ctx, 1, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Close(); err != nil {
+		t.Fatal(err)
+	}
+	h, err = OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if facts, err := h.CharacterSelfFactsBefore(ctx, 1); err != nil || len(facts) != 0 {
+		t.Fatalf("source saw its own future fact: %+v %v", facts, err)
+	}
+	if facts, err := h.CharacterSelfFactsBefore(ctx, 2); err != nil || len(facts) != 1 || facts[0].Key != "hometown" || facts[0].Value != "汐湾" {
+		t.Fatalf("delivered fact did not persist: %+v %v", facts, err)
+	}
+	if _, err := h.db.ExecContext(ctx, "DELETE FROM character_turns WHERE source_message_id=1"); err != nil {
+		t.Fatal(err)
+	}
+	if facts, err := h.CharacterSelfFactsBefore(ctx, 2); err != nil || len(facts) != 0 {
+		t.Fatalf("forgotten source left a biography fact: %+v %v", facts, err)
+	}
+}
+
+func TestLegacyUnreviewedReflectionDoesNotEnterNewContext(t *testing.T) {
+	ctx := context.Background()
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 26, 16, 0, 0, 0, time.UTC)
+	if err := h.AddUserMessage(ctx, "你好", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	legacy := character.Turn{Mode: "say", Reply: "嗯。", StateUpdated: true, Moment: character.Moment{Cause: "未经证实的用户动机"}, OpenThreads: []character.OpenThread{{Subject: "过期的承诺", Owner: "character", SourceIDs: []string{"chat:1"}}}}
+	if err := h.SaveCharacterTurn(ctx, 1, legacy, at); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.CommitCharacterReply(ctx, 1, legacy.Reply, at); err != nil {
+		t.Fatal(err)
+	}
+	if state, _, err := h.CharacterStateBefore(ctx, 3, at.Add(time.Minute)); err != nil || state.Moment.Cause != "" || len(state.OpenThreads) != 0 {
+		t.Fatalf("legacy interpretation entered new context: %+v %v", state, err)
+	}
+	if err := h.AddUserMessage(ctx, "新话题", at.Add(time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	current := character.Turn{Mode: "say", Reply: "好。", StateUpdated: true, StateVersion: 2, Moment: character.Moment{Feeling: "平静"}}
+	if err := h.SaveCharacterTurn(ctx, 3, current, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.CommitCharacterReply(ctx, 3, current.Reply, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if state, _, err := h.CharacterStateBefore(ctx, 5, at.Add(2*time.Minute)); err != nil || state.Moment.Feeling != "平静" {
+		t.Fatalf("new reviewed state not restored: %+v %v", state, err)
 	}
 }

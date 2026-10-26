@@ -88,6 +88,10 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 	}
 	sources = append(sources, threadSources...)
 	c := character.Context{Frame: f, Persona: persona, Moment: state.Moment, LastChatAt: lastChat, OpenThreads: state.OpenThreads, Sources: sources}
+	c.SelfFacts, err = s.History.CharacterSelfFactsBefore(ctx, f.SourceMessageID)
+	if err != nil {
+		return character.Context{}, err
+	}
 	c.Routine = s.Config.Routine
 	if strings.TrimSpace(c.Routine) == "" {
 		c.Routine = character.DefaultRoutine(s.Config.Language)
@@ -102,6 +106,13 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 	}
 	if !at.IsZero() {
 		c.MomentAt = at.Format(time.RFC3339)
+	}
+	closedAt, err := s.History.RecentClosedExchange(ctx, f.SourceMessageID, now)
+	if err != nil {
+		return character.Context{}, err
+	}
+	if !closedAt.IsZero() {
+		c.ClosedAt = closedAt.In(localNow.Location()).Format(time.RFC3339)
 	}
 	return c, nil
 }
@@ -126,7 +137,7 @@ func (s Session) composeCharacterReply(ctx context.Context, now time.Time, sourc
 	if err != nil {
 		return "", err
 	}
-	turn, err := character.Generate(ctx, s.Client, s.Config.Model, c)
+	turn, err := character.GenerateChecked(ctx, s.Client, s.Config.Model, c)
 	if err != nil {
 		return "", fmt.Errorf("character dialogue: %w", err)
 	}
@@ -212,6 +223,9 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 	}
 	if !momentAt.IsZero() {
 		c.MomentAt = momentAt.Format(time.RFC3339)
+	}
+	if err == nil {
+		c.SelfFacts, err = s.History.CharacterSelfFactsBefore(ctx, sourceID+1)
 	}
 	return c, references, err
 }

@@ -16,7 +16,7 @@ func TestMessagesPreserveVoiceAndActualDialogue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(messages) != 5 || messages[1].Role != "user" || messages[2].Role != "assistant" || messages[3].Content != "……" || messages[4].Role != "system" {
+	if len(messages) != 6 || messages[1].Role != "user" || messages[2].Role != "assistant" || messages[3].Content != "……" || messages[4].Role != "system" || messages[5].Role != "system" {
 		t.Fatalf("actual role order was lost: %+v", messages)
 	}
 	for _, value := range []string{"custom character", "fictional city", "有点期待", "在听同一首旧歌"} {

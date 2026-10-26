@@ -55,7 +55,7 @@ func TestResetClearsLifeAndQueuedWorkButPreservesPolicyAndReceipts(t *testing.T)
 	if _, err := h.EnqueueFeishu(ctx, "reset", "chat", "m2", "/清除记忆", at.Add(time.Minute), time.UTC); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"character_turns", "personal_memory", "memory_revisions", "relationship_snapshots", "world_state", "world_events", "goal_world_state", "goal_world_events", "initiative_checks", "contact_intents", "contact_delivery", "assistant_turns"} {
+	for _, table := range []string{"character_turns", "character_self_facts", "personal_memory", "memory_revisions", "relationship_snapshots", "world_state", "world_events", "goal_world_state", "goal_world_events", "initiative_checks", "contact_intents", "contact_delivery", "assistant_turns"} {
 		var n int
 		if err := h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&n); err != nil || n != 0 {
 			t.Fatalf("%s survived reset: %d %v", table, n, err)

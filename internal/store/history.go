@@ -237,6 +237,15 @@ CREATE TABLE IF NOT EXISTS character_turns (
   created_at TEXT NOT NULL,
   committed INTEGER NOT NULL DEFAULT 0 CHECK(committed IN (0,1))
 );
+CREATE TABLE IF NOT EXISTS character_self_facts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  fact_key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  source_message_id INTEGER NOT NULL REFERENCES character_turns(source_message_id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  UNIQUE(source_message_id, fact_key)
+);
+CREATE INDEX IF NOT EXISTS character_self_facts_key ON character_self_facts(fact_key, source_message_id);
 CREATE TABLE IF NOT EXISTS actor_continuity (
   source_message_id INTEGER PRIMARY KEY REFERENCES messages(id),
   state_json TEXT NOT NULL,

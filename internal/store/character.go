@@ -27,6 +27,57 @@ func (h *History) CharacterTurn(ctx context.Context, sourceID int64) (character.
 	return t, err == nil, err
 }
 
+// CharacterSelfFactsBefore returns the latest delivered version of each stable
+// fictional biography fact. Every row remains tied to its original turn.
+func (h *History) CharacterSelfFactsBefore(ctx context.Context, sourceID int64) ([]character.SelfFact, error) {
+	rows, err := h.db.QueryContext(ctx, `SELECT f.fact_key,f.value FROM character_self_facts f
+JOIN assistant_turns a ON a.source_message_id=f.source_message_id
+JOIN messages m ON m.id=a.assistant_message_id
+WHERE f.source_message_id<? AND m.content!='[forgotten memory]'
+AND f.id=(SELECT MAX(n.id) FROM character_self_facts n WHERE n.fact_key=f.fact_key AND n.source_message_id<?)
+ORDER BY f.id DESC LIMIT 24`, sourceID, sourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var facts []character.SelfFact
+	for rows.Next() {
+		var fact character.SelfFact
+		if err := rows.Scan(&fact.Key, &fact.Value); err != nil {
+			return nil, err
+		}
+		facts = append(facts, fact)
+	}
+	return facts, rows.Err()
+}
+
+// RecentClosedExchange is a conversational boundary, not a delivery pause.
+// A later completed action replaces it; old boundaries expire naturally.
+func (h *History) RecentClosedExchange(ctx context.Context, sourceID int64, now time.Time) (time.Time, error) {
+	var raw, stamp string
+	err := h.db.QueryRowContext(ctx, `SELECT turn_json,created_at FROM character_turns
+WHERE source_message_id<? AND committed=1 AND json_extract(turn_json,'$.mode')!='wait'
+ORDER BY source_message_id DESC LIMIT 1`, sourceID).Scan(&raw, &stamp)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+	var t character.Turn
+	if err := json.Unmarshal([]byte(raw), &t); err != nil || t.Mode != "close" {
+		return time.Time{}, err
+	}
+	at, err := time.Parse(time.RFC3339Nano, stamp)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if age := now.Sub(at); age < 0 || age > 4*time.Hour {
+		return time.Time{}, nil
+	}
+	return at, nil
+}
+
 func (h *History) OpenThreadSources(ctx context.Context, threads []character.OpenThread) ([]actor.Evidence, error) {
 	var sources []actor.Evidence
 	seen := map[string]bool{}
@@ -119,6 +170,7 @@ func (h *History) CharacterStateBefore(ctx context.Context, sourceID int64, now 
 	var raw, stamp string
 	err := h.db.QueryRowContext(ctx, `SELECT turn_json,created_at FROM character_turns
 WHERE source_message_id < ? AND committed = 1 AND json_extract(turn_json,'$.state_updated') = 1
+AND COALESCE(json_extract(turn_json,'$.state_version'),0) >= 2
 ORDER BY source_message_id DESC LIMIT 1`, sourceID).Scan(&raw, &stamp)
 	if errors.Is(err, sql.ErrNoRows) {
 		return character.Turn{}, time.Time{}, nil
@@ -245,7 +297,7 @@ ORDER BY c.source_message_id DESC LIMIT 1`).Scan(&id, &raw, &stamp)
 	}
 	var previous int64
 	var previousStamp string
-	err = h.db.QueryRowContext(ctx, `SELECT source_message_id,created_at FROM character_turns WHERE committed=1 AND json_extract(turn_json,'$.state_updated')=1 ORDER BY source_message_id DESC LIMIT 1`).Scan(&previous, &previousStamp)
+	err = h.db.QueryRowContext(ctx, `SELECT source_message_id,created_at FROM character_turns WHERE committed=1 AND json_extract(turn_json,'$.state_updated')=1 AND COALESCE(json_extract(turn_json,'$.state_version'),0)>=2 ORDER BY source_message_id DESC LIMIT 1`).Scan(&previous, &previousStamp)
 	if errors.Is(err, sql.ErrNoRows) {
 		return id, t, true, nil
 	}
@@ -289,6 +341,7 @@ func (h *History) SaveCharacterReflection(ctx context.Context, sourceID int64, t
 	if old.Reply != t.Reply || !t.StateUpdated {
 		return errors.New("reflection must preserve its delivered reply")
 	}
+	t.Mode = old.Mode       // Reflection cannot change the executed dialogue action.
 	t.Absence = old.Absence // Reflection cannot rewrite an executed availability action.
 	data, err := json.Marshal(t)
 	if err != nil {
@@ -299,6 +352,20 @@ func (h *History) SaveCharacterReflection(ctx context.Context, sourceID int64, t
 	}
 	if err := recordCharacterWorldTx(ctx, tx, sourceID, t, stamp); err != nil {
 		return err
+	}
+	if len(t.SelfFacts) > 0 {
+		var delivered string
+		if err := tx.QueryRowContext(ctx, `SELECT m.content FROM assistant_turns a JOIN messages m ON m.id=a.assistant_message_id WHERE a.source_message_id=?`, sourceID).Scan(&delivered); err != nil {
+			return err
+		}
+		if delivered != t.Reply {
+			return errors.New("self facts require the exact delivered reply")
+		}
+		for _, fact := range t.SelfFacts {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO character_self_facts(fact_key,value,source_message_id,created_at) VALUES(?,?,?,?)`, fact.Key, fact.Value, sourceID, stamp); err != nil {
+				return err
+			}
+		}
 	}
 	return tx.Commit()
 }

@@ -270,7 +270,7 @@ ORDER BY source_message_id DESC LIMIT 20`)
 		return "【记忆 · 最近 20 条有效事实；非完整对话】\n" + body, "Memory · up to 20 active facts, not the full transcript\n" + body, nil
 	}
 	var raw, stamp string
-	err := tx.QueryRowContext(ctx, `SELECT turn_json,created_at FROM character_turns WHERE committed=1 AND json_extract(turn_json,'$.state_updated')=1 ORDER BY source_message_id DESC LIMIT 1`).Scan(&raw, &stamp)
+	err := tx.QueryRowContext(ctx, `SELECT turn_json,created_at FROM character_turns WHERE committed=1 AND json_extract(turn_json,'$.state_updated')=1 AND COALESCE(json_extract(turn_json,'$.state_version'),0)>=2 ORDER BY source_message_id DESC LIMIT 1`).Scan(&raw, &stamp)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "【诊断】暂无已保存的人物状态；不会临时生成。", "No saved character state. Nothing is generated for this inspection.", nil
 	}

@@ -4,7 +4,7 @@ Status: experimental, opt-in as `character_v2`. [中文](character-dialogue.zh-C
 
 ## Design
 
-The earlier `actor_v1` engine plans an action, realizes it, reviews it and may replan. That is useful for constrained tasks, but in conversation it can discard the original social context, produce commentary about its own behavior and turn ordinary ambiguity into silence. V2 removes that sequence from the reply path.
+The earlier `actor_v1` engine plans an action before dialogue, realizes it and may replan. That can discard conversational context. V2 lets the character draft one dialogue action in context, then independently checks that the action, words and available evidence agree before delivery. The checker cannot write the character's line.
 
 ```mermaid
 flowchart LR
@@ -13,18 +13,22 @@ flowchart LR
   H --> C
   M[Expiring character state] --> C
   W[World ledger and sourced memories] --> C
-  C --> D[One plain dialogue generation]
-  D --> O[Durable outbox and paced delivery]
+  C --> D[Character drafts words and action]
+  D --> V[Independent consistency review]
+  V --> O[Durable outbox and paced delivery]
   O --> H
   H --> R[Background reflection]
-  R --> M
+  R --> Q[Evidence review]
+  Q --> M
 ```
 
 - **Identity:** a stable character card with preferences, conflicting needs and a personal voice. A custom `persona background` replaces the default card. A cautious character can withhold private information without interrogating the other person.
 - **Actual conversation:** up to 40 recent messages retain their user/assistant roles and source order, including when Feishu messages queue. Existing sourced facts and a small selection of older episodes supplement the transcript. This is bounded retrieval, not unlimited memory.
 - **Fictional life:** the Tidehaven world ledger retains major events and object continuity. The character can author ordinary activities inside that setting. Those activities are not evidence of real encounters, user facts or device actions.
-- **Speech:** one plain-text generation, with no separate action planner, per-message reviewer or greeting/punctuation branches. A short delivery action can accompany speech. Invalid/empty output remains an error for channel retry; the explicit `[[wait]]` choice commits a quiet turn without sending text. No fixed conversational substitute is inserted.
-- **Reflection:** a separate worker summarizes the character's own feeling, attention and current scene after delivery. It starts after a 20-second quiet age, normally coalescing updates to every four committed exchanges or ten minutes between source turns. A remaining completed exchange, including a deliberate quiet turn, also qualifies after 90 seconds, so its ending can be recorded without another incoming message. It never edits an utterance or invents user facts. Malformed reflection leaves the earlier snapshot intact and backs off for a minute.
+- **Stable self facts:** background reflection extracts only stable fictional biography details explicitly spoken in a delivered reply, with that reply as the source. They survive short context windows and are cleared with their source; temporary meals, plans and moods stay out of this ledger.
+- **State migration:** only snapshots produced by the current evidence review enter character context. Older unreviewed mood and open-thread interpretations are ignored; delivered conversation and sourced long-term facts remain.
+- **Speech and action:** the character drafts a `say`, `close`, `wait` or timed `away` action with its actual words. `close` persists a conversational ending without claiming physical unavailability; later quiet turns preserve that boundary, while a substantive new message can reopen it. An independent reviewer checks definite conflicts between words, action, time, evidence and available capabilities. It requests at most one revision and cannot write the line itself. A failed review remains an error for channel retry; no fixed substitute is inserted.
+- **Reflection:** a separate worker summarizes the character's own feeling, attention and current scene after delivery. It starts after a 20-second quiet age, normally coalescing updates to every four committed exchanges or ten minutes between source turns. A remaining completed exchange, including a deliberate quiet turn, also qualifies after 90 seconds, so its ending can be recorded without another incoming message. It never edits an utterance or invents user facts. Independent evidence review rejects definite unsupported user motives, impossible commitments or false unfinished obligations, with at most one revision. Reflection cannot change an executed action or utterance; a failed reflection leaves the earlier snapshot intact.
 - **Time:** feeling and its cause expire after eight hours; immediate intention, energy and engagement after two; scene after six; attention and unfinished subjects after 72. These are simple expiration rules, not a validated psychological model. The ordinary transcript remains available after a snapshot expires.
 - **Delivery:** prepared replies are reused on retry. Reflection ignores Feishu replies awaiting delivery. Forgetting clears derived character state; a reflection already in flight cannot recreate a deleted source. Existing quiet hours, contact limits and reply pacing remain in charge of contact.
 
@@ -36,7 +40,7 @@ The stable card and fictional setting establish who this person is. The current 
 
 Both ordinary dialogue and spontaneous-contact judgment use this same state. The character can introduce a subject, continue briefly, return to her own activity, or bring the exchange to a close. Local time supplies context; no production branch says that a particular hour must produce a sleep message. Curiosity or a significant concern may justify changing an earlier intention. Brief replies alone are not treated as evidence of anger, and an old disagreement should not become a permanent interpretation of ordinary questions.
 
-Background reflection updates these small authored snapshots after the exchange. It can retain an unfinished subject, remove one that was resolved or withdrawn, and let an earlier mood soften. It receives the source of the delivered reply too, so the character's own expressed intention need not be attributed to the user. Source IDs are checked for existence; semantic accuracy remains model-dependent. Unfinished subjects are optional context, not obligations or automatic reminders. There is no additional planning model call before each reply, and no claim that these snapshots constitute consciousness.
+Background reflection updates these small authored snapshots after the exchange. It can retain an unfinished subject, remove one that was resolved or withdrawn, and let an earlier mood soften. It receives the source of the delivered reply too, so the character's own expressed intention need not be attributed to the user. Source IDs are checked for existence and a separate model reviews clear semantic conflicts; neither check proves every interpretation correct. Unfinished subjects are optional context, not obligations or automatic reminders. There is no pre-dialogue planner, and no claim that these snapshots constitute consciousness.
 
 ## Mood, routine and availability
 
@@ -91,13 +95,13 @@ The reset covers the active local database. Existing Feishu chat messages, provi
 
 Feishu v2 groups consecutive messages from the same chat after a four-second pause, with a maximum wait of twelve seconds and eight messages per group. The last user message anchors one reply; all inputs remain in the transcript. Group membership is committed before generation, so retries/restarts keep the same contribution. A prepared reply is never absorbed into another group. Messages arriving after a group is claimed form a subsequent contribution. This is bounded coalescing, not a typing indicator or a claim to know when someone has finished.
 
-`internal/character/rhythm.go` supplies participation counts alongside the original dialogue: the size of the current contribution, recent message lengths and recent questions. Small contributions ordinarily receive one short thought; repeated questions or disproportionate speaking discourage further unsolicited elaboration. These are generation cues, not a hard text truncation or a keyword classifier for emotion. Important disclosures and substantive questions can still receive longer answers. No extra model call is introduced.
+`internal/character/rhythm.go` supplies participation counts alongside the original dialogue: the size of the current contribution, recent message lengths and recent questions. Small contributions ordinarily receive one short thought; repeated questions or disproportionate speaking discourage further unsolicited elaboration. These are generation cues, not a hard text truncation or a keyword classifier for emotion. Important disclosures and substantive questions can still receive longer answers. The independent review adds a model call and latency to each ordinary reply; a definite conflict can cause one more draft and review.
 
 The character can explicitly leave a completed or uninteresting optional exchange quiet. Direct questions, greetings, corrections and requests for help should still receive attention. The runtime distinguishes intentional silence from a failed generation, persists it and never sends the internal marker. Fictional activities do not authorize promises of photos, attachments or device operations without tools.
 
 ## Spontaneous contact
 
-With v2 and the Feishu runtime running, an independent loop considers whether the character has a concrete reason to reach out. It uses the character card, current state, ordered conversation, sourced memories and world events. It can follow up, share or reconnect, or decide to leave things quiet. A proposal contains a brief subject and source IDs; it is not hidden reasoning. Ordinary replies still use one direct generation.
+With v2 and the Feishu runtime running, an independent loop considers whether the character has a concrete reason to reach out. It uses the character card, current state, ordered conversation, sourced memories and world events. It can follow up, share or reconnect, or decide to leave things quiet. A proposal contains a brief subject and source IDs; it is not hidden reasoning. Ordinary replies use a direct draft followed by consistency review.
 
 Initial conservative limits:
 

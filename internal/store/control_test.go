@@ -271,3 +271,41 @@ func TestExpiredUnsentClosingIsReconsideredButFreshRetryIsStable(t *testing.T) {
 		t.Fatal("fresh retry reset", item, ok, err)
 	}
 }
+
+func TestWakeInvalidatesPendingSleepActionWithoutDroppingInput(t *testing.T) {
+	ctx := context.Background()
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 26, 1, 0, 0, 0, time.UTC)
+	if _, err := h.EnqueueFeishu(ctx, "old", "c", "m1", "在吗", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	old := character.Turn{Mode: "say", Reply: "先睡了", Absence: &character.Absence{Kind: "sleep", Until: at.Add(7 * time.Hour).Format(time.RFC3339), Reason: "休息"}}
+	if err := h.SaveCharacterTurn(ctx, 1, old, at); err != nil {
+		t.Fatal(err)
+	}
+	controlTestMessage(t, h, "/wake", at.Add(time.Second))
+	if err := h.SetFeishuReply(ctx, "old", old.Reply, at.Add(2*time.Second)); !errors.Is(err, ErrTurnSuperseded) {
+		t.Fatal("wake overtaken by old sleep draft", err)
+	}
+	if err := h.SaveCharacterTurn(ctx, 1, old, at.Add(2*time.Second)); !errors.Is(err, ErrTurnSuperseded) {
+		t.Fatal("old in-flight sleep survived wake", err)
+	}
+	item, ready, err := h.NextFeishuBatch(ctx, at.Add(5*time.Second))
+	if err != nil || !ready || item.UserMessageID != 1 {
+		t.Fatal(item, ready, err)
+	}
+	if _, found, err := h.CharacterTurn(ctx, 1); err != nil || found {
+		t.Fatal("stale draft still cached", err)
+	}
+	current := character.Turn{Mode: "say", Reply: "在的"}
+	if err := h.SaveCharacterTurn(ctx, 1, current, at.Add(5*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SetFeishuReply(ctx, "old", current.Reply, at.Add(5*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+}

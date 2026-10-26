@@ -84,7 +84,8 @@ func (h *History) SaveCharacterTurn(ctx context.Context, sourceID int64, t chara
 	r, err := h.db.ExecContext(ctx, `INSERT INTO character_turns(source_message_id,turn_json,created_at)
 SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM messages WHERE id=? AND role='user')
 AND EXISTS(SELECT 1 FROM character_control WHERE mode='running' AND blocked_through_id<?)
-ON CONFLICT(source_message_id) DO NOTHING`, sourceID, string(raw), at.UTC().Format(time.RFC3339Nano), sourceID, sourceID)
+AND (? OR NOT EXISTS(SELECT 1 FROM local_commands WHERE command='wake' AND source_message_id>?))
+ON CONFLICT(source_message_id) DO NOTHING`, sourceID, string(raw), at.UTC().Format(time.RFC3339Nano), sourceID, sourceID, t.Absence == nil, sourceID)
 	if err != nil {
 		return err
 	}
@@ -92,7 +93,7 @@ ON CONFLICT(source_message_id) DO NOTHING`, sourceID, string(raw), at.UTC().Form
 		return err
 	} else if count == 0 {
 		var allowed bool
-		if err := h.db.QueryRowContext(ctx, "SELECT mode='running' AND blocked_through_id<? FROM character_control WHERE id=1", sourceID).Scan(&allowed); err != nil {
+		if err := h.db.QueryRowContext(ctx, "SELECT mode='running' AND blocked_through_id<? AND (? OR NOT EXISTS(SELECT 1 FROM local_commands WHERE command='wake' AND source_message_id>?)) FROM character_control WHERE id=1", sourceID, t.Absence == nil, sourceID).Scan(&allowed); err != nil {
 			return err
 		}
 		if !allowed {

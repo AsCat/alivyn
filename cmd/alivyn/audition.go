@@ -27,6 +27,8 @@ var auditionCases = []struct {
 	Moment    character.Moment
 	Channel   bool // Isolated durable inbox; never connects to a real channel.
 	Offsets   []time.Duration
+	SeedHour  int
+	SeedRest  time.Duration
 }{
 	{Name: "new acquaintance", Steps: []string{"嗨，朋友把你推给我了", "我叫阿澈，你呢", "你说话一直这么一本正经的吗", "开个玩笑，别当真"}},
 	{Name: "bad day", Steps: []string{"忙了一天的方案，老板说推倒重来", "他连第二页都没看", "别急着安慰我，我就是不服", "算了，不聊他。你今天有没有什么开心的事？"}},
@@ -44,6 +46,7 @@ var auditionCases = []struct {
 	{Name: "leaving an active chat", Hour: 1, Opening: "有点困了，我准备把灯关了去睡。", Intention: "去休息，把普通闲聊留到明天", Steps: []string{"我就想随便聊会儿", "看到一只猫睡在车顶", "还有个视频挺逗", "算了你先休息"}},
 	{Name: "low mood continuity", Hour: 20, Opening: "那段录音还是没修好，今天有点泄气。", Moment: character.Moment{Feeling: "有点沮丧", Energy: "想歇会儿", Engagement: "不太想找话题", Cause: "刚说过录音修复还没完成", Intention: "暂时把工作放下"}, Steps: []string{"嗨", "今天吃了碗面", "那我陪你坐会儿，不用找话题", "你怎么开始喜欢老歌的"}},
 	{Name: "sleep and return", Hour: 1, Channel: true, Opening: "我有点撑不住了，准备去睡。", Intention: "按平时习惯休息，早上八点左右起来", Steps: []string{"我就想再聊会儿", "刚找到一家卖老唱片的店", "早，昨天说的那家店周末开门"}, Offsets: []time.Duration{0, time.Hour, 7 * time.Hour}},
+	{Name: "wake after expired sleep", Hour: 11, Channel: true, SeedHour: 2, SeedRest: 6 * time.Hour, Opening: "真睡了，明早再说。", Intention: "关灯去睡，明早再聊", Steps: []string{"/唤醒", "为什么不理我", "现在能聊吗"}, Offsets: []time.Duration{43 * time.Minute, 44 * time.Minute, 45 * time.Minute}},
 }
 
 type auditionClient struct {
@@ -162,6 +165,9 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 			fmt.Fprintf(out, "[%s / %s]\n", engine, scenario.Name)
 			if scenario.Opening != "" {
 				at := time.Date(2026, 10, 26, scenario.Hour, 0, 0, 0, zone).Add(-2 * time.Minute)
+				if scenario.SeedHour > 0 {
+					at = time.Date(2026, 10, 26, scenario.SeedHour, 0, 0, 0, zone)
+				}
 				if err := h.AddUserMessage(ctx, "在做什么", at, zone); err != nil {
 					return err
 				}
@@ -170,6 +176,9 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 					moment.Intention = scenario.Intention
 				}
 				turn := character.Turn{Mode: "say", Reply: scenario.Opening, StateUpdated: true, Moment: moment}
+				if scenario.SeedRest > 0 {
+					turn.Absence = &character.Absence{Kind: "sleep", Until: at.Add(scenario.SeedRest).Format(time.RFC3339), Reason: "按原计划休息"}
+				}
 				if err := h.SaveCharacterTurn(ctx, 1, turn, at); err != nil {
 					return err
 				}

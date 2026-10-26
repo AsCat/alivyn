@@ -139,3 +139,61 @@ func TestWakeReleasesDeferredReplyWithoutResettingMemory(t *testing.T) {
 		t.Fatal("wake erased personal facts")
 	}
 }
+
+func TestWakeAfterExpiredSleepOverridesOldTranscriptAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	h, err := store.OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zone := time.FixedZone("test", 8*3600)
+	night := time.Date(2026, 10, 26, 2, 30, 0, 0, zone)
+	if _, err := h.EnqueueFeishu(ctx, "night", "c", "m1", "在吗", night, zone); err != nil {
+		t.Fatal(err)
+	}
+	client := &characterScript{replies: []string{`{"mode":"away","reply":"真睡了，明早说","absence":{"kind":"sleep","until":"2026-10-26T08:00:00+08:00","reason":"准备休息"}}`, "在，刚才没接上。"}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Engine: "character_v2", Model: "mock", Timezone: "Asia/Shanghai"}, History: h, Client: client}
+	reply, err := s.ComposeReplyForAt(ctx, 1, night)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SetFeishuReply(ctx, "night", reply, night); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.MarkFeishuSent(ctx, "night"); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 10, 26, 11, 43, 0, 0, zone)
+	if err := h.AddUserMessage(ctx, "/唤醒", now, zone); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Close(); err != nil {
+		t.Fatal(err)
+	}
+	h, err = store.OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	s.History = h
+	if _, err := h.EnqueueFeishu(ctx, "day", "c", "m2", "为什么不理我", now.Add(time.Second), zone); err != nil {
+		t.Fatal(err)
+	}
+	latest, _ := h.Recent(ctx, 1)
+	if _, err := s.ComposeReplyForAt(ctx, latest[0].ID, now.Add(2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, m := range client.calls[1] {
+		joined += m.Content + "\n"
+	}
+	for _, want := range []string{"CURRENT AVAILABILITY: awake and available", "11:43:02+08:00", "Conversation time boundary", "No new timed absence"} {
+		if !strings.Contains(joined, want) {
+			t.Fatal("missing runtime transition", want)
+		}
+	}
+	if strings.Contains(joined, "/唤醒") {
+		t.Fatal("operator command leaked into the character transcript")
+	}
+}

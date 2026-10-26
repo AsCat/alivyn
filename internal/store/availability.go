@@ -20,6 +20,26 @@ FROM messages WHERE id=?`, sourceID).Scan(&received, &canLeave)
 	if err != nil {
 		return
 	}
+	// Wake is an explicit availability transition, even when a previous sleep
+	// deadline has already passed (or no timed absence was ever recorded).
+	var wakeStamp string
+	err = h.db.QueryRowContext(ctx, `SELECT m.created_at FROM local_commands c JOIN messages m ON m.id=c.source_message_id WHERE c.command='wake' ORDER BY m.id DESC LIMIT 1`).Scan(&wakeStamp)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return
+	}
+	if err == nil {
+		wakeAt, parseErr := time.Parse(time.RFC3339Nano, wakeStamp)
+		if parseErr != nil {
+			err = parseErr
+			return
+		}
+		if age := now.Sub(wakeAt); age >= 0 && age < time.Hour {
+			canLeave = false
+			status = fmt.Sprintf("CURRENT AVAILABILITY: awake and available. Resumed at %s; now %s. Earlier sleep, busy or solitude intentions have ended. Reconsider the latest message now; do not continue an old goodbye or claim to still be asleep. This is current runtime state, not a new shared experience or a topic to explain to the user.", wakeAt.Format(time.RFC3339), now.Format(time.RFC3339))
+			err = nil
+			return
+		}
+	}
 	var kind, reason string
 	var until int64
 	err = h.db.QueryRowContext(ctx, "SELECT kind,reason,until_ns FROM character_absence WHERE id=1").Scan(&kind, &reason, &until)
@@ -35,9 +55,12 @@ FROM messages WHERE id=?`, sourceID).Scan(&received, &canLeave)
 	if now.Before(end) {
 		canLeave = false
 		status += "; still away"
-	} else if now.Sub(end) < time.Hour {
-		canLeave = false
-		status += "; recently returned, reconsider waiting messages before another absence"
+	} else {
+		status += "; CURRENT AVAILABILITY: returned and available. That absence has ended; earlier bedtime messages describe the past, not the present. Reconsider new messages at the current local time."
+		if now.Sub(end) < time.Hour {
+			canLeave = false
+			status += "; recently returned, reconsider waiting messages before another absence"
+		}
 	}
 	return
 }
@@ -45,6 +68,13 @@ FROM messages WHERE id=?`, sourceID).Scan(&received, &canLeave)
 func saveAbsenceTx(ctx context.Context, tx *sql.Tx, sourceID int64, t character.Turn) error {
 	if t.Absence == nil {
 		return nil
+	}
+	var superseded bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM local_commands WHERE command='wake' AND source_message_id>?)", sourceID).Scan(&superseded); err != nil {
+		return err
+	}
+	if superseded {
+		return ErrTurnSuperseded
 	}
 	until, err := time.Parse(time.RFC3339, t.Absence.Until)
 	if err != nil {

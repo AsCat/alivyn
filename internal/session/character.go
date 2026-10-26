@@ -25,6 +25,7 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 	f.Recent = nil
 	inDialogue := map[string]bool{}
 	lastChat := ""
+	var previousAt time.Time
 	var sources []actor.Evidence
 	for _, e := range entries {
 		if e.Content == store.ForgetAcknowledgement {
@@ -39,6 +40,10 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 			continue
 		}
 		inDialogue[fmt.Sprintf("chat:%d", e.ID)] = true
+		if !previousAt.IsZero() && e.CreatedAt.Sub(previousAt) >= 2*time.Hour {
+			f.Recent = append(f.Recent, model.Message{Role: "system", Content: fmt.Sprintf("Conversation time boundary: %.1f hours passed since the preceding message. The next message arrived at %s. Earlier activities and goodbyes are historical; use the current availability state and local time, rather than treating this as one uninterrupted exchange.", e.CreatedAt.Sub(previousAt).Hours(), e.CreatedAt.Format(time.RFC3339))})
+		}
+		previousAt = e.CreatedAt
 		text := e.Content
 		if r := []rune(text); len(r) > 2000 {
 			text = string(r[:2000]) + "…"

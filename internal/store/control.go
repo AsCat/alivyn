@@ -89,6 +89,9 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 	if !isControlInput(text) {
 		name = "blocked"
 		zh, en = "【控制台】人物对话已暂停。这条消息不会进入人物记忆；可用 /唤醒 恢复，或 /返回角色 退出诊断。", "Character dialogue is paused. This message will not enter character memory. Use /wake to resume or /resume to leave diagnostics."
+		if mode == "diagnostic" {
+			zh, en = "【控制台】当前在诊断模式，人物聊天已暂停。发送 /返回角色 继续聊天；这条消息不会进入人物记忆。", "Diagnostics is active; character chat is paused. Send /resume to return to chat. This message will not enter character memory."
+		}
 	} else {
 		switch name {
 		case "help":
@@ -130,9 +133,12 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 				err = exec("UPDATE character_absence SET until_ns=MIN(until_ns,?)", at.UnixNano())
 			}
 			if err == nil {
+				err = exec(`INSERT INTO reply_deferrals(source_message_id,until_ns) SELECT source_message_id,? FROM character_turns WHERE json_extract(turn_json,'$.absence') IS NOT NULL ON CONFLICT(source_message_id) DO NOTHING`, at.UnixNano())
+			}
+			if err == nil {
 				err = exec("UPDATE reply_deferrals SET until_ns=MIN(until_ns,?)", at.UnixNano())
 			}
-			zh, en = "【控制台】人物已唤醒，记忆保留；原有勿扰和联系限制继续生效。", "Character awake; memory preserved. Existing contact restrictions still apply."
+			zh, en = "【控制台】已恢复聊天，记忆保留。勿扰只影响她主动联系，不影响回复你的消息。", "Chat resumed; memory preserved. Do-not-disturb limits proactive contact, not replies to your messages."
 		case "quiet", "contact_on":
 			err = exec("UPDATE contact_settings SET paused=? WHERE id=1", name == "quiet")
 			if name == "quiet" {

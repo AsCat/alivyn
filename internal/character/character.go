@@ -117,6 +117,9 @@ func messagesFor(c Context) ([]model.Message, error) {
 	} else {
 		messages = append(messages, rhythmMessage(c))
 	}
+	if c.Availability != "" {
+		messages = append(messages, model.Message{Role: "system", Content: "Authoritative current availability, after the historical transcript: " + c.Availability + " Current local time: " + c.Frame.Now + ". Respond from this state. Do not explain control commands, invent missing experiences, or deny earlier messages."})
+	}
 	if c.CanLeave && c.Occasion == "" {
 		contract := `Return JSON only: {"mode":"say|wait|away","reply":"actual message or empty","absence":null}. Choose ONE mode. For away, absence must be {"kind":"sleep|busy|alone","until":"RFC3339 return time","reason":"brief reason"}, choosing one kind. Words saying you leave now require away. No analysis.`
 		if c.Frame.Language == "zh-CN" {

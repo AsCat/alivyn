@@ -47,7 +47,11 @@ func runPersona(args []string, out io.Writer) error {
 		if err := config.SavePersonaPack(args[2]); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "Persona pack set to %s. Restart a running channel to apply it. Identity and memories are retained.\n", args[2])
+		if selected, ok := persona.Get(args[2]); ok && selected.Standalone {
+			fmt.Fprintf(out, "Guest persona set to %s. Use an isolated ALIVYN_HOME and restart the channel.\n", args[2])
+		} else {
+			fmt.Fprintf(out, "Persona pack set to %s. Restart a running channel to apply it. Identity and memories are retained.\n", args[2])
+		}
 		return nil
 	}
 	if len(args) == 2 && args[0] == "routine" && args[1] == "show" {
@@ -99,10 +103,13 @@ func runPersona(args []string, out io.Writer) error {
 		fmt.Fprintf(out, "Persona style set to %s. Restart a running channel to apply it.\n", args[1])
 		return nil
 	}
-	return errors.New("usage: alivyn persona show|set natural|romantic|companion|pack list|pack show|pack set natural|vivid|background show|background set <text>|routine show|routine set <text>")
+	return errors.New("usage: alivyn persona show|set natural|romantic|companion|pack list|pack show|pack set natural|vivid|dafeiyu-astrbot|background show|background set <text>|routine show|routine set <text>")
 }
 
 func displayPersonaBackground(c config.Config) string {
+	if selected, ok := persona.Get(c.EffectivePersonaPack()); ok && selected.Standalone {
+		return "Imported guest persona: " + selected.NameZH + " (see internal/persona/third_party/dafeiyu-astrbot-v2.1.md)"
+	}
 	if c.EffectiveEngine() == "character_v2" && strings.TrimSpace(c.Background) == "" {
 		return character.DefaultPersona(c.Language)
 	}

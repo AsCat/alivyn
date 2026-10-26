@@ -2,7 +2,9 @@
 
 Status: the first temperament and episode loop works; perception, device actions, and separate character instances remain future work.
 
-`persona pack` changes how **the same Alivyn individual** responds. `natural` preserves the existing treatment. `vivid` adds more specific preferences, conflicting motives, and emotional carryover. Switching keeps the name, fictional world, conversation history, and contact limits. It does not create another person or reinterpret their past.
+`natural` and `vivid` change how **the same Alivyn individual** responds. `natural` preserves the existing treatment. `vivid` adds more specific preferences, conflicting motives, and emotional carryover. Switching between these keeps the name, fictional world, conversation history, and contact limits.
+
+`dafeiyu-astrbot` is a separate guest character using an upstream AstrBot v2.1 persona prompt. It requires a separate `ALIVYN_HOME`; switching an existing history between Alivyn and the guest is rejected. This is a text persona trial, not the full upstream bot or its phone/media tools. See [the trial provenance and limits](dafeiyu-trial.md).
 
 ```sh
 alivyn persona pack list

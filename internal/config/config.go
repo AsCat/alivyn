@@ -159,6 +159,9 @@ func SaveWorldPack(pack string) error {
 }
 
 func (c Config) EffectiveBackground() string {
+	if selected, ok := persona.Get(c.EffectivePersonaPack()); ok && selected.Standalone {
+		return persona.Text(selected.ID, c.Language)
+	}
 	base := strings.TrimSpace(c.Background)
 	if base == "" {
 		if c.Language == "zh-CN" {
@@ -173,11 +176,28 @@ func (c Config) EffectiveBackground() string {
 	return base
 }
 
-// SavePersonaPack changes temperament without changing identity or stored history.
+// SavePersonaPack keeps existing history and refuses to cross the boundary
+// between Alivyn and a standalone guest once a history database exists.
 func SavePersonaPack(id string) error {
 	c, err := Load()
 	if err != nil {
 		return err
+	}
+	current, _ := persona.Get(c.EffectivePersonaPack())
+	next, ok := persona.Get(id)
+	if !ok {
+		return errors.New("unknown persona pack")
+	}
+	if current.Standalone != next.Standalone {
+		dir, err := Directory()
+		if err != nil {
+			return err
+		}
+		if _, err := os.Stat(filepath.Join(dir, "alivyn.db")); err == nil {
+			return errors.New("guest characters require a separate ALIVYN_HOME so their memories do not mix")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	c.PersonaPack = id
 	return saveExisting(c)

@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestRemoteModelMustUseHTTPS(t *testing.T) {
 	base := Config{SchemaVersion: 1, Name: "Ari", Language: "en", Provider: "custom", Model: "example"}
@@ -102,5 +106,23 @@ func TestPersonaPackChangesTemperamentWithoutReplacingIdentity(t *testing.T) {
 	}
 	if reset, err := Load(); err != nil || reset.EffectivePersonaPack() != "natural" {
 		t.Fatalf("cannot return to original temperament: %+v %v", reset, err)
+	}
+}
+
+func TestGuestCharacterCannotShareAnExistingHistory(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ALIVYN_HOME", dir)
+	c := Config{SchemaVersion: 1, Name: "意续", Language: "zh-CN", Provider: "deepseek", BaseURL: DefaultDeepSeekURL, Model: DefaultDeepSeekModel}
+	if err := SaveNew(c); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "alivyn.db"), []byte("existing history"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SavePersonaPack("dafeiyu-astrbot"); err == nil {
+		t.Fatal("guest character was allowed to share the existing history")
+	}
+	if got, err := Load(); err != nil || got.EffectivePersonaPack() != "natural" {
+		t.Fatalf("failed guest switch changed the live persona: %+v %v", got, err)
 	}
 }

@@ -1,0 +1,7 @@
+# DaFeiYu upstream persona trial
+
+This guest character embeds the v2.1 system prompt body from [whyever77/dafeiyu-astrbot](https://github.com/whyever77/dafeiyu-astrbot), specifically `persona/大肥鱼-人格.md` at commit `662cd5dd096ce0c0cf2f599b51e82efff80da24d` (retrieved 2026-10-26). The upstream repository licenses the persona text under MIT and requests attribution. Its license is retained at `internal/persona/third_party/LICENSE.dafeiyu-astrbot`. DaFeiYu is a community derivative character, not an official DeepSeek character.
+
+Run it in a separate `ALIVYN_HOME` with its own configuration and history. The runtime rejects switching an existing history between Alivyn and this guest character. One Feishu private chat must be served by only one active agent at a time.
+
+This trial preserves the upstream text persona, with Alivyn's DeepSeek model connection, Feishu text transport, continuity state and contact scheduler. It does not install AstrBot, QQ, its plugins, image/audio tools or virtual phone. The source prompt says the character lives in QQ; the actual trial transport is Feishu, and the runtime tells the model that these differ. Refer to the [Chinese trial notes](dafeiyu-trial.zh-CN.md) for the local deployment.

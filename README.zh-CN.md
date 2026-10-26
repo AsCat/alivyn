@@ -49,7 +49,7 @@ go run ./cmd/alivyn
 
 默认语气是**自然**：直接、简洁，亲近感随着真实交流逐渐形成。意续初识时把对方当陌生人；有效交谈会让关系逐步走向初识、熟悉和亲近，反复说“你好”不会让她自动变熟。对方要求保持距离时，她会收敛亲密语气。`alivyn persona show` 查看风格与人物背景；`alivyn persona set natural|romantic|companion` 切换风格，`alivyn persona background set '慢热，遇到陌生人先观察对方。'` 可设置简短人物背景，并影响第一次打招呼。已运行的渠道需要重启才能生效。飞书回复会按收到消息的时间计算一个有上限的短暂间隔；模型已经花较长时间时不会额外等待。意续把当地时间当作背景信息，不会只凭时钟猜测你在做什么。
 
-新增可选的**鲜活性格包**：为同一个意续补充更明确的偏好、互相牵扯的心思和情绪余波，沿用她原有的名字、世界与记忆。这是意续原创的人物写法，借鉴社区陪伴角色的设计机制，不使用其形象或人设文本。`character_v2` 还会把有来源的重要交流整理成可供后来回想的经历；鲜活包在飞书里偶尔可以把一轮回复分成两三条短气泡。运行 `alivyn persona pack list` 查看，再用 `alivyn persona pack set vivid` 选择；`set natural` 可回到原版。已运行的飞书渠道需要重启。语音、图片、手机工具与另一位独立人物仍待实现。可用 `ALIVYN_AUDITION_PACK=vivid alivyn actor audition character_v2 "bad day"` 做隔离试演，与 `ALIVYN_AUDITION_PACK=natural` 对比，不改线上配置或发送真实消息。能力边界与后续接入方案见[体验包设计](docs/experience-packs.zh-CN.md)。
+新增可选的**鲜活性格包**：为同一个意续补充更明确的偏好、互相牵扯的心思和情绪余波，沿用她原有的名字、世界与记忆。这是意续原创的人物写法，借鉴社区陪伴角色的设计机制。`character_v2` 还会把有来源的重要交流整理成可供后来回想的经历；鲜活包在飞书里偶尔可以把一轮回复分成两三条短气泡。运行 `alivyn persona pack list` 查看，再用 `alivyn persona pack set vivid` 选择；`set natural` 可回到原版。已运行的飞书渠道需要重启。可用 `ALIVYN_AUDITION_PACK=vivid alivyn actor audition character_v2 "bad day"` 做隔离试演。另有使用上游原始文本的[大肥鱼独立角色试用](docs/dafeiyu-trial.zh-CN.md)，须与意续分开存储。语音、图片、手机工具仍待实现。能力边界见[体验包设计](docs/experience-packs.zh-CN.md)。
 
 当前记忆提取器识别明确的面试表述，也识别“我叫阿意”“我喜欢咖啡”等简短、明确的个人陈述。个人记忆保留来源，长对话后仍能调用；后来说“我不喜欢咖啡”会修正旧偏好，说“忘记我喜欢咖啡”或“忘记我的名字”会删除对应记忆并遮盖原始消息。面试记忆保留改期和 `memory forget interview` 的机制。用 `memory list` 查看当前事实，或用 `memory export` 导出包含 `events` 和 `personal` 的 JSON。较长或含糊的说法不会自动变成长期个人记忆；这里也不是完整账号数据导出。
 

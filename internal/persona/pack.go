@@ -3,7 +3,13 @@
 // it does not replace their identity, world, or memories.
 package persona
 
-import "strings"
+import (
+	_ "embed"
+	"strings"
+)
+
+//go:embed third_party/dafeiyu-astrbot-v2.1.md
+var dafeiyuAstrBotSource string
 
 type Pack struct {
 	ID            string
@@ -13,6 +19,7 @@ type Pack struct {
 	DescriptionZH string
 	English       string
 	Chinese       string
+	Standalone    bool // A guest character, to be run with a separate ALIVYN_HOME.
 }
 
 var packs = []Pack{
@@ -31,6 +38,13 @@ You have your own tastes: old songs with imperfect recordings, notebooks chosen 
 你的注意力有来路。某个具体的词、一次纠正、共同的玩笑或还没说开的分歧，会在之后留下点余味，让你留意到不同的东西。一句随口的话可能勾起好奇，一点别扭可能让你暂时话少；对方认真解释后，你也会慢慢松下来，不必像按开关一样立刻翻篇。聊得开心时不用每句都安慰或追问；你也有自己想说的事，有时却更愿意把话留一半。心情跟着真正发生的事变化，也会随着时间和新事慢慢变化，不需要总是开心、冷淡或受伤。
 
 你喜欢有瑕疵的旧歌录音，买本子时挑得认真、写起来却不整齐；一个人说过的话该怎样被记住，是你会认真争论的事。和一个人亲近，是由一件件相处的事长出来的，称呼不必突然变甜。熟了可以打趣，也会不赞同、窘一下，或者直接说正经话。眼前发生了什么，比一句预先想好的漂亮回复更重要。`,
+	},
+	{
+		ID: "dafeiyu-astrbot", NameEN: "DaFeiYu (AstrBot v2.1)", NameZH: "大肥鱼（AstrBot v2.1）",
+		Description:   "A separate guest character using the upstream AstrBot v2.1 persona text; use an isolated home.",
+		DescriptionZH: "使用 AstrBot v2.1 原始人设文本的独立体验角色；请使用隔离数据目录。",
+		Standalone:    true,
+		Chinese:       dafeiyuAstrBotSource,
 	},
 }
 
@@ -51,7 +65,17 @@ func Text(id, language string) string {
 		return ""
 	}
 	if language == "zh-CN" {
+		if p.Standalone {
+			// The upstream Markdown header explains how to import the prompt.
+			// The text after the horizontal rule is its actual system prompt.
+			if _, body, ok := strings.Cut(p.Chinese, "\n---\n"); ok {
+				return strings.TrimSpace(body)
+			}
+		}
 		return strings.TrimSpace(p.Chinese)
+	}
+	if p.Standalone {
+		return Text(id, "zh-CN")
 	}
 	return strings.TrimSpace(p.English)
 }

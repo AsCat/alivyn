@@ -26,6 +26,22 @@ func TestMessagesPreserveVoiceAndActualDialogue(t *testing.T) {
 	}
 }
 
+func TestImportedGuestPromptReplacesAlivynBasePrompt(t *testing.T) {
+	c := Context{Persona: "你是「大肥鱼」，住在 QQ 里的蓝色小鲸鱼娘。", DirectPersona: true,
+		Frame: actor.Frame{Name: "大肥鱼", Language: "zh-CN", Recent: []model.Message{{Role: "user", Content: "嗨"}}}}
+	messages, err := Messages(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	system := messages[0].Content
+	if !strings.HasPrefix(system, c.Persona) || !strings.Contains(system, "actual transport is Feishu") {
+		t.Fatal("imported persona or transport boundary missing")
+	}
+	if strings.Contains(system, "你在私聊里扮演一个持续生活的具体人物") {
+		t.Fatal("Alivyn's default prompt was mixed into the guest persona")
+	}
+}
+
 func TestTurnAllowsAuthoredSceneButRejectsInventedWorldReferences(t *testing.T) {
 	f := actor.Frame{Canon: "fictional city", Evidence: []actor.Evidence{{ID: "worldv2:3", Provenance: "simulated_world"}}}
 	raw := `{"mode":"say","reply":"在等水开。","moment":{"feeling":"放松","attention":"晚饭","scene":"烧水煮面"},"used_world_ids":[]}`

@@ -306,7 +306,7 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 			return h.SkipFeishuReply(ctx, item.EventID)
 		}
 		parts := []string{reply}
-		if s.Config.EffectiveEngine() == "character_v2" && s.Config.EffectivePersonaPack() == "vivid" {
+		if s.Config.EffectiveEngine() == "character_v2" && (s.Config.EffectivePersonaPack() == "vivid" || s.Config.EffectivePersonaPack() == "dafeiyu-astrbot") {
 			turn, found, err := h.CharacterTurn(ctx, item.UserMessageID)
 			if err != nil {
 				return err

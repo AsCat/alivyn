@@ -92,7 +92,11 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 	if strings.TrimSpace(c.Routine) == "" {
 		c.Routine = character.DefaultRoutine(s.Config.Language)
 	}
-	c.CanLeave, c.Availability, c.ReceivedAt, err = s.History.AvailabilityContext(ctx, f.SourceMessageID, now)
+	localNow, err := time.Parse(time.RFC3339, f.Now)
+	if err != nil {
+		return character.Context{}, err
+	}
+	c.CanLeave, c.Availability, c.ReceivedAt, err = s.History.AvailabilityContext(ctx, f.SourceMessageID, localNow)
 	if err != nil {
 		return character.Context{}, err
 	}

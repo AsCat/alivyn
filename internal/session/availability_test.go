@@ -188,12 +188,46 @@ func TestWakeAfterExpiredSleepOverridesOldTranscriptAcrossRestart(t *testing.T) 
 	for _, m := range client.calls[1] {
 		joined += m.Content + "\n"
 	}
-	for _, want := range []string{"CURRENT AVAILABILITY: awake and available", "11:43:02+08:00", "Conversation time boundary", "No new timed absence"} {
+	for _, want := range []string{"CURRENT AVAILABILITY: returned and available", "08:00:00+08:00", "3.7 hours have passed", "chat routing was enabled", "does not mean the character just woke up", "11:43:02+08:00", "Conversation time boundary", "No new timed absence"} {
 		if !strings.Contains(joined, want) {
 			t.Fatal("missing runtime transition", want)
 		}
 	}
+	if strings.Contains(joined, "awake and available") || strings.Contains(joined, "Resumed at") {
+		t.Fatal("chat control was represented as a waking event")
+	}
 	if strings.Contains(joined, "/唤醒") {
 		t.Fatal("operator command leaked into the character transcript")
+	}
+}
+
+func TestWakeWithoutAbsenceDoesNotBecomeACharacterWakingEvent(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	zone := time.FixedZone("test", 8*3600)
+	now := time.Date(2026, 10, 26, 11, 43, 0, 0, zone)
+	if err := h.AddUserMessage(ctx, "/唤醒", now, zone); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.AddUserMessage(ctx, "现在在忙吗", now.Add(time.Second), zone); err != nil {
+		t.Fatal(err)
+	}
+	client := &characterScript{replies: []string{"刚忙完。"}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Engine: "character_v2", Timezone: "Asia/Shanghai", Model: "mock"}, History: h, Client: client}
+	if _, err := s.ComposeReplyForAt(ctx, 2, now.Add(2*time.Second).UTC()); err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, m := range client.calls[0] {
+		joined += m.Content + "\n"
+	}
+	for _, want := range []string{"chat routing enabled", "11:43:02+08:00", "does not mean the character just woke up"} {
+		if !strings.Contains(joined, want) {
+			t.Fatal("missing local control context", want)
+		}
 	}
 }

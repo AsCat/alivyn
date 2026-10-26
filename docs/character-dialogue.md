@@ -46,7 +46,7 @@ The default routine describes resting around 00:30 and rising around 08:00, with
 
 One generation chooses speech, silence, or a timed absence for sleep, another activity or solitude. `[[wait]]` sends nothing and schedules no follow-up. When timed absence is available, one generation returns a small `mode/reply/absence` envelope. It contains only a delivery choice, actual words and optional absence parameters (kind, RFC3339 return time and short reason), not chain-of-thought or a full emotional report. Only the reply reaches the user. Ordinary completion plus local validation avoids blank output observed with some provider JSON modes; the older `[[away:{...}]]` first-line format is also parsed. The executor validates a return between one minute and sixteen hours away and persists the decision. While away, ordinary messages wait without model polling, and proactive contact is blocked.
 
-At return, waiting messages are reconsidered together, up to eight at a time; no stale bedtime draft is sent. A previously deferred source cannot be deferred again, and another absence is unavailable for an hour after returning. The queue and deadline survive restarts. `/status` shows an active absence; `/wake` ends it early. Wake explicitly updates current availability and prevents another timed absence for an hour, even if the old deadline has already passed or there was no recorded absence. Contact restrictions only govern proactive contact. Multi-hour transcript gaps carry time boundaries so old goodbyes are not treated as current intentions.
+At return, waiting messages are reconsidered together, up to eight at a time; no stale bedtime draft is sent. A previously deferred source cannot be deferred again, and another absence is unavailable for an hour after returning. The queue and deadline survive restarts. `/status` shows an active absence; `/wake` ends it early. Wake changes chat routing, not when the character got out of bed. The model receives the local end time and elapsed time of the last absence separately from this control action. Another timed absence remains unavailable for an hour after chat resumes, even if the old deadline had passed or no absence was recorded. Contact restrictions only govern proactive contact. Multi-hour transcript gaps carry time boundaries so old goodbyes are not treated as current intentions.
 
 Unattended deferred delivery currently runs only in the `character_v2` Feishu worker. Terminal chat supports mood, routine, silence and controls, but does not send a background return message. Offline machines cannot deliver; expired work is considered on resumption. The model still chooses whether to leave: this is not a hard nightly schedule or a guarantee of humanlike behavior.
 
@@ -59,7 +59,7 @@ Send a command as a separate message. Actions execute locally during ingestion, 
 | `/help` | `/帮助` | List commands |
 | `/status` | `/状态` | Runtime mode, current absence and contact limits |
 | `/freeze` | `/暂停` | Pause character replies and proactive contact, keeping memory |
-| `/wake` | `/唤醒` | Resume and end an absence early, preserving contact restrictions |
+| `/wake` | `/唤醒` | Resume chat and end an absence early, preserving contact restrictions |
 | `/quiet` | `/勿扰` | Disable proactive contact |
 | `/contact on` | `/允许主动` | Allow initiative, subject to quiet hours and limits |
 | `/diagnostics` | `/诊断` | Request internal inspection |

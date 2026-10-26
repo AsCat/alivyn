@@ -118,7 +118,7 @@ func messagesFor(c Context) ([]model.Message, error) {
 		messages = append(messages, rhythmMessage(c))
 	}
 	if c.Availability != "" {
-		messages = append(messages, model.Message{Role: "system", Content: "Authoritative current availability, after the historical transcript: " + c.Availability + " Current local time: " + c.Frame.Now + ". Respond from this state. Do not explain control commands, invent missing experiences, or deny earlier messages."})
+		messages = append(messages, model.Message{Role: "system", Content: "Authoritative current availability, after the historical transcript: " + c.Availability + " Current local time: " + c.Frame.Now + ". Respond from this state. Prior spoken plans and goodbyes show what was said then; they cannot override elapsed time or the persisted absence end. A spoken line without an active timed absence is not evidence of a present absence. If an earlier line conflicts with the current clock or availability, acknowledge the mismatch briefly when relevant. Do not explain control commands or invent missing experiences."})
 	}
 	if c.CanLeave && c.Occasion == "" {
 		contract := `Return JSON only: {"mode":"say|wait|away","reply":"actual message or empty","absence":null}. Choose ONE mode. For away, absence must be {"kind":"sleep|busy|alone","until":"RFC3339 return time","reason":"brief reason"}, choosing one kind. Words saying you leave now require away. No analysis.`

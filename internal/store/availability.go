@@ -20,47 +20,52 @@ FROM messages WHERE id=?`, sourceID).Scan(&received, &canLeave)
 	if err != nil {
 		return
 	}
-	// Wake is an explicit availability transition, even when a previous sleep
-	// deadline has already passed (or no timed absence was ever recorded).
+	// Wake changes chat routing. It is not an event in the character's life:
+	// in particular, it does not establish when the character got out of bed.
 	var wakeStamp string
 	err = h.db.QueryRowContext(ctx, `SELECT m.created_at FROM local_commands c JOIN messages m ON m.id=c.source_message_id WHERE c.command='wake' ORDER BY m.id DESC LIMIT 1`).Scan(&wakeStamp)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return
 	}
+	var recentWake bool
+	var wakeAt time.Time
 	if err == nil {
-		wakeAt, parseErr := time.Parse(time.RFC3339Nano, wakeStamp)
-		if parseErr != nil {
-			err = parseErr
+		wakeAt, err = time.Parse(time.RFC3339Nano, wakeStamp)
+		if err != nil {
 			return
 		}
-		if age := now.Sub(wakeAt); age >= 0 && age < time.Hour {
-			canLeave = false
-			status = fmt.Sprintf("CURRENT AVAILABILITY: awake and available. Resumed at %s; now %s. Earlier sleep, busy or solitude intentions have ended. Reconsider the latest message now; do not continue an old goodbye or claim to still be asleep. This is current runtime state, not a new shared experience or a topic to explain to the user.", wakeAt.Format(time.RFC3339), now.Format(time.RFC3339))
-			err = nil
-			return
-		}
+		age := now.Sub(wakeAt)
+		recentWake = age >= 0 && age < time.Hour
 	}
 	var kind, reason string
 	var until int64
 	err = h.db.QueryRowContext(ctx, "SELECT kind,reason,until_ns FROM character_absence WHERE id=1").Scan(&kind, &reason, &until)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = nil
+		if recentWake {
+			canLeave = false
+			status = fmt.Sprintf("CURRENT AVAILABILITY: chat routing enabled at %s; now %s. This control action is not a character-life event and does not mean the character just woke up. Earlier intentions to leave do not imply a current absence.", wakeAt.In(now.Location()).Format(time.RFC3339), now.Format(time.RFC3339))
+		}
 		return
 	}
 	if err != nil {
 		return
 	}
-	end := time.Unix(0, until)
-	status = fmt.Sprintf("Last absence: %s, reason: %s, return time: %s", kind, reason, end.Format(time.RFC3339))
+	end := time.Unix(0, until).In(now.Location())
+	status = fmt.Sprintf("Last character absence: %s, reason: %s, ended or ends at: %s; current local time: %s", kind, reason, end.Format(time.RFC3339), now.Format(time.RFC3339))
 	if now.Before(end) {
 		canLeave = false
 		status += "; still away"
 	} else {
-		status += "; CURRENT AVAILABILITY: returned and available. That absence has ended; earlier bedtime messages describe the past, not the present. Reconsider new messages at the current local time."
+		status += fmt.Sprintf("; CURRENT AVAILABILITY: returned and available; %.1f hours have passed since that absence ended. Earlier leaving or bedtime lines are past statements, not the present state. Respond at the current local time.", now.Sub(end).Hours())
 		if now.Sub(end) < time.Hour {
 			canLeave = false
 			status += "; recently returned, reconsider waiting messages before another absence"
 		}
+	}
+	if recentWake {
+		canLeave = false
+		status += fmt.Sprintf("; chat routing was enabled at %s. That control action is not a character-life event and does not mean the character just woke up; it cannot move the prior absence into the present.", wakeAt.In(now.Location()).Format(time.RFC3339))
 	}
 	return
 }

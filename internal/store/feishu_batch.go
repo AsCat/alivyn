@@ -10,6 +10,17 @@ import (
 // transcript. A claimed batch, cached generation or prepared send is immutable
 // across retries and restarts. The worker must have only one consumer.
 func (h *History) NextFeishuBatch(ctx context.Context, now time.Time) (FeishuInboxItem, bool, error) {
+	return h.NextFeishuBatchWithPause(ctx, now, 4*time.Second)
+}
+
+// NextFeishuBatchWithPause gives a more conversational guest character time
+// to hear a few consecutive thoughts as one contribution. The pause is
+// bounded so a stream of messages cannot postpone the reply indefinitely.
+func (h *History) NextFeishuBatchWithPause(ctx context.Context, now time.Time, pause time.Duration) (FeishuInboxItem, bool, error) {
+	if pause < time.Second || pause > 10*time.Second {
+		pause = 4 * time.Second
+	}
+	window := 3 * pause
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
 		return FeishuInboxItem{}, false, err
@@ -42,7 +53,7 @@ ORDER BY f.received_ns,f.rowid LIMIT 8`, now.UnixNano())
 		}
 		item.ReceivedAt = time.Unix(0, ns)
 		backlog := len(batch) > 0 && !item.ReceivedAt.After(now) && now.Sub(batch[0].ReceivedAt) > time.Minute
-		if len(batch) > 0 && (item.ChatID != batch[0].ChatID || item.State == "ready" || claimed || (!backlog && (item.ReceivedAt.Sub(batch[len(batch)-1].ReceivedAt) > 4*time.Second || item.ReceivedAt.Sub(batch[0].ReceivedAt) > 12*time.Second))) {
+		if len(batch) > 0 && (item.ChatID != batch[0].ChatID || item.State == "ready" || claimed || (!backlog && (item.ReceivedAt.Sub(batch[len(batch)-1].ReceivedAt) > pause || item.ReceivedAt.Sub(batch[0].ReceivedAt) > window))) {
 			break
 		}
 		batch = append(batch, item)
@@ -65,7 +76,7 @@ ORDER BY f.received_ns,f.rowid LIMIT 8`, now.UnixNano())
 	}
 	// Bound the wait even when someone keeps typing. No sleep or model call
 	// holds the database transaction open.
-	if now.Sub(anchor.ReceivedAt) < 4*time.Second && now.Sub(batch[0].ReceivedAt) < 12*time.Second && len(batch) < 8 {
+	if now.Sub(anchor.ReceivedAt) < pause && now.Sub(batch[0].ReceivedAt) < window && len(batch) < 8 {
 		return FeishuInboxItem{}, false, nil
 	}
 	for _, item := range batch {

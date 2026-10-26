@@ -95,6 +95,32 @@ func TestFeishuBatchBoundaries(t *testing.T) {
 	}
 }
 
+func TestLongerGuestPauseGroupsTwoThoughts(t *testing.T) {
+	ctx := context.Background()
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Now().Add(-time.Minute)
+	for i, line := range []string{"你在干嘛", "有什么想对我说的吗"} {
+		if _, err := h.EnqueueFeishu(ctx, fmt.Sprint(i), "chat", fmt.Sprint(i), line, at.Add(time.Duration(i)*5*time.Second), time.UTC); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, ready, err := h.NextFeishuBatchWithPause(ctx, at.Add(10*time.Second), 7*time.Second); err != nil || ready {
+		t.Fatalf("guest answered before the conversational pause: ready=%t err=%v", ready, err)
+	}
+	item, ready, err := h.NextFeishuBatchWithPause(ctx, at.Add(12*time.Second), 7*time.Second)
+	if err != nil || !ready || item.EventID != "1" {
+		t.Fatalf("guest did not group both thoughts: %+v ready=%t err=%v", item, ready, err)
+	}
+	entries, err := h.ActorTranscriptThrough(ctx, 10, item.UserMessageID)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("both lines must reach the same reply: %+v %v", entries, err)
+	}
+}
+
 func TestForgettingEarlierBatchMemberRedactsAndCancelsAnchor(t *testing.T) {
 	ctx := context.Background()
 	h, err := OpenHistory(ctx, t.TempDir())

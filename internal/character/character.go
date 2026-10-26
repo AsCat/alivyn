@@ -151,7 +151,12 @@ func messagesFor(c Context) ([]model.Message, error) {
 	if c.Occasion != "" {
 		messages = append(messages, model.Message{Role: "system", Content: "Policy has approved one spontaneous message for this reason: " + c.Occasion + ". Continue in the same personal voice. This is not a new user utterance. Keep it brief; no obligation to reply."})
 	} else {
-		messages = append(messages, rhythmMessage(c))
+		// The imported character already defines its own conversation rhythm.
+		// Applying Alivyn's short-reply meter here suppresses the very persona
+		// the user selected, especially after a short invitation to talk.
+		if !c.DirectPersona {
+			messages = append(messages, rhythmMessage(c))
+		}
 		if c.AllowBubbles {
 			instruction := "A thought may sometimes arrive in two short beats. When that feels natural, place one blank line between them inside reply; the chat channel will send them as separate bubbles. One bubble is often enough. At most three, with no labels or filler."
 			if c.Frame.Language == "zh-CN" {

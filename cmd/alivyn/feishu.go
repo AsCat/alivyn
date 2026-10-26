@@ -287,7 +287,11 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 	var ok bool
 	var err error
 	if s.Config.EffectiveEngine() == "character_v2" {
-		item, ok, err = h.NextFeishuBatch(ctx, time.Now())
+		pause := 4 * time.Second
+		if s.Config.EffectivePersonaPack() == "dafeiyu-astrbot" {
+			pause = 7 * time.Second
+		}
+		item, ok, err = h.NextFeishuBatchWithPause(ctx, time.Now(), pause)
 	} else {
 		item, ok, err = h.NextFeishu(ctx)
 	}

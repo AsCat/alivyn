@@ -40,6 +40,11 @@ func TestImportedGuestPromptReplacesAlivynBasePrompt(t *testing.T) {
 	if strings.Contains(system, "你在私聊里扮演一个持续生活的具体人物") {
 		t.Fatal("Alivyn's default prompt was mixed into the guest persona")
 	}
+	for _, message := range messages[1:] {
+		if strings.Contains(message.Content, "这一轮默认只说一个很短的意思") {
+			t.Fatal("Alivyn's short-reply meter suppressed the guest persona")
+		}
+	}
 }
 
 func TestTurnAllowsAuthoredSceneButRejectsInventedWorldReferences(t *testing.T) {

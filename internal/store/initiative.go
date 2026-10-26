@@ -22,6 +22,30 @@ type InitiativeCheck struct {
 	Ready     bool
 }
 
+const (
+	initiativeConsiderationGap = 2 * time.Hour
+	initiativeRoutineBudget    = 4
+	initiativeFreshBudget      = 6
+)
+
+// Repeated consideration of an unchanged conversation cannot consume the
+// entire day and prevent a later, newly shared conversation from being heard.
+// The extra two checks still have a strict daily API limit.
+func initiativeBudgetExhaustedTx(ctx context.Context, tx *sql.Tx, count int, sourceID int64) (bool, error) {
+	if count < initiativeRoutineBudget {
+		return false, nil
+	}
+	if count >= initiativeFreshBudget {
+		return true, nil
+	}
+	var lastSource int64
+	err := tx.QueryRowContext(ctx, "SELECT source_message_id FROM initiative_checks ORDER BY id DESC LIMIT 1").Scan(&lastSource)
+	if errors.Is(err, sql.ErrNoRows) {
+		return true, nil // An inspection/reset may remove checks, not the budget.
+	}
+	return lastSource == sourceID, err
+}
+
 // initiativeWindowTx is shared by proposal creation and the final send gate.
 // No model call can override these checks.
 func initiativeWindowTx(ctx context.Context, tx *sql.Tx, now time.Time, zone *time.Location, excludeIntent int64) (InitiativeCheck, error) {
@@ -173,7 +197,11 @@ func (h *History) ClaimInitiative(ctx context.Context, now time.Time, zone *time
 	if day != today {
 		count = 0
 	}
-	if count >= 4 {
+	exhausted, err := initiativeBudgetExhaustedTx(ctx, tx, count, c.SourceID)
+	if err != nil {
+		return c, err
+	}
+	if exhausted {
 		c.Ready = false
 		c.Reason = "daily consideration budget"
 		return c, nil
@@ -183,7 +211,7 @@ func (h *History) ClaimInitiative(ctx context.Context, now time.Time, zone *time
 		c.Reason = "consideration cooldown"
 		return c, nil
 	}
-	if _, err := tx.ExecContext(ctx, "UPDATE initiative_clock SET next_check_ns=?,budget_day=?,checks=? WHERE id=1", now.Add(45*time.Minute).UnixNano(), today, count+1); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE initiative_clock SET next_check_ns=?,budget_day=?,checks=? WHERE id=1", now.Add(initiativeConsiderationGap).UnixNano(), today, count+1); err != nil {
 		return c, err
 	}
 	r, err := tx.ExecContext(ctx, "INSERT INTO initiative_checks(source_message_id,through_message_id,at_ns) VALUES(?,?,?)", c.SourceID, c.ThroughID, now.UnixNano())
@@ -213,7 +241,14 @@ func (h *History) InitiativeStatus(ctx context.Context, now time.Time, zone *tim
 	if err := tx.QueryRowContext(ctx, "SELECT next_check_ns,budget_day,checks FROM initiative_clock WHERE id=1").Scan(&next, &day, &checks); err != nil {
 		return c, err
 	}
-	if day == now.In(zone).Format("2006-01-02") && checks >= 4 {
+	var exhausted bool
+	if day == now.In(zone).Format("2006-01-02") {
+		exhausted, err = initiativeBudgetExhaustedTx(ctx, tx, checks, c.SourceID)
+		if err != nil {
+			return c, err
+		}
+	}
+	if exhausted {
 		c.Ready = false
 		c.Reason = "daily consideration budget"
 	} else if now.UnixNano() < next {

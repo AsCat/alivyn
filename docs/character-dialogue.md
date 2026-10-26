@@ -103,7 +103,7 @@ Initial conservative limits:
 
 - The relationship must be beyond stranger and not reserved. A latest conversation older than 72 hours is not a trigger.
 - Wait at least 30 minutes after a familiar conversation, or 45 minutes for an acquaintance, plus 0–10 minutes of stable variation. A completed quiet turn also counts as a handled conversation.
-- Respect pause, quiet hours, daily contact cap and pending private replies before making an API call. There is at most one consideration per 45 minutes and four per local calendar day; those limits survive restarts.
+- Respect pause, quiet hours, daily contact cap and pending private replies before making an API call. Considerations are at least two hours apart. Four routine checks are allowed per local day; up to two more require a new conversation. The hard limit is six model checks per day, and the budget survives restarts.
 - A valid proposal cites 1–3 available references and proposes a delay of 5–60 minutes. It expires after three hours. An identical kind/source set is suppressed for 72 hours.
 - Recheck the conversation after judgment, before composition and before sending. New user messages cancel pending spontaneous proposals. Composition can also choose silence.
 - After an unanswered proactive delivery, spontaneous contact waits for the user to return. No escalating complaints or guilt messages.

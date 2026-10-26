@@ -178,7 +178,7 @@ func TestInitiativeFinalSendRecheck(t *testing.T) {
 
 func TestInitiativeCadenceBudgetAndQuietHoursPersist(t *testing.T) {
 	ctx := context.Background()
-	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 10, 26, 8, 0, 0, 0, time.UTC)
 	dir := t.TempDir()
 	h, err := OpenHistory(ctx, dir)
 	if err != nil {
@@ -189,7 +189,7 @@ func TestInitiativeCadenceBudgetAndQuietHoursPersist(t *testing.T) {
 		t.Fatalf("quiet: %+v %v", c, err)
 	}
 	for i := 0; i < 4; i++ {
-		at := now.Add(time.Duration(i) * 46 * time.Minute)
+		at := now.Add(time.Duration(i) * (2*time.Hour + time.Minute))
 		c, err := h.ClaimInitiative(ctx, at, time.UTC)
 		if err != nil || !c.Ready {
 			t.Fatalf("budget claim %d: %+v %v", i, c, err)
@@ -200,6 +200,11 @@ func TestInitiativeCadenceBudgetAndQuietHoursPersist(t *testing.T) {
 		if c, err := h.ClaimInitiative(ctx, at.Add(time.Second), time.UTC); err != nil || c.Ready {
 			t.Fatalf("rapid reconsideration: %+v %v", c, err)
 		}
+		if i == 0 {
+			if c, err := h.ClaimInitiative(ctx, at.Add(time.Hour), time.UTC); err != nil || c.Ready || c.Reason != "consideration cooldown" {
+				t.Fatalf("unchanged conversation reconsidered within an hour: %+v %v", c, err)
+			}
+		}
 	}
 	h.Close()
 	h, err = OpenHistory(ctx, dir)
@@ -207,7 +212,29 @@ func TestInitiativeCadenceBudgetAndQuietHoursPersist(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer h.Close()
-	if c, err := h.ClaimInitiative(ctx, now.Add(5*time.Hour), time.UTC); err != nil || c.Ready || c.Reason != "daily consideration budget" {
+	if c, err := h.ClaimInitiative(ctx, now.Add(7*time.Hour), time.UTC); err != nil || c.Ready || c.Reason != "daily consideration budget" {
 		t.Fatalf("restart reset budget: %+v %v", c, err)
+	}
+	for i := 0; i < 2; i++ {
+		at := now.Add(time.Duration(8+i*2)*time.Hour + 5*time.Minute)
+		if err := h.AddUserMessage(ctx, "我刚又找到一张旧照片", at.Add(-time.Hour), time.UTC); err != nil {
+			t.Fatal(err)
+		}
+		if err := h.Add(ctx, "assistant", "照片里是那家书店？", at.Add(-time.Hour+time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		c, err := h.ClaimInitiative(ctx, at, time.UTC)
+		if err != nil || !c.Ready {
+			t.Fatalf("fresh conversation could not be reconsidered: %+v %v", c, err)
+		}
+		if _, err := h.FinishInitiative(ctx, c, character.Initiative{Action: "wait", Reason: "no new reason"}, at, time.UTC); err != nil {
+			t.Fatal(err)
+		}
+		if c, err := h.ClaimInitiative(ctx, at.Add(time.Minute), time.UTC); err != nil || c.Ready || c.Reason != "daily consideration budget" {
+			t.Fatalf("same new conversation exceeded budget: %+v %v", c, err)
+		}
+	}
+	if c, err := h.ClaimInitiative(ctx, now.Add(12*time.Hour+10*time.Minute), time.UTC); err != nil || c.Ready || c.Reason != "daily consideration budget" {
+		t.Fatalf("fresh-context allowance exceeded hard cap: %+v %v", c, err)
 	}
 }

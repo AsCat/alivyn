@@ -58,3 +58,16 @@ func TestOpenThreadRequiresRealChatSource(t *testing.T) {
 		}
 	}
 }
+
+func TestEpisodeRequiresObservedConversationEvidence(t *testing.T) {
+	frame := actor.Frame{Evidence: []actor.Evidence{{ID: "chat:7", Provenance: "observed_chat"}, {ID: "worldv2:1", Provenance: "simulated_world"}}}
+	raw := `{"mode":"say","reply":"嗯。","episode":{"event":"对方解释了刚才的玩笑","effect":"我不再绷着","interpretation":"也许只是想逗我","source_ids":["chat:7"]}}`
+	if _, err := Parse(raw, frame); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"chat:999", "worldv2:1"} {
+		if _, err := Parse(strings.Replace(raw, "chat:7", ref, 1), frame); err == nil {
+			t.Fatal("unsupported episode source accepted", ref)
+		}
+	}
+}

@@ -187,6 +187,13 @@ CREATE TABLE IF NOT EXISTS feishu_reply_groups (
   event_id TEXT PRIMARY KEY REFERENCES feishu_inbox(event_id) ON DELETE CASCADE,
   anchor_event_id TEXT NOT NULL REFERENCES feishu_inbox(event_id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS feishu_reply_parts (
+  event_id TEXT NOT NULL REFERENCES feishu_inbox(event_id) ON DELETE CASCADE,
+  part_index INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','sent')),
+  PRIMARY KEY(event_id,part_index)
+);
 CREATE TABLE IF NOT EXISTS personal_memory (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   memory_key TEXT NOT NULL,

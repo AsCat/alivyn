@@ -51,6 +51,39 @@ ORDER BY f.id DESC LIMIT 24`, sourceID, sourceID)
 	return facts, rows.Err()
 }
 
+// CharacterEpisodesBefore returns evidence-reviewed autobiographical notes.
+// Drafts and later queued turns cannot enter an earlier reply's context.
+func (h *History) CharacterEpisodesBefore(ctx context.Context, sourceID int64) ([]character.Episode, error) {
+	rows, err := h.db.QueryContext(ctx, `SELECT c.turn_json FROM character_turns c
+JOIN assistant_turns a ON a.source_message_id=c.source_message_id
+JOIN messages m ON m.id=a.assistant_message_id
+WHERE c.source_message_id<? AND c.committed=1
+AND json_extract(c.turn_json,'$.state_updated')=1
+AND COALESCE(json_extract(c.turn_json,'$.state_version'),0)>=2
+AND json_extract(c.turn_json,'$.episode.event') IS NOT NULL
+AND m.content!='[forgotten memory]'
+ORDER BY c.source_message_id DESC LIMIT 8`, sourceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var episodes []character.Episode
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		var turn character.Turn
+		if err := json.Unmarshal([]byte(raw), &turn); err != nil {
+			return nil, err
+		}
+		if turn.Episode != nil {
+			episodes = append(episodes, *turn.Episode)
+		}
+	}
+	return episodes, rows.Err()
+}
+
 // RecentClosedExchange is a conversational boundary, not a delivery pause.
 // A later completed action replaces it; old boundaries expire naturally.
 func (h *History) RecentClosedExchange(ctx context.Context, sourceID int64, now time.Time) (time.Time, error) {

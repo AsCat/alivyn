@@ -88,6 +88,31 @@ func (s *characterScript) Complete(_ context.Context, _ string, messages []model
 	return r, nil
 }
 
+func TestVividPackReachesCharacterModelWithoutRewritingHistory(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 26, 21, 0, 0, 0, time.UTC)
+	if err := h.AddUserMessage(ctx, "你昨天说那首歌有点奇怪", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &characterScript{replies: []string{`{"mode":"say","reply":"嗯，我还在想那句尾音。","absence":null}`}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Engine: "character_v2", WorldPack: "tidehaven", PersonaPack: "vivid", Model: "mock"}, History: h, Client: client}
+	if _, err := s.ComposeReplyAt(ctx, at); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.calls) != 1 || !strings.Contains(client.calls[0][0].Content, "这些心思可以同时存在") || !strings.Contains(client.calls[0][0].Content, `"name":"意续"`) {
+		t.Fatalf("selected temperament or identity missing: %+v", client.calls)
+	}
+	entries, err := h.Recent(ctx, 10)
+	if err != nil || len(entries) != 1 || entries[0].Content != "你昨天说那首歌有点奇怪" {
+		t.Fatalf("pack changed conversation history: %+v %v", entries, err)
+	}
+}
+
 func TestCharacterCarriesStateAndRoleHistoryAcrossRestart(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

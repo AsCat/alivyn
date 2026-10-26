@@ -305,7 +305,17 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 			}
 			return h.SkipFeishuReply(ctx, item.EventID)
 		}
-		if err := h.SetFeishuReply(ctx, item.EventID, reply, time.Now()); err != nil {
+		parts := []string{reply}
+		if s.Config.EffectiveEngine() == "character_v2" && s.Config.EffectivePersonaPack() == "vivid" {
+			turn, found, err := h.CharacterTurn(ctx, item.UserMessageID)
+			if err != nil {
+				return err
+			}
+			if found && turn.Mode == "say" && turn.Absence == nil {
+				parts = display.Bubbles(reply)
+			}
+		}
+		if err := h.SetFeishuReplyParts(ctx, item.EventID, reply, parts, time.Now()); err != nil {
 			return err
 		}
 		item.Reply = reply
@@ -313,8 +323,19 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 	if err := waitForReplyPace(ctx, item.ReceivedAt, item.EventID, item.Reply); err != nil {
 		return err
 	}
-	return h.DeliverFeishu(ctx, item.EventID, func() error {
-		_, err := sender.Send(ctx, &types.SendInput{ChatID: item.ChatID, Text: display.Clean(item.Reply), ReplyMessageID: item.MessageID})
+	return h.DeliverFeishuParts(ctx, item.EventID, func(index int, body string) error {
+		if index > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(650+min(len([]rune(body))*28, 1100)) * time.Millisecond):
+			}
+		}
+		input := &types.SendInput{ChatID: item.ChatID, Text: display.Clean(body)}
+		if index == 0 {
+			input.ReplyMessageID = item.MessageID
+		}
+		_, err := sender.Send(ctx, input)
 		return err
 	})
 }

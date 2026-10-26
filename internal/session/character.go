@@ -10,6 +10,7 @@ import (
 	"github.com/AsCat/alivyn/internal/actor"
 	"github.com/AsCat/alivyn/internal/character"
 	"github.com/AsCat/alivyn/internal/model"
+	"github.com/AsCat/alivyn/internal/persona"
 	"github.com/AsCat/alivyn/internal/store"
 )
 
@@ -74,10 +75,7 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 	if s.Config.EffectiveWorldPack() == "tidehaven" {
 		f.Canon = character.Setting(s.Config.Language)
 	}
-	persona := s.Config.Background
-	if strings.TrimSpace(persona) == "" {
-		persona = character.DefaultPersona(s.Config.Language)
-	}
+	persona := s.characterPersona()
 	state, at, err := s.History.CharacterStateBefore(ctx, f.SourceMessageID, now)
 	if err != nil {
 		return character.Context{}, err
@@ -88,7 +86,12 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 	}
 	sources = append(sources, threadSources...)
 	c := character.Context{Frame: f, Persona: persona, Moment: state.Moment, LastChatAt: lastChat, OpenThreads: state.OpenThreads, Sources: sources}
+	c.AllowBubbles = s.Config.EffectivePersonaPack() == "vivid"
 	c.SelfFacts, err = s.History.CharacterSelfFactsBefore(ctx, f.SourceMessageID)
+	if err != nil {
+		return character.Context{}, err
+	}
+	c.Episodes, err = s.History.CharacterEpisodesBefore(ctx, f.SourceMessageID)
 	if err != nil {
 		return character.Context{}, err
 	}
@@ -115,6 +118,17 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 		c.ClosedAt = closedAt.In(localNow.Location()).Format(time.RFC3339)
 	}
 	return c, nil
+}
+
+func (s Session) characterPersona() string {
+	base := strings.TrimSpace(s.Config.Background)
+	if base == "" {
+		base = character.DefaultPersona(s.Config.Language)
+	}
+	if extra := persona.Text(s.Config.EffectivePersonaPack(), s.Config.Language); extra != "" {
+		return base + "\n\n" + extra
+	}
+	return base
 }
 
 func (s Session) composeCharacterReply(ctx context.Context, now time.Time, sourceID int64) (string, error) {
@@ -226,6 +240,9 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 	}
 	if err == nil {
 		c.SelfFacts, err = s.History.CharacterSelfFactsBefore(ctx, sourceID+1)
+	}
+	if err == nil {
+		c.Episodes, err = s.History.CharacterEpisodesBefore(ctx, sourceID+1)
 	}
 	return c, references, err
 }

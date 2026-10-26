@@ -137,6 +137,13 @@ func releaseDeferredTx(ctx context.Context, tx *sql.Tx, now time.Time) error {
 	// A closing line prepared before an outage may be obsolete by the time
 	// transport recovers. Remove its undelivered transcript receipt, then
 	// reconsider the input instead of sending an old bedtime announcement.
+	// If any bubble was already sent, keep the delivered closing instead of
+	// reconsidering its source and accidentally sending a different reply.
+	if _, err := tx.ExecContext(ctx, `UPDATE feishu_inbox SET state='sent',reply=NULL WHERE state='ready'
+AND user_message_id IN (SELECT d.source_message_id FROM reply_deferrals d JOIN character_turns c ON c.source_message_id=d.source_message_id WHERE d.until_ns<=? AND json_extract(c.turn_json,'$.absence') IS NOT NULL)
+AND EXISTS(SELECT 1 FROM feishu_reply_parts p WHERE p.event_id=feishu_inbox.event_id AND p.state='sent')`, now.UnixNano()); err != nil {
+		return err
+	}
 	for _, q := range []string{
 		`UPDATE messages SET content='[forgotten memory]' WHERE id IN (SELECT a.assistant_message_id FROM assistant_turns a JOIN feishu_inbox f ON f.user_message_id=a.source_message_id JOIN reply_deferrals d ON d.source_message_id=f.user_message_id JOIN character_turns c ON c.source_message_id=f.user_message_id WHERE f.state='ready' AND d.until_ns<=? AND json_extract(c.turn_json,'$.absence') IS NOT NULL)`,
 		`DELETE FROM assistant_turns WHERE source_message_id IN (SELECT f.user_message_id FROM feishu_inbox f JOIN reply_deferrals d ON d.source_message_id=f.user_message_id JOIN character_turns c ON c.source_message_id=f.user_message_id WHERE f.state='ready' AND d.until_ns<=? AND json_extract(c.turn_json,'$.absence') IS NOT NULL)`,

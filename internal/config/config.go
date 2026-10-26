@@ -12,6 +12,8 @@ import (
 	"time"
 	_ "time/tzdata"
 	"unicode"
+
+	"github.com/AsCat/alivyn/internal/persona"
 )
 
 const DefaultDeepSeekURL = "https://api.deepseek.com"
@@ -22,6 +24,7 @@ type Config struct {
 	Name          string `json:"name"`
 	Language      string `json:"language"`
 	Style         string `json:"style,omitempty"`
+	PersonaPack   string `json:"persona_pack,omitempty"`
 	Background    string `json:"background,omitempty"`
 	Routine       string `json:"routine,omitempty"`
 	WorldPack     string `json:"world_pack,omitempty"`
@@ -63,6 +66,9 @@ func (c Config) Validate() error {
 	}
 	if c.Style != "" && c.Style != "natural" && c.Style != "romantic" && c.Style != "companion" {
 		return errors.New("style must be natural, romantic, or companion")
+	}
+	if _, ok := persona.Get(c.EffectivePersonaPack()); !ok {
+		return errors.New("unknown persona pack")
 	}
 	if len([]rune(c.Background)) > 500 || strings.IndexFunc(c.Background, unicode.IsControl) >= 0 {
 		return errors.New("background must be single-line and at most 500 characters")
@@ -109,6 +115,13 @@ func (c Config) EffectiveStyle() string {
 	return c.Style
 }
 
+func (c Config) EffectivePersonaPack() string {
+	if c.PersonaPack == "" {
+		return "natural"
+	}
+	return c.PersonaPack
+}
+
 func (c Config) EffectiveWorldPack() string {
 	if c.WorldPack == "" {
 		return "tidehaven"
@@ -146,13 +159,28 @@ func SaveWorldPack(pack string) error {
 }
 
 func (c Config) EffectiveBackground() string {
-	if strings.TrimSpace(c.Background) != "" {
-		return strings.TrimSpace(c.Background)
+	base := strings.TrimSpace(c.Background)
+	if base == "" {
+		if c.Language == "zh-CN" {
+			base = "慢热。对陌生人礼貌但有所保留，不会刚认识就亲昵；熟悉后会表达好奇，偶尔开玩笑。讨厌空话，重视兑现承诺。"
+		} else {
+			base = "Slow to trust. Polite but reserved with strangers; curious and occasionally playful as familiarity grows. Dislikes empty promises."
+		}
 	}
-	if c.Language == "zh-CN" {
-		return "慢热。对陌生人礼貌但有所保留，不会刚认识就亲昵；熟悉后会表达好奇，偶尔开玩笑。讨厌空话，重视兑现承诺。"
+	if extra := persona.Text(c.EffectivePersonaPack(), c.Language); extra != "" {
+		return base + "\n\n" + extra
 	}
-	return "Slow to trust. Polite but reserved with strangers; curious and occasionally playful as familiarity grows. Dislikes empty promises."
+	return base
+}
+
+// SavePersonaPack changes temperament without changing identity or stored history.
+func SavePersonaPack(id string) error {
+	c, err := Load()
+	if err != nil {
+		return err
+	}
+	c.PersonaPack = id
+	return saveExisting(c)
 }
 
 // SaveStyle replaces only the public persona setting, preserving existing

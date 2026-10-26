@@ -27,11 +27,7 @@ type Session struct {
 }
 
 func (s Session) commandReply(ctx context.Context, id int64) (string, bool, error) {
-	persona := s.Config.Background
-	if strings.TrimSpace(persona) == "" {
-		persona = character.DefaultPersona(s.Config.Language)
-	}
-	card := s.Config.Name + "\n" + persona
+	card := s.Config.Name + "\n" + s.characterPersona()
 	if s.Config.EffectiveWorldPack() == "tidehaven" {
 		card += "\n" + character.Setting(s.Config.Language)
 	}

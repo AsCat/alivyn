@@ -20,7 +20,7 @@ func TestCharacterStateCommitsWithReplyExpiresAndForgets(t *testing.T) {
 	if _, err := h.EnqueueFeishu(ctx, "one", "chat", "m1", "我叫小明", at, time.UTC); err != nil {
 		t.Fatal(err)
 	}
-	turn := character.Turn{Mode: "say", Reply: "小明，记住了。", StateUpdated: true, StateVersion: 2, Moment: character.Moment{Feeling: "好奇", Attention: "小明刚才说的事", Scene: "在听歌"}}
+	turn := character.Turn{Mode: "say", Reply: "小明，记住了。", StateUpdated: true, StateVersion: 2, Moment: character.Moment{Feeling: "好奇", Attention: "小明刚才说的事", Scene: "在听歌"}, Episode: &character.Episode{Event: "对方说自己叫小明", Effect: "我记住了这个称呼", SourceIDs: []string{"chat:1"}}}
 	if err := h.SaveCharacterTurn(ctx, 1, turn, at); err != nil {
 		t.Fatal(err)
 	}
@@ -32,6 +32,9 @@ func TestCharacterStateCommitsWithReplyExpiresAndForgets(t *testing.T) {
 	}
 	if err := h.SetFeishuReply(ctx, "one", turn.Reply, at); err != nil {
 		t.Fatal(err)
+	}
+	if episodes, err := h.CharacterEpisodesBefore(ctx, 2); err != nil || len(episodes) != 1 || episodes[0].Event != "对方说自己叫小明" {
+		t.Fatalf("committed episode missing: %+v %v", episodes, err)
 	}
 	for _, tc := range []struct {
 		age                       time.Duration
@@ -49,6 +52,9 @@ func TestCharacterStateCommitsWithReplyExpiresAndForgets(t *testing.T) {
 	}
 	if _, found, err := h.CharacterTurn(ctx, 1); err != nil || found {
 		t.Fatal("forget left character state containing a name")
+	}
+	if episodes, err := h.CharacterEpisodesBefore(ctx, 3); err != nil || len(episodes) != 0 {
+		t.Fatalf("forget left autobiographical episode: %+v %v", episodes, err)
 	}
 }
 

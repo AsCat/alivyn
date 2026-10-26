@@ -71,8 +71,22 @@ FROM feishu_inbox WHERE state IN ('pending','ready') ORDER BY received_ns, rowid
 // SetFeishuReply commits generated text to the local conversation and inbox
 // together. A send retry reuses the same text instead of asking the model again.
 func (h *History) SetFeishuReply(ctx context.Context, eventID, reply string, at time.Time) error {
+	return h.SetFeishuReplyParts(ctx, eventID, reply, []string{reply}, at)
+}
+
+// SetFeishuReplyParts prepares one logical turn and its delivery bubbles in
+// one transaction. Existing callers continue to prepare a single bubble.
+func (h *History) SetFeishuReplyParts(ctx context.Context, eventID, reply string, parts []string, at time.Time) error {
 	if strings.TrimSpace(reply) == "" {
 		return errors.New("empty Feishu reply")
+	}
+	if len(parts) == 0 || len(parts) > 3 {
+		return errors.New("Feishu reply needs one to three parts")
+	}
+	for _, part := range parts {
+		if strings.TrimSpace(part) == "" || len([]rune(part)) > 1000 {
+			return errors.New("invalid Feishu reply part")
+		}
 	}
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -89,6 +103,21 @@ func (h *History) SetFeishuReply(ctx context.Context, eventID, reply string, at 
 	}
 	if rows != 1 {
 		return ErrTurnSuperseded
+	}
+	var sentParts int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM feishu_reply_parts WHERE event_id=? AND state='sent'", eventID).Scan(&sentParts); err != nil {
+		return err
+	}
+	if sentParts > 0 {
+		return errors.New("cannot replace a partially delivered Feishu reply")
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM feishu_reply_parts WHERE event_id=?", eventID); err != nil {
+		return err
+	}
+	for i, part := range parts {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO feishu_reply_parts(event_id,part_index,text) VALUES(?,?,?)", eventID, i, strings.TrimSpace(part)); err != nil {
+			return err
+		}
 	}
 	var sourceID int64
 	if err := tx.QueryRowContext(ctx, "SELECT user_message_id FROM feishu_inbox WHERE event_id = ?", eventID).Scan(&sourceID); err != nil {
@@ -145,4 +174,60 @@ func (h *History) SkipFeishuReply(ctx context.Context, eventID string) error {
 func (h *History) MarkFeishuSent(ctx context.Context, eventID string) error {
 	_, err := h.db.ExecContext(ctx, "UPDATE feishu_inbox SET reply = NULL, state = 'sent' WHERE event_id = ? AND state = 'ready'", eventID)
 	return err
+}
+
+// DeliverFeishuParts resumes at the first unsent bubble after a partial send.
+// The transport call and its receipt are fenced against a concurrent reset.
+func (h *History) DeliverFeishuParts(ctx context.Context, eventID string, send func(int, string) error) error {
+	h.deliveryMu.RLock()
+	defer h.deliveryMu.RUnlock()
+	var reply string
+	err := h.db.QueryRowContext(ctx, "SELECT COALESCE(reply,'') FROM feishu_inbox WHERE event_id=? AND state='ready'", eventID).Scan(&reply)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	rows, err := h.db.QueryContext(ctx, "SELECT part_index,text,state FROM feishu_reply_parts WHERE event_id=? ORDER BY part_index", eventID)
+	if err != nil {
+		return err
+	}
+	type part struct {
+		index int
+		text  string
+		state string
+	}
+	var parts []part
+	for rows.Next() {
+		var p part
+		if err := rows.Scan(&p.index, &p.text, &p.state); err != nil {
+			rows.Close()
+			return err
+		}
+		parts = append(parts, p)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	if len(parts) == 0 { // A ready row from an older local database.
+		if err := send(0, reply); err != nil {
+			return err
+		}
+		return h.MarkFeishuSent(ctx, eventID)
+	}
+	for _, p := range parts {
+		if p.state == "sent" {
+			continue
+		}
+		if err := send(p.index, p.text); err != nil {
+			return err
+		}
+		if _, err := h.db.ExecContext(ctx, "UPDATE feishu_reply_parts SET state='sent' WHERE event_id=? AND part_index=? AND state='pending'", eventID, p.index); err != nil {
+			return err
+		}
+	}
+	return h.MarkFeishuSent(ctx, eventID)
 }

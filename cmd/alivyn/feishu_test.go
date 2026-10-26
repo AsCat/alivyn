@@ -325,6 +325,39 @@ type flakySender struct {
 	fail  bool
 }
 
+type bubbleSender struct{ sent []types.SendInput }
+
+func (b *bubbleSender) Send(_ context.Context, input *types.SendInput) (*types.SendResult, error) {
+	b.sent = append(b.sent, *input)
+	return &types.SendResult{}, nil
+}
+
+func TestVividCharacterSendsTwoBubblesFromOneTurn(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if _, err := h.EnqueueFeishu(ctx, "vivid-event", "chat", "message", "你想说什么", time.Now().Add(-time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &burstCompleter{reply: `{"mode":"say","reply":"先听我说。\n\n其实我有点紧张。","absence":null}`}
+	s := session.Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", PersonaPack: "vivid", WorldPack: "tidehaven"}, History: h, Client: client}
+	sender := &bubbleSender{}
+	if err := processFeishuOnce(ctx, h, s, sender); err != nil {
+		t.Fatal(err)
+	}
+	if client.calls != 1 || len(sender.sent) != 2 || sender.sent[0].Text != "先听我说。" || sender.sent[1].Text != "其实我有点紧张。" || sender.sent[0].ReplyMessageID != "message" || sender.sent[1].ReplyMessageID != "" {
+		t.Fatalf("wrong bubble delivery: calls=%d sent=%+v", client.calls, sender.sent)
+	}
+	entries, err := h.RecentForModel(ctx, 10)
+	if err != nil || len(entries) != 2 || entries[1].Content != "先听我说。\n\n其实我有点紧张。" {
+		t.Fatalf("one logical reply was not retained: %+v %v", entries, err)
+	}
+}
+
 func (f *flakySender) Send(_ context.Context, _ *types.SendInput) (*types.SendResult, error) {
 	f.calls++
 	if f.fail {

@@ -73,3 +73,34 @@ func TestPersonaStyleUpgradePreservesModelSettings(t *testing.T) {
 		t.Fatalf("invalid update changed config: %+v %v", unchanged, err)
 	}
 }
+
+func TestPersonaPackChangesTemperamentWithoutReplacingIdentity(t *testing.T) {
+	t.Setenv("ALIVYN_HOME", t.TempDir())
+	original := Config{SchemaVersion: 1, Name: "意续", Language: "zh-CN", Provider: "deepseek", BaseURL: DefaultDeepSeekURL, Model: DefaultDeepSeekModel, Timezone: "Asia/Shanghai"}
+	if err := SaveNew(original); err != nil {
+		t.Fatal(err)
+	}
+	if err := SavePersonaPack("vivid"); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed.Name != original.Name || changed.Provider != original.Provider || changed.Model != original.Model || changed.Timezone != original.Timezone || changed.EffectivePersonaPack() != "vivid" {
+		t.Fatalf("pack replaced identity or model: %+v", changed)
+	}
+	if err := SavePersonaPack("unknown"); err == nil {
+		t.Fatal("unknown pack accepted")
+	}
+	unchanged, err := Load()
+	if err != nil || unchanged.EffectivePersonaPack() != "vivid" {
+		t.Fatalf("failed update changed pack: %+v %v", unchanged, err)
+	}
+	if err := SavePersonaPack("natural"); err != nil {
+		t.Fatal(err)
+	}
+	if reset, err := Load(); err != nil || reset.EffectivePersonaPack() != "natural" {
+		t.Fatalf("cannot return to original temperament: %+v %v", reset, err)
+	}
+}

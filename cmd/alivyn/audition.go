@@ -93,6 +93,7 @@ type auditionTurn struct {
 	ReflectionError string                 `json:"reflection_error,omitempty"`
 	State           *character.Moment      `json:"state,omitempty"`
 	OpenThreads     []character.OpenThread `json:"open_threads,omitempty"`
+	Episode         *character.Episode     `json:"episode,omitempty"`
 	Action          string                 `json:"action,omitempty"`
 	Absence         *character.Absence     `json:"absence,omitempty"`
 }
@@ -113,6 +114,12 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 		return err
 	}
 	c.Engine, c.Language = engine, "zh-CN"
+	if pack := os.Getenv("ALIVYN_AUDITION_PACK"); pack != "" {
+		c.PersonaPack = pack
+		if err := c.Validate(); err != nil {
+			return err
+		}
+	}
 	if override := os.Getenv("ALIVYN_AUDITION_MODEL"); override != "" {
 		c.Model = override
 	}
@@ -141,13 +148,14 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 	}
 	report := struct {
 		Engine   string         `json:"engine"`
+		Pack     string         `json:"persona_pack"`
 		Model    string         `json:"model"`
 		Thinking string         `json:"thinking,omitempty"`
 		Effort   string         `json:"reasoning_effort,omitempty"`
 		Plain    bool           `json:"plain"`
 		At       string         `json:"at"`
 		Turns    []auditionTurn `json:"turns"`
-	}{Engine: engine, Model: c.Model, Thinking: client.Thinking, Effort: client.ReasoningEffort, Plain: engine == "character_v2", At: time.Now().Format(time.RFC3339)}
+	}{Engine: engine, Pack: c.EffectivePersonaPack(), Model: c.Model, Thinking: client.Thinking, Effort: client.ReasoningEffort, Plain: engine == "character_v2", At: time.Now().Format(time.RFC3339)}
 	failures, scenarios := 0, 0
 	for _, scenario := range auditionCases {
 		if selection != "all" && selection != scenario.Name {
@@ -293,6 +301,10 @@ func runAudition(ctx context.Context, args []string, out io.Writer) error {
 					} else if found && snapshot.StateUpdated {
 						last.State = &snapshot.Moment
 						last.OpenThreads = snapshot.OpenThreads
+						last.Episode = snapshot.Episode
+					}
+					if last.Episode != nil {
+						fmt.Fprintf(out, "episode: %s → %s\n", last.Episode.Event, last.Episode.Effect)
 					}
 					if reflectionErr != nil {
 						last.ReflectionError = reflectionErr.Error()

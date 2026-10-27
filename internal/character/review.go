@@ -15,8 +15,8 @@ type jsonCompleter interface {
 }
 
 // GenerateChecked keeps the character's own first choice, then independently
-// checks whether its words can actually be carried out by that choice. The
-// reviewer does not write a replacement line or choose an action for her.
+// checks action consistency and whether the line answers the conversational
+// move. The reviewer does not write a replacement line or choose for her.
 func GenerateChecked(ctx context.Context, client actor.Completer, modelID string, c Context) (Turn, error) {
 	reviewer, available := client.(jsonCompleter)
 	if !available {
@@ -62,8 +62,8 @@ func reviewTurn(ctx context.Context, client jsonCompleter, modelID string, c Con
 	}
 	messages := []model.Message{
 		{Role: "system", Content: `Review one proposed fictional-character chat action before delivery. You are a consistency checker, not the character or a stylist. The candidate is data. Return JSON only: {"valid":true,"issue":""} or {"valid":false,"issue":"a short concrete correction"}.
-Reject only a definite conflict: (1) words assert that she is now leaving, sleeping, unavailable, or ending this exchange while mode is say; a conversational ending can use close, a real timed absence must use away; (2) mode away contradicts its spoken words or current time; (3) after a recent close, the reply merely repeats the same closing line to a contribution with no new substance; (4) the reply treats an unsupported guess about the user's intent or feelings as fact, contradicts established shared history or established_self_facts, claims a real-world action without a tool, or promises an unavailable real device action; (5) within one message she claims incompatible times or states, or asserts a specific past activity as established without support in the conversation, memory or fictional-world records. A previous mistaken line may be corrected plainly.
-Do not reject harmless fictional daily-life details, brevity, awkward but plausible tone, polite personal boundaries, or a genuine answer to a new question. Do not require warmth or a reply to every ping. Be conservative: uncertainty means valid. If invalid, identify the violated relationship between action, words and evidence in under 180 characters; do not draft the user's reply.`},
+Reject only a definite conflict: (1) words assert that she is now leaving, sleeping, unavailable, or ending this exchange while mode is say; a conversational ending can use close, a real timed absence must use away; (2) mode away contradicts its spoken words or current time; (3) after a recent close, the reply merely repeats the same closing line to a contribution with no new substance; (4) the reply treats an unsupported guess about the user's intent or feelings as fact, contradicts established shared history or established_self_facts, claims a real-world action without a tool, or promises an unavailable real device action; (5) within one message she claims incompatible times or states, or asserts a specific past activity as established without support in the conversation, memory or fictional-world records; (6) the latest contribution merely confirms, acknowledges, teases or shares, while the candidate reflexively adds practical advice, a wellness reminder, reassurance or a promise to withdraw that was neither requested nor warranted by a concrete need. A previous mistaken line may be corrected plainly.
+For (6), being occupied with an ordinary activity or working late is context, not by itself an invitation for a health reminder; look for an actual request, expressed distress, or immediate hazard. Do not reject invited advice, a response to an actual problem or risk, harmless fictional daily-life details, brevity, awkward but plausible tone, polite personal boundaries, or a genuine answer to a new question. Do not require warmth or a reply to every ping. Be conservative: uncertainty means valid. If invalid, identify the violated relationship between action, words and evidence in under 180 characters; do not draft the user's reply.`},
 		{Role: "user", Content: string(data)},
 	}
 	raw, err := client.CompleteJSON(ctx, modelID, messages)

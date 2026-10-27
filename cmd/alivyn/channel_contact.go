@@ -25,6 +25,9 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 	nextInitiativeCheck := time.Time{}
 	for ctx.Err() == nil {
 		now := time.Now()
+		if err := h.ReconcilePartialContacts(ctx, now); err != nil && ctx.Err() == nil {
+			fmt.Fprintf(out, "Contact partial delivery reconciliation failed: %v\n", err)
+		}
 		if now.Sub(lastHeartbeat) >= time.Minute {
 			if err := advanceConfiguredWorld(ctx, h, s.Config, now, zone); err != nil {
 				fmt.Fprintf(out, "World clock failed: %v\n", err)
@@ -84,8 +87,23 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 					fmt.Fprintf(out, "Contact composition failed; using fallback: %v\n", err)
 				}
 			}
-			if err := h.DeliverContact(ctx, item.IntentID, time.Now(), zone, item.Body, func() error {
-				return send(ctx, item.Body, item.Key)
+			parts := []string{item.Body}
+			if s.Config.EffectiveEngine() == "character_v2" && (s.Config.EffectivePersonaPack() == "vivid" || s.Config.EffectivePersonaPack() == "dafeiyu-astrbot") {
+				parts = display.Bubbles(item.Body)
+			}
+			if err := h.DeliverContactParts(ctx, item.IntentID, time.Now(), zone, item.Body, parts, func(index, total int, body string) error {
+				if index > 0 {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(time.Duration(650+min(len([]rune(body))*28, 1100)) * time.Millisecond):
+					}
+				}
+				key := item.Key
+				if total > 1 {
+					key = fmt.Sprintf("%s:part:%d", item.Key, index)
+				}
+				return send(ctx, body, key)
 			}); err != nil && ctx.Err() == nil {
 				fmt.Fprintf(out, "Contact delivery pending; will retry: %v\n", err)
 			}

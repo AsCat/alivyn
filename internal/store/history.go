@@ -172,6 +172,14 @@ CREATE TABLE IF NOT EXISTS contact_delivery (
   state TEXT NOT NULL CHECK(state IN ('pending','sent','failed')),
   sent_ns INTEGER
 );
+CREATE TABLE IF NOT EXISTS contact_delivery_parts (
+  intent_id INTEGER NOT NULL REFERENCES contact_intents(id),
+  part_index INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','sent')),
+  sent_ns INTEGER,
+  PRIMARY KEY(intent_id,part_index)
+);
 CREATE TABLE IF NOT EXISTS runtime_state (
   id INTEGER PRIMARY KEY CHECK(id = 1),
   last_active_ns INTEGER,

@@ -2,11 +2,109 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/AsCat/alivyn/internal/contact"
 )
+
+func TestProactiveBurstRetriesOnlyUnsentPartsAndCountsOnce(t *testing.T) {
+	ctx := context.Background()
+	at, zone := contactTestClock(t)
+	dir := t.TempDir()
+	h, err := OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedChannelIntent(t, h, at, "burst-retry")
+	item, ready, err := h.NextChannelContact(ctx, at, zone, "zh-CN")
+	if err != nil || !ready {
+		t.Fatal(item, ready, err)
+	}
+	parts := []string{"你去哪儿了？", "算了，先忙你的。"}
+	err = h.DeliverContactParts(ctx, item.IntentID, at, zone, "你去哪儿了？\n\n算了，先忙你的。", parts, func(index, _ int, _ string) error {
+		if index == 1 {
+			return errors.New("temporary send failure")
+		}
+		return nil
+	})
+	if err == nil {
+		t.Fatal("expected second send failure")
+	}
+	if err := h.Close(); err != nil {
+		t.Fatal(err)
+	}
+	h, err = OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	item, ready, err = h.NextChannelContact(ctx, at.Add(time.Minute), zone, "zh-CN")
+	if err != nil || !ready {
+		t.Fatal(item, ready, err)
+	}
+	var retried []int
+	if err := h.DeliverContactParts(ctx, item.IntentID, at.Add(time.Minute), zone, item.Body, parts, func(index, _ int, _ string) error {
+		retried = append(retried, index)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(retried) != 1 || retried[0] != 1 {
+		t.Fatalf("retried parts: %v", retried)
+	}
+	entries, err := h.Recent(ctx, 10)
+	if err != nil || len(entries) != 2 || entries[0].Content != parts[0] || entries[1].Content != parts[1] {
+		t.Fatalf("visible transcript: %+v %v", entries, err)
+	}
+	var deliveries int
+	if err := h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM contact_delivery WHERE state='sent'").Scan(&deliveries); err != nil || deliveries != 1 {
+		t.Fatal(deliveries, err)
+	}
+}
+
+func TestUserReplyStopsRemainingProactiveBurst(t *testing.T) {
+	ctx := context.Background()
+	at, zone := contactTestClock(t)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedChannelIntent(t, h, at, "burst-interrupted")
+	item, ready, err := h.NextChannelContact(ctx, at, zone, "zh-CN")
+	if err != nil || !ready {
+		t.Fatal(item, ready, err)
+	}
+	parts := []string{"你去哪儿了？", "好吧，等你。"}
+	err = h.DeliverContactParts(ctx, item.IntentID, at, zone, "你去哪儿了？\n\n好吧，等你。", parts, func(index, _ int, _ string) error {
+		if index == 0 {
+			return nil
+		}
+		return errors.New("second bubble not sent")
+	})
+	if err == nil {
+		t.Fatal("expected second send failure")
+	}
+	if err := h.AddUserMessage(ctx, "我在呢", at.Add(time.Minute), zone); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.ReconcilePartialContacts(ctx, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ready, err := h.NextChannelContact(ctx, at.Add(2*time.Minute), zone, "zh-CN"); err != nil || ready {
+		t.Fatal(ready, err)
+	}
+	entries, err := h.Recent(ctx, 10)
+	if err != nil || len(entries) != 2 || entries[0].Content != parts[0] || entries[1].Content != "我在呢" {
+		t.Fatalf("interrupted transcript: %+v %v", entries, err)
+	}
+	var body, state string
+	if err := h.db.QueryRowContext(ctx, "SELECT body,state FROM contact_delivery WHERE intent_id=?", item.IntentID).Scan(&body, &state); err != nil || body != parts[0] || state != "sent" {
+		t.Fatal(body, state, err)
+	}
+}
 
 func seedChannelIntent(t *testing.T, h *History, at time.Time, key string) {
 	t.Helper()

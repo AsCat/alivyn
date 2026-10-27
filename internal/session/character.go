@@ -176,6 +176,11 @@ func (s Session) composeCharacterContactAt(ctx context.Context, occasion string,
 	if err != nil {
 		return "", err
 	}
+	tuning, err := s.History.CharacterTuning(ctx)
+	if err != nil {
+		return "", err
+	}
+	c.InitiativeLevel = tuning.Initiative
 	c.Occasion = occasion
 	t, err := character.Generate(ctx, s.Client, s.Config.Model, c)
 	if err != nil {

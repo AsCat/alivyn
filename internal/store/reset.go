@@ -27,7 +27,7 @@ func resetCharacterTx(ctx context.Context, tx *sql.Tx, command string, at time.T
 	}
 	for _, table := range []string{
 		"character_absence", "reply_deferrals",
-		"feishu_reply_parts", "feishu_reply_groups", "feishu_inbox", "initiative_checks", "contact_events", "contact_outbox", "contact_delivery", "contact_intents",
+		"feishu_reply_parts", "feishu_reply_groups", "feishu_inbox", "initiative_checks", "contact_events", "contact_outbox", "contact_delivery_parts", "contact_delivery", "contact_intents",
 		"goal_world_engagements", "actor_decisions", "actor_continuity", "character_self_facts", "character_turns", "assistant_turns", "command_results", "local_commands",
 		"personal_memory", "memory_revisions", "relationship_snapshots", "relationship_state",
 		"goal_world_events", "goal_world_state", "world_events", "world_state", "messages",
@@ -123,4 +123,49 @@ func (h *History) DeliverContact(ctx context.Context, id int64, at time.Time, zo
 		return err
 	}
 	return h.MarkChannelContactSent(ctx, id, time.Now())
+}
+
+// DeliverContactParts sends a short burst as one logical proactive contact.
+// Every bubble has its own durable receipt and transport idempotency key.
+func (h *History) DeliverContactParts(ctx context.Context, id int64, at time.Time, zone *time.Location, body string, parts []string, send func(int, int, string) error) error {
+	h.deliveryMu.RLock()
+	defer h.deliveryMu.RUnlock()
+	started := time.Now()
+	current := func() time.Time { return at.Add(time.Since(started)) }
+	saved, err := h.ContactParts(ctx, id)
+	if err != nil {
+		return err
+	}
+	if len(saved) == 0 {
+		ok, err := h.FinalizeChannelContact(ctx, id, body, at, zone)
+		if err != nil || !ok {
+			return err
+		}
+		if err := h.PrepareContactParts(ctx, id, parts); err != nil {
+			return err
+		}
+		saved, err = h.ContactParts(ctx, id)
+		if err != nil {
+			return err
+		}
+	}
+	for _, part := range saved {
+		if part.Sent {
+			continue
+		}
+		allowed, err := h.ContactPartAllowed(ctx, id, current(), zone)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return h.CompleteContactPartial(ctx, id, current(), "partial burst stopped by contact policy")
+		}
+		if err := send(part.Index, len(saved), part.Text); err != nil {
+			return err
+		}
+		if err := h.MarkChannelContactPartSent(ctx, id, part.Index, current()); err != nil {
+			return err
+		}
+	}
+	return h.MarkChannelContactSent(ctx, id, current())
 }

@@ -419,7 +419,7 @@ func clearInitiativesTx(ctx context.Context, tx *sql.Tx) error {
 }
 
 func InitiativeOccasion(p character.Initiative) string {
-	occasion := "You previously chose a personal reason to reach out: " + p.Reason + ". This is a " + p.Kind + " grounded in these records: " + strings.Join(p.EvidenceIDs, ", ") + ". Say the concrete thing naturally in one short message, without explaining the scheduling or requiring an answer. Do not re-answer the user's old message."
+	occasion := "You previously chose a personal reason to reach out: " + p.Reason + ". This is a " + p.Kind + " grounded in these records: " + strings.Join(p.EvidenceIDs, ", ") + ". Say the concrete thing naturally in one concise turn, without explaining the scheduling or requiring an answer. Do not re-answer the user's old message."
 	if p.Unanswered > 0 {
 		occasion += fmt.Sprintf(" You have sent %d proactive message(s) since their last reply. You may briefly notice their absence or wonder where they went if that fits your relationship, but do not repeat your last question or imply they owe a response.", p.Unanswered)
 	}

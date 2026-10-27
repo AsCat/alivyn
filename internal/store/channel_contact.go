@@ -84,7 +84,17 @@ func (h *History) prepareChannelContact(ctx context.Context, id int64, at time.T
 	if err == nil && deliveryState != "pending" {
 		return ChannelContact{}, false, nil
 	}
+	var sentParts int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM contact_delivery_parts WHERE intent_id=? AND state='sent'", id).Scan(&sentParts); err != nil {
+		return ChannelContact{}, false, err
+	}
 	if first.Valid && at.Sub(time.Unix(0, first.Int64)) >= 55*time.Minute {
+		if sentParts > 0 {
+			if _, err := completeContactPartialTx(ctx, tx, id, at, "partial burst stopped after Feishu retry window"); err != nil {
+				return ChannelContact{}, false, err
+			}
+			return ChannelContact{}, false, tx.Commit()
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE contact_delivery SET state = 'failed' WHERE intent_id = ?`, id); err != nil {
 			return ChannelContact{}, false, err
 		}
@@ -97,30 +107,43 @@ func (h *History) prepareChannelContact(ctx context.Context, id int64, at time.T
 	if last.Valid && at.Sub(time.Unix(0, last.Int64)) < 15*time.Second {
 		return ChannelContact{}, false, nil
 	}
-	decision, err := evaluateIntentTxExcluding(ctx, tx, item, at, zone, id)
-	if err != nil {
-		return ChannelContact{}, false, err
-	}
-	if decision.Final {
-		state := "canceled"
-		if decision.Reason == "expired intent is not backfilled" {
-			state = "expired"
-		}
-		event := ContactEvent{IntentID: id, Outcome: "canceled", Reason: decision.Reason, At: at}
-		if err := updateIntentAndLog(ctx, tx, id, state, decision.Reason, event); err != nil {
+	if sentParts > 0 {
+		allowed, err := contactPartAllowedTx(ctx, tx, id, at, zone)
+		if err != nil {
 			return ChannelContact{}, false, err
 		}
-		return ChannelContact{}, false, tx.Commit()
-	}
-	if !decision.Ready {
-		if item.Reason != decision.Reason {
-			event := ContactEvent{IntentID: id, Outcome: "skipped", Reason: decision.Reason, At: at}
-			if err := updateIntentAndLog(ctx, tx, id, "pending", decision.Reason, event); err != nil {
+		if !allowed {
+			if _, err := completeContactPartialTx(ctx, tx, id, at, "partial burst stopped by contact policy"); err != nil {
 				return ChannelContact{}, false, err
 			}
 			return ChannelContact{}, false, tx.Commit()
 		}
-		return ChannelContact{}, false, nil
+	} else {
+		decision, err := evaluateIntentTxExcluding(ctx, tx, item, at, zone, id)
+		if err != nil {
+			return ChannelContact{}, false, err
+		}
+		if decision.Final {
+			state := "canceled"
+			if decision.Reason == "expired intent is not backfilled" {
+				state = "expired"
+			}
+			event := ContactEvent{IntentID: id, Outcome: "canceled", Reason: decision.Reason, At: at}
+			if err := updateIntentAndLog(ctx, tx, id, state, decision.Reason, event); err != nil {
+				return ChannelContact{}, false, err
+			}
+			return ChannelContact{}, false, tx.Commit()
+		}
+		if !decision.Ready {
+			if item.Reason != decision.Reason {
+				event := ContactEvent{IntentID: id, Outcome: "skipped", Reason: decision.Reason, At: at}
+				if err := updateIntentAndLog(ctx, tx, id, "pending", decision.Reason, event); err != nil {
+					return ChannelContact{}, false, err
+				}
+				return ChannelContact{}, false, tx.Commit()
+			}
+			return ChannelContact{}, false, nil
+		}
 	}
 	if !first.Valid {
 		body = contactBody(item.Topic, language)
@@ -202,8 +225,17 @@ func (h *History) MarkChannelContactSent(ctx context.Context, id int64, at time.
 	if state != "pending" {
 		return errors.New("contact delivery is not pending")
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO messages(role, content, created_at) VALUES ('assistant', ?, ?)`, body, at.UTC().Format(time.RFC3339Nano)); err != nil {
+	var totalParts, remainingParts int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(SUM(CASE WHEN state='pending' THEN 1 ELSE 0 END),0) FROM contact_delivery_parts WHERE intent_id=?", id).Scan(&totalParts, &remainingParts); err != nil {
 		return err
+	}
+	if remainingParts > 0 {
+		return errors.New("contact burst has unsent parts")
+	}
+	if totalParts == 0 {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO messages(role, content, created_at) VALUES ('assistant', ?, ?)`, body, at.UTC().Format(time.RFC3339Nano)); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE contact_delivery SET state = 'sent', sent_ns = ? WHERE intent_id = ?`, at.UnixNano(), id); err != nil {
 		return err

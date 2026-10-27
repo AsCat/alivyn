@@ -49,7 +49,7 @@ func rhythmMessage(c Context) model.Message {
 	}
 	if r.ContributionMessages > 0 && r.ContributionChars <= small {
 		if c.Frame.Language == "zh-CN" {
-			text += " 这一轮默认只说一个很短的意思，日常回应通常约2–16个汉字就够。说完停下，不补自己的生活片段、感想、笑话或新问题。只有这段话确实提出需要解释的问题、认真倾诉或明确邀请展开时才多说。不要把这个字数提示告诉对方，也不要省略必要内容。"
+			text += " 这一轮通常只需接住一个很短的意思，不必每次写成完整句子。同一个意思有时可以分两拍说；第一拍接住了，就停下，不为了改变条数补自己的近况、感想、笑话或新问题。只有这段话确实提出需要解释的问题、认真倾诉或明确邀请展开时才多说。不要把这个提示告诉对方，也不要省略必要内容。"
 		} else {
 			text += " For this small contribution, usually a few words (roughly 1–10) suffice. Stop after one thought; no appended life anecdote, reflection, joke or new question. Expand only if the contribution actually asks for an explanation, expresses a significant concern or invites elaboration. Do not mention these counts or omit necessary substance."
 		}

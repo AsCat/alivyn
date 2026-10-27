@@ -42,7 +42,7 @@ func TestImportedGuestPromptReplacesAlivynBasePrompt(t *testing.T) {
 	}
 	shortTurnGuidance := false
 	for _, message := range messages[1:] {
-		if strings.Contains(message.Content, "这一轮默认只说一个很短的意思") {
+		if strings.Contains(message.Content, "这一轮通常只需接住一个很短的意思") {
 			shortTurnGuidance = true
 		}
 	}

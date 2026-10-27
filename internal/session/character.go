@@ -9,6 +9,7 @@ import (
 
 	"github.com/AsCat/alivyn/internal/actor"
 	"github.com/AsCat/alivyn/internal/character"
+	"github.com/AsCat/alivyn/internal/display"
 	"github.com/AsCat/alivyn/internal/model"
 	"github.com/AsCat/alivyn/internal/persona"
 	"github.com/AsCat/alivyn/internal/store"
@@ -161,6 +162,9 @@ func (s Session) composeCharacterReply(ctx context.Context, now time.Time, sourc
 	if err != nil {
 		return "", fmt.Errorf("character dialogue: %w", err)
 	}
+	if c.AllowBubbles && turn.Mode == "say" && turn.Absence == nil {
+		turn.Reply = display.ComposeChat(turn.Reply, c.Frame.Recent, c.Frame.Language)
+	}
 	if err := s.History.SaveCharacterTurn(ctx, sourceID, turn, now); err != nil {
 		return "", err
 	}
@@ -188,6 +192,9 @@ func (s Session) composeCharacterContactAt(ctx context.Context, occasion string,
 	}
 	if t.Mode == "wait" {
 		return "", ErrContactWait
+	}
+	if c.AllowBubbles && t.Mode == "say" && t.Absence == nil {
+		t.Reply = display.ComposeChat(t.Reply, c.Frame.Recent, c.Frame.Language)
 	}
 	if len([]rune(t.Reply)) > 180 {
 		return "", errors.New("character contact is too long")

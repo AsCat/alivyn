@@ -190,9 +190,9 @@ func messagesFor(c Context) ([]model.Message, error) {
 		// guest persona still owns its wording and can expand for real invitations.
 		messages = append(messages, rhythmMessage(c))
 		if c.AllowBubbles {
-			instruction := "A thought may sometimes arrive in two short beats. When that feels natural, place one blank line between them inside reply; the chat channel will send them as separate bubbles. One bubble is often enough. At most three, with no labels or filler."
+			instruction := "Write this as a private chat, not polished prose. A short reply may end without a full stop. If one relevant thought naturally has two beats, put one blank line between them inside reply; the channel will send separate bubbles. One bubble is often enough, and silence remains possible. At most three beats. The second beat must carry the same exchange forward, not introduce an unrelated personal update, filler, fake vocal tic, or question just to vary the count."
 			if c.Frame.Language == "zh-CN" {
-				instruction = "同一个念头有时会分两拍说完。只有自然时，才在 reply 文字里用一个空行分成前后两段；聊天渠道会把它们送成连续气泡。一条说完也很好，最多三段，不加序号，不为凑气泡添话。"
+				instruction = "这是私聊打字，不必把每条短消息都写成以句号结束的完整书面句。同一个贴着眼前话题的意思若自然分两拍说，可在 reply 中间空一行，渠道会分成两个气泡；一条说完或选择不回也都自然。最多三拍。第二拍必须推进眼前这段话，不为凑条数补无关的个人近况、语气词、假装咳嗽或硬追问。"
 			}
 			messages = append(messages, model.Message{Role: "system", Content: instruction})
 		}

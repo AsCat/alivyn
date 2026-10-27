@@ -332,7 +332,7 @@ func (b *bubbleSender) Send(_ context.Context, input *types.SendInput) (*types.S
 	return &types.SendResult{}, nil
 }
 
-func TestVividCharacterSendsTwoBubblesFromOneTurn(t *testing.T) {
+func TestVividCharacterRealizesTwoSentencesAsTwoBubbles(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	h, err := store.OpenHistory(ctx, t.TempDir())
@@ -343,7 +343,7 @@ func TestVividCharacterSendsTwoBubblesFromOneTurn(t *testing.T) {
 	if _, err := h.EnqueueFeishu(ctx, "vivid-event", "chat", "message", "你想说什么", time.Now().Add(-time.Minute), time.UTC); err != nil {
 		t.Fatal(err)
 	}
-	client := &burstCompleter{reply: `{"mode":"say","reply":"先听我说。\n\n其实我有点紧张。","absence":null}`}
+	client := &burstCompleter{reply: `{"mode":"say","reply":"先听我说。其实我有点紧张。","absence":null}`}
 	s := session.Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", PersonaPack: "vivid", WorldPack: "tidehaven"}, History: h, Client: client}
 	sender := &bubbleSender{}
 	if err := processFeishuOnce(ctx, h, s, sender); err != nil {

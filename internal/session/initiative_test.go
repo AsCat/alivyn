@@ -59,6 +59,36 @@ func TestProactiveContactReviewsContradictoryLifeClaimBeforeDelivery(t *testing.
 	}
 }
 
+func TestProactiveContextIncludesCharacterOwnEstablishedMotives(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if err := h.AddUserMessage(ctx, "我还在工作", now.Add(-time.Hour), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Add(ctx, "assistant", "你忙你的，我听着。", now.Add(-time.Hour+time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", PersonaPack: "dafeiyu-astrbot", WorldPack: "none", Timezone: "UTC"}, History: h}
+	_, refs, err := s.characterContactContext(ctx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range refs {
+		if ref.ID == "self:character" {
+			if ref.Provenance != "authored_character" || len([]rune(ref.Text)) > 1101 {
+				t.Fatalf("invalid character motive: %+v", ref)
+			}
+			return
+		}
+	}
+	t.Fatal("character's own motives were unavailable to initiative")
+}
+
 func TestInitiativeFromIdleToMessageAndQuietChoice(t *testing.T) {
 	for _, choice := range []string{"contact", "wait", "invalid"} {
 		t.Run(choice, func(t *testing.T) {

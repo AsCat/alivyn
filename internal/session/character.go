@@ -223,6 +223,19 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 	// Proactive contact includes the last response, unlike a source-bound reply.
 	c.Frame.Recent = nil
 	references := append(append([]actor.Evidence(nil), c.Frame.Evidence...), c.Sources...)
+	// A character can initiate from an established preference or her own
+	// recorded state, without pretending a new external event happened.
+	if profile := strings.TrimSpace(c.Persona); profile != "" {
+		runes := []rune(profile)
+		if len(runes) > 1100 {
+			profile = string(runes[:1100]) + "…"
+		}
+		references = append(references, actor.Evidence{ID: "self:character", Provenance: "authored_character", Text: profile})
+	}
+	if c.Moment.Feeling != "" || c.Moment.Intention != "" || c.Moment.Attention != "" {
+		references = append(references, actor.Evidence{ID: "self:moment", Provenance: "character_state", At: c.MomentAt,
+			Text: fmt.Sprintf("feeling=%s; attention=%s; intention=%s; connection=%s", c.Moment.Feeling, c.Moment.Attention, c.Moment.Intention, c.Moment.Connection)})
+	}
 	for i, e := range entries {
 		if e.Content != "[forgotten memory]" {
 			content := e.Content
@@ -278,6 +291,11 @@ func (s Session) ReflectCharacter(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	tuning, err := s.History.CharacterTuning(ctx)
+	if err != nil {
+		return err
+	}
+	c.InitiativeLevel = tuning.Initiative
 	if source, found, err := s.History.CharacterReplySource(ctx, id); err != nil {
 		return err
 	} else if found {

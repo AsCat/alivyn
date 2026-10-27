@@ -140,8 +140,14 @@ func TestCharacterCarriesStateAndRoleHistoryAcrossRestart(t *testing.T) {
 	if err := h.CommitCharacterReply(ctx, 1, reply, at.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
+	if err := h.SetInitiative(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.ReflectCharacter(ctx, at.Add(30*time.Second)); err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(client.calls[1][1].Content, `"initiative_level":100`) {
+		t.Fatalf("reflection missed character disposition: %+v", client.calls[1])
 	}
 	h.Close()
 	h, err = store.OpenHistory(ctx, dir)

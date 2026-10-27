@@ -44,6 +44,11 @@ func runContact(ctx context.Context, args []string, out io.Writer) error {
 		}
 		fmt.Fprintf(out, "paused=%t quiet=%s-%s daily_limit=%d timezone=%s serve_transport=local-outbox feishu_run_transport=feishu\n",
 			p.Paused, p.QuietStart, p.QuietEnd, p.DailyLimit, zone)
+		tuning, err := h.CharacterTuning(ctx)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "initiative_level=%d\n", tuning.Initiative)
 		if c.EffectiveEngine() == "character_v2" {
 			state, err := h.InitiativeStatus(ctx, time.Now(), zone)
 			if err != nil {

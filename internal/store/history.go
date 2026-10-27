@@ -111,6 +111,11 @@ CREATE TABLE IF NOT EXISTS contact_settings (
   daily_limit INTEGER NOT NULL DEFAULT 2
 );
 INSERT OR IGNORE INTO contact_settings(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS character_tuning (
+  id INTEGER PRIMARY KEY CHECK(id=1),
+  initiative INTEGER NOT NULL DEFAULT 25 CHECK(initiative BETWEEN 0 AND 100)
+);
+INSERT OR IGNORE INTO character_tuning(id) VALUES(1);
 CREATE TABLE IF NOT EXISTS initiative_clock (
   id INTEGER PRIMARY KEY CHECK(id=1),
   next_check_ns INTEGER NOT NULL DEFAULT 0,

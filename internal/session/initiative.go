@@ -30,11 +30,14 @@ func (s Session) ConsiderInitiative(ctx context.Context, now time.Time) (string,
 		s.History.FailInitiative(ctx, check.ID)
 		return "context failed", err
 	}
+	c.InitiativeLevel = check.Level
+	c.UnansweredOutreach = check.Unanswered
 	p, err := character.ConsiderContact(ctx, s.Client, s.Config.Model, c, refs)
 	if err != nil {
 		s.History.FailInitiative(ctx, check.ID)
 		return "consideration failed", err
 	}
+	p.Unanswered = check.Unanswered
 	queued, err := s.History.FinishInitiative(ctx, check, p, now.Add(time.Since(started)), zone)
 	if err != nil {
 		return "", err

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/AsCat/alivyn/internal/character"
@@ -12,6 +14,31 @@ import (
 )
 
 func runPersona(args []string, out io.Writer) error {
+	if len(args) >= 2 && args[0] == "tune" && args[1] == "initiative" {
+		if len(args) > 3 {
+			return errors.New("usage: alivyn persona tune initiative [0..100]")
+		}
+		_, h, err := openConfiguredHistory(context.Background())
+		if err != nil {
+			return err
+		}
+		defer h.Close()
+		if len(args) == 3 {
+			level, err := strconv.Atoi(args[2])
+			if err != nil {
+				return errors.New("initiative must be between 0 and 100")
+			}
+			if err := h.SetInitiative(context.Background(), level); err != nil {
+				return err
+			}
+		}
+		tuning, err := h.CharacterTuning(context.Background())
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "initiative=%d (0=off, 25=default, 100=high; contact daily limit and quiet hours still apply)\n", tuning.Initiative)
+		return nil
+	}
 	if len(args) == 2 && args[0] == "pack" && args[1] == "list" {
 		c, err := config.Load()
 		if err != nil {
@@ -103,7 +130,7 @@ func runPersona(args []string, out io.Writer) error {
 		fmt.Fprintf(out, "Persona style set to %s. Restart a running channel to apply it.\n", args[1])
 		return nil
 	}
-	return errors.New("usage: alivyn persona show|set natural|romantic|companion|pack list|pack show|pack set natural|vivid|dafeiyu-astrbot|background show|background set <text>|routine show|routine set <text>")
+	return errors.New("usage: alivyn persona show|set natural|romantic|companion|pack list|pack show|pack set natural|vivid|dafeiyu-astrbot|background show|background set <text>|routine show|routine set <text>|tune initiative [0..100]")
 }
 
 func displayPersonaBackground(c config.Config) string {

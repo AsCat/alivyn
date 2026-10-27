@@ -15,27 +15,23 @@ import (
 )
 
 type InitiativeCheck struct {
-	ID        int64
-	SourceID  int64
-	ThroughID int64
-	Reason    string
-	Ready     bool
+	ID         int64
+	SourceID   int64
+	ThroughID  int64
+	Unanswered int
+	Level      int
+	Reason     string
+	Ready      bool
 }
-
-const (
-	initiativeConsiderationGap = 2 * time.Hour
-	initiativeRoutineBudget    = 4
-	initiativeFreshBudget      = 6
-)
 
 // Repeated consideration of an unchanged conversation cannot consume the
 // entire day and prevent a later, newly shared conversation from being heard.
 // The extra two checks still have a strict daily API limit.
-func initiativeBudgetExhaustedTx(ctx context.Context, tx *sql.Tx, count int, sourceID int64) (bool, error) {
-	if count < initiativeRoutineBudget {
+func initiativeBudgetExhaustedTx(ctx context.Context, tx *sql.Tx, count int, sourceID int64, profile character.InitiativeProfile) (bool, error) {
+	if count < profile.RoutineDailyChecks {
 		return false, nil
 	}
-	if count >= initiativeFreshBudget {
+	if count >= profile.FreshDailyChecks {
 		return true, nil
 	}
 	var lastSource int64
@@ -78,6 +74,14 @@ func initiativeWindowTx(ctx context.Context, tx *sql.Tx, now time.Time, zone *ti
 		check.Reason = "paused"
 		return check, nil
 	}
+	if err := tx.QueryRowContext(ctx, "SELECT initiative FROM character_tuning WHERE id=1").Scan(&check.Level); err != nil {
+		return check, err
+	}
+	profile := character.ProfileForInitiative(check.Level)
+	if !profile.Enabled {
+		check.Reason = "initiative disabled"
+		return check, nil
+	}
 	if contact.Quiet(now.In(zone), start, end) {
 		check.Reason = "quiet hours"
 		return check, nil
@@ -95,7 +99,9 @@ func initiativeWindowTx(ctx context.Context, tx *sql.Tx, now time.Time, zone *ti
 		return check, nil
 	}
 	var userStamp, latestStamp, role string
-	err = tx.QueryRowContext(ctx, "SELECT id,created_at FROM messages WHERE role='user' ORDER BY id DESC LIMIT 1").Scan(&check.SourceID, &userStamp)
+	err = tx.QueryRowContext(ctx, `SELECT m.id,m.created_at FROM messages m WHERE m.role='user'
+AND NOT EXISTS(SELECT 1 FROM local_commands c WHERE c.source_message_id=m.id)
+ORDER BY m.id DESC LIMIT 1`).Scan(&check.SourceID, &userStamp)
 	if errors.Is(err, sql.ErrNoRows) {
 		check.Reason = "no conversation"
 		return check, nil
@@ -103,7 +109,14 @@ func initiativeWindowTx(ctx context.Context, tx *sql.Tx, now time.Time, zone *ti
 	if err != nil {
 		return check, err
 	}
-	if err := tx.QueryRowContext(ctx, "SELECT id,role,created_at FROM messages ORDER BY id DESC LIMIT 1").Scan(&check.ThroughID, &role, &latestStamp); err != nil {
+	var lastVisibleID int64
+	if err := tx.QueryRowContext(ctx, `SELECT m.id,m.role,m.created_at FROM messages m
+WHERE NOT EXISTS(SELECT 1 FROM local_commands c WHERE c.source_message_id=m.id)
+AND NOT EXISTS(SELECT 1 FROM assistant_turns a JOIN local_commands c ON c.source_message_id=a.source_message_id WHERE a.assistant_message_id=m.id)
+ORDER BY m.id DESC LIMIT 1`).Scan(&lastVisibleID, &role, &latestStamp); err != nil {
+		return check, err
+	}
+	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(id),0) FROM messages").Scan(&check.ThroughID); err != nil {
 		return check, err
 	}
 	userAt, err := time.Parse(time.RFC3339Nano, userStamp)
@@ -133,14 +146,9 @@ WHERE source_message_id=? AND committed=1 AND json_extract(turn_json,'$.mode')='
 		check.Reason = "private reply pending"
 		return check, nil
 	}
-	gap := 30 * time.Minute
+	gap := profile.FirstContactGap
 	if r.Stage == relationship.Acquaintance {
-		gap = 45 * time.Minute
-	}
-	gap += time.Duration(check.SourceID%11) * time.Minute
-	if now.Sub(lastAt) < gap {
-		check.Reason = "conversation still recent"
-		return check, nil
+		gap += 15 * time.Minute
 	}
 	var unanswered int
 	if err := tx.QueryRowContext(ctx, `SELECT
@@ -148,8 +156,17 @@ WHERE source_message_id=? AND committed=1 AND json_extract(turn_json,'$.mode')='
  (SELECT COUNT(*) FROM contact_outbox WHERE sent_ns>=?)`, userAt.UnixNano(), userAt.UnixNano()).Scan(&unanswered); err != nil {
 		return check, err
 	}
-	if unanswered > 0 {
+	check.Unanswered = unanswered
+	if unanswered >= profile.MaxUnanswered {
 		check.Reason = "waiting for user to return"
+		return check, nil
+	}
+	if unanswered > 0 {
+		gap = profile.FollowupGap
+	}
+	gap += time.Duration((check.SourceID+int64(unanswered)*7)%11) * time.Minute
+	if now.Sub(lastAt) < gap {
+		check.Reason = "conversation still recent"
 		return check, nil
 	}
 	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM contact_intents WHERE state='pending' AND expires_ns>? AND id!=?", now.UnixNano(), excludeIntent).Scan(&pending); err != nil {
@@ -197,7 +214,8 @@ func (h *History) ClaimInitiative(ctx context.Context, now time.Time, zone *time
 	if day != today {
 		count = 0
 	}
-	exhausted, err := initiativeBudgetExhaustedTx(ctx, tx, count, c.SourceID)
+	profile := character.ProfileForInitiative(c.Level)
+	exhausted, err := initiativeBudgetExhaustedTx(ctx, tx, count, c.SourceID, profile)
 	if err != nil {
 		return c, err
 	}
@@ -211,7 +229,7 @@ func (h *History) ClaimInitiative(ctx context.Context, now time.Time, zone *time
 		c.Reason = "consideration cooldown"
 		return c, nil
 	}
-	if _, err := tx.ExecContext(ctx, "UPDATE initiative_clock SET next_check_ns=?,budget_day=?,checks=? WHERE id=1", now.Add(initiativeConsiderationGap).UnixNano(), today, count+1); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE initiative_clock SET next_check_ns=?,budget_day=?,checks=? WHERE id=1", now.Add(profile.ConsiderationGap).UnixNano(), today, count+1); err != nil {
 		return c, err
 	}
 	r, err := tx.ExecContext(ctx, "INSERT INTO initiative_checks(source_message_id,through_message_id,at_ns) VALUES(?,?,?)", c.SourceID, c.ThroughID, now.UnixNano())
@@ -243,7 +261,7 @@ func (h *History) InitiativeStatus(ctx context.Context, now time.Time, zone *tim
 	}
 	var exhausted bool
 	if day == now.In(zone).Format("2006-01-02") {
-		exhausted, err = initiativeBudgetExhaustedTx(ctx, tx, checks, c.SourceID)
+		exhausted, err = initiativeBudgetExhaustedTx(ctx, tx, checks, c.SourceID, character.ProfileForInitiative(c.Level))
 		if err != nil {
 			return c, err
 		}
@@ -259,6 +277,7 @@ func (h *History) InitiativeStatus(ctx context.Context, now time.Time, zone *tim
 }
 
 func (h *History) FinishInitiative(ctx context.Context, c InitiativeCheck, p character.Initiative, now time.Time, zone *time.Location) (bool, error) {
+	p.Unanswered = c.Unanswered // The model cannot choose or spoof the outreach round.
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -288,7 +307,7 @@ func (h *History) FinishInitiative(ctx context.Context, c InitiativeCheck, p cha
 		if err != nil {
 			return false, err
 		}
-		if !fresh.Ready || fresh.SourceID != c.SourceID {
+		if !fresh.Ready || fresh.SourceID != c.SourceID || fresh.Unanswered != c.Unanswered || fresh.Level != c.Level {
 			outcome = "superseded"
 		} else {
 			outcome = "queued"
@@ -297,7 +316,7 @@ func (h *History) FinishInitiative(ctx context.Context, c InitiativeCheck, p cha
 	var duplicate int
 	if outcome == "queued" {
 		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM initiative_checks c JOIN contact_intents i ON i.id=c.intent_id
-WHERE c.topic_key=? AND c.at_ns>? AND i.state IN ('pending','sent')`, p.TopicKey(), now.Add(-72*time.Hour).UnixNano()).Scan(&duplicate); err != nil {
+WHERE c.topic_key=? AND c.at_ns>? AND i.state IN ('pending','sent')`, initiativeTopicKey(p, c.Unanswered), now.Add(-72*time.Hour).UnixNano()).Scan(&duplicate); err != nil {
 			return false, err
 		}
 		if duplicate > 0 {
@@ -320,10 +339,14 @@ VALUES('initiative',?,?,?,?,?)`, now.Add(time.Duration(p.AfterMinutes)*time.Minu
 			return false, err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, "UPDATE initiative_checks SET outcome=?,reason=?,proposal_json=?,topic_key=?,intent_id=? WHERE id=?", outcome, p.Reason, string(data), p.TopicKey(), intentID, c.ID); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE initiative_checks SET outcome=?,reason=?,proposal_json=?,topic_key=?,intent_id=? WHERE id=?", outcome, p.Reason, string(data), initiativeTopicKey(p, c.Unanswered), intentID, c.ID); err != nil {
 		return false, err
 	}
 	return outcome == "queued", tx.Commit()
+}
+
+func initiativeTopicKey(p character.Initiative, unanswered int) string {
+	return fmt.Sprintf("%s:%d", p.TopicKey(), unanswered)
 }
 
 func (h *History) FailInitiative(ctx context.Context, id int64) error {
@@ -396,5 +419,9 @@ func clearInitiativesTx(ctx context.Context, tx *sql.Tx) error {
 }
 
 func InitiativeOccasion(p character.Initiative) string {
-	return "You previously chose a personal reason to reach out: " + p.Reason + ". This is a " + p.Kind + " grounded in these records: " + strings.Join(p.EvidenceIDs, ", ") + ". Say the concrete thing naturally in one short message, without explaining the scheduling or requiring an answer. Do not re-answer the user's old message. If the reason no longer makes sense, return exactly [[wait]]."
+	occasion := "You previously chose a personal reason to reach out: " + p.Reason + ". This is a " + p.Kind + " grounded in these records: " + strings.Join(p.EvidenceIDs, ", ") + ". Say the concrete thing naturally in one short message, without explaining the scheduling or requiring an answer. Do not re-answer the user's old message."
+	if p.Unanswered > 0 {
+		occasion += fmt.Sprintf(" You have sent %d proactive message(s) since their last reply. You may briefly notice their absence or wonder where they went if that fits your relationship, but do not repeat your last question or imply they owe a response.", p.Unanswered)
+	}
+	return occasion + " If the reason no longer makes sense, return exactly [[wait]]."
 }

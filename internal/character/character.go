@@ -65,24 +65,26 @@ type Turn struct {
 }
 
 type Context struct {
-	Frame         actor.Frame
-	Persona       string
-	DirectPersona bool // Use an imported guest prompt as the primary prompt.
-	Moment        Moment
-	MomentAt      string
-	LastChatAt    string
-	Occasion      string // Nonempty only for policy-approved proactive contact.
-	OpenThreads   []OpenThread
-	SelfFacts     []SelfFact
-	Episodes      []Episode
-	Sources       []actor.Evidence // Actual sourced conversation, for reflection.
-	Routine       string
-	CanLeave      bool // Only a durable channel can deliver a later reply.
-	AllowBubbles  bool // The selected temperament can write a few conversational beats.
-	Availability  string
-	ReceivedAt    string
-	ClosedAt      string // A prior conversational ending, not a timed absence.
-	Revision      string // Bounded feedback from the independent action review.
+	Frame              actor.Frame
+	Persona            string
+	DirectPersona      bool // Use an imported guest prompt as the primary prompt.
+	Moment             Moment
+	MomentAt           string
+	LastChatAt         string
+	Occasion           string // Nonempty only for policy-approved proactive contact.
+	OpenThreads        []OpenThread
+	SelfFacts          []SelfFact
+	Episodes           []Episode
+	Sources            []actor.Evidence // Actual sourced conversation, for reflection.
+	Routine            string
+	CanLeave           bool // Only a durable channel can deliver a later reply.
+	AllowBubbles       bool // The selected temperament can write a few conversational beats.
+	Availability       string
+	ReceivedAt         string
+	ClosedAt           string // A prior conversational ending, not a timed absence.
+	Revision           string // Bounded feedback from the independent action review.
+	InitiativeLevel    int    // Persistent disposition used for contact consideration.
+	UnansweredOutreach int    // Delivered proactive messages since the last user message.
 }
 
 func Setting(language string) string {

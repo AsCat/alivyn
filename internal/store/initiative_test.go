@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AsCat/alivyn/internal/character"
+	"github.com/AsCat/alivyn/internal/contact"
 )
 
 func seedInitiative(t *testing.T, h *History, now time.Time) {
@@ -106,6 +107,144 @@ func TestInitiativeRestartCompositionDeliveryAndNoUnansweredChasing(t *testing.T
 	c, err = h.ClaimInitiative(ctx, now.Add(2*time.Hour), time.UTC)
 	if err != nil || c.Ready || c.Reason != "waiting for user to return" {
 		t.Fatalf("chased unanswered contact: %+v %v", c, err)
+	}
+}
+
+func TestHighInitiativeCanFollowUpSeveralTimesAndResetsAfterReply(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedInitiative(t, h, now)
+	if err := h.SetInitiative(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SetContactPolicy(ctx, contact.Policy{QuietStart: "23:00", QuietEnd: "07:00", DailyLimit: 6}); err != nil {
+		t.Fatal(err)
+	}
+	for round := 0; round < 4; round++ {
+		at := now.Add(time.Duration(round) * 40 * time.Minute)
+		check, err := h.ClaimInitiative(ctx, at, time.UTC)
+		if err != nil || !check.Ready || check.Unanswered != round {
+			t.Fatalf("round %d could not consider: %+v %v", round, check, err)
+		}
+		if queued, err := h.FinishInitiative(ctx, check, proposedContact(), at, time.UTC); err != nil || !queued {
+			t.Fatalf("round %d did not queue: %t %v", round, queued, err)
+		}
+		item, ready, err := h.NextChannelContact(ctx, at.Add(6*time.Minute), time.UTC, "zh-CN")
+		if err != nil || !ready {
+			t.Fatalf("round %d not due: %+v %t %v", round, item, ready, err)
+		}
+		if ok, err := h.FinalizeChannelContact(ctx, item.IntentID, "我又想到那幅画。", at.Add(6*time.Minute), time.UTC); err != nil || !ok {
+			t.Fatalf("round %d could not finalize: %t %v", round, ok, err)
+		}
+		if err := h.MarkChannelContactSent(ctx, item.IntentID, at.Add(7*time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if check, err := h.ClaimInitiative(ctx, now.Add(160*time.Minute), time.UTC); err != nil || check.Ready || check.Reason != "waiting for user to return" {
+		t.Fatalf("unanswered cap failed: %+v %v", check, err)
+	}
+	if err := h.AddUserMessage(ctx, "回来啦", now.Add(180*time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Add(ctx, "assistant", "嗯，画还在。", now.Add(180*time.Minute+time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	check, err := h.ClaimInitiative(ctx, now.Add(215*time.Minute), time.UTC)
+	if err != nil || !check.Ready || check.Unanswered != 0 {
+		t.Fatalf("user reply did not reset outreach: %+v %v", check, err)
+	}
+}
+
+func TestInitiativeTuningCannotBypassQuietHoursOrDailyLimit(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedInitiative(t, h, now)
+	if err := h.SetInitiative(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.ClaimInitiative(ctx, now, time.UTC); err != nil || c.Ready || c.Reason != "initiative disabled" {
+		t.Fatalf("disabled: %+v %v", c, err)
+	}
+	if err := h.SetInitiative(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SetContactPolicy(ctx, contact.Policy{QuietStart: "11:00", QuietEnd: "13:00", DailyLimit: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.ClaimInitiative(ctx, now, time.UTC); err != nil || c.Ready || c.Reason != "quiet hours" {
+		t.Fatalf("quiet hours: %+v %v", c, err)
+	}
+	if err := h.SetContactPolicy(ctx, contact.Policy{QuietStart: "23:00", QuietEnd: "07:00", DailyLimit: 1}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.ClaimInitiative(ctx, now, time.UTC)
+	if err != nil || !c.Ready {
+		t.Fatal(c, err)
+	}
+	if queued, err := h.FinishInitiative(ctx, c, proposedContact(), now, time.UTC); err != nil || !queued {
+		t.Fatal(queued, err)
+	}
+	item, ready, err := h.NextChannelContact(ctx, now.Add(6*time.Minute), time.UTC, "zh-CN")
+	if err != nil || !ready {
+		t.Fatal(item, ready, err)
+	}
+	if ok, err := h.FinalizeChannelContact(ctx, item.IntentID, "我想起那张画。", now.Add(6*time.Minute), time.UTC); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if err := h.MarkChannelContactSent(ctx, item.IntentID, now.Add(7*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.ClaimInitiative(ctx, now.Add(40*time.Minute), time.UTC); err != nil || c.Ready || c.Reason != "daily contact limit" {
+		t.Fatalf("daily limit: %+v %v", c, err)
+	}
+}
+
+func TestTuningCommandDoesNotBecomeAConversationOrResetUnansweredContact(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedInitiative(t, h, now)
+	if err := h.SetContactPolicy(ctx, contact.Policy{QuietStart: "23:00", QuietEnd: "07:00", DailyLimit: 5}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.ClaimInitiative(ctx, now, time.UTC)
+	if err != nil || !c.Ready {
+		t.Fatal(c, err)
+	}
+	if queued, err := h.FinishInitiative(ctx, c, proposedContact(), now, time.UTC); err != nil || !queued {
+		t.Fatal(queued, err)
+	}
+	item, ready, err := h.NextChannelContact(ctx, now.Add(6*time.Minute), time.UTC, "zh-CN")
+	if err != nil || !ready {
+		t.Fatal(item, ready, err)
+	}
+	if ok, err := h.FinalizeChannelContact(ctx, item.IntentID, "我想起那张画。", now.Add(6*time.Minute), time.UTC); err != nil || !ok {
+		t.Fatal(ok, err)
+	}
+	if err := h.MarkChannelContactSent(ctx, item.IntentID, now.Add(7*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	controlTestMessage(t, h, "/主动性 100", now.Add(8*time.Minute))
+	check, err := h.ClaimInitiative(ctx, now.Add(40*time.Minute), time.UTC)
+	if err != nil || !check.Ready || check.Unanswered != 1 || check.SourceID != c.SourceID {
+		t.Fatalf("command hid an unanswered contact: %+v %v", check, err)
+	}
+	if queued, err := h.FinishInitiative(ctx, check, proposedContact(), now.Add(40*time.Minute), time.UTC); err != nil || !queued {
+		t.Fatalf("follow-up after command: %t %v", queued, err)
 	}
 }
 

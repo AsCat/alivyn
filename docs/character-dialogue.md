@@ -103,14 +103,14 @@ The character can explicitly leave a completed or uninteresting optional exchang
 
 With v2 and the Feishu runtime running, an independent loop considers whether the character has a concrete reason to reach out. It uses the character card, current state, ordered conversation, sourced memories and world events. It can follow up, share or reconnect, or decide to leave things quiet. A proposal contains a brief subject and source IDs; it is not hidden reasoning. Ordinary replies use a direct draft followed by consistency review.
 
-Initial conservative limits:
+Initiative is a separate persistent character setting. It changes how often the character considers contact and how many unanswered messages she may follow up on; the character still decides whether and what to say based on the relationship, current state and recent messages. Its default is 25:
 
 - The relationship must be beyond stranger and not reserved. A latest conversation older than 72 hours is not a trigger.
 - Wait at least 30 minutes after a familiar conversation, or 45 minutes for an acquaintance, plus 0–10 minutes of stable variation. A completed quiet turn also counts as a handled conversation.
-- Respect pause, quiet hours, daily contact cap and pending private replies before making an API call. Considerations are at least two hours apart. Four routine checks are allowed per local day; up to two more require a new conversation. The hard limit is six model checks per day, and the budget survives restarts.
+- Respect pause, quiet hours, daily contact cap and pending private replies before making an API call. At the default level, considerations are at least two hours apart. Four routine checks are allowed per local day; up to two more require a new conversation. The default hard limit is six model checks per day. Higher initiative shortens the gap but retains a daily budget, including across restarts.
 - A valid proposal cites 1–3 available references and proposes a delay of 5–60 minutes. It expires after three hours. An identical kind/source set is suppressed for 72 hours.
 - Recheck the conversation after judgment, before composition and before sending. New user messages cancel pending spontaneous proposals. Composition can also choose silence.
-- After an unanswered proactive delivery, spontaneous contact waits for the user to return. No escalating complaints or guilt messages.
+- At the default level, one unanswered proactive delivery makes her wait. At initiative levels 50, 75 and 90, the maximum number of consecutive unanswered proactive messages becomes 2, 3 and 4 respectively. Every attempt still needs a fresh model judgment, elapsed time and delivery checks. She may naturally wonder where the user went, or stay quiet. Silence cannot become a debt, a threat or a repeated demand. A user reply resets the unanswered count.
 
 Existing interview, wake and world-update intents retain their own triggers and share the contact policy. The new limits above apply to spontaneous consideration. `serve` remains a local outbox demo; spontaneous model consideration runs in the Feishu channel worker. Sleeping/offline machines cannot generate or deliver until their runtime returns.
 
@@ -119,7 +119,10 @@ alivyn contact status
 alivyn contact pause
 alivyn contact resume
 alivyn contact simulate
+alivyn persona tune initiative 100
 ```
+
+In Feishu, send `/initiative 100` (or `/主动性 100`) to try the highest level, `/initiative 25` to restore the default, or `/initiative 0` to disable autonomous initiation. `/contact limit 5` (or `/联系上限 5`) raises the daily outbound cap for a multi-message test; `/status` shows both settings. Changes take effect without restarting the channel and stay outside character memory. A high level does not force an immediate message. At level 100, the next consideration after a sent message still waits roughly 20–30 minutes, followed by the model's proposed 5–60 minute sending delay. Quiet hours, pause, absence and the daily cap still apply.
 
 `contact simulate` uses synthetic conversations and a virtual clock in disposable databases, with the configured model/key. It makes paid model calls but sends no channel messages and leaves the installed history unchanged. It reports sharing, respecting concentration and leaving a closed subject alone. A model can choose silence even for the sharing example; the command is an inspection tool, not a deterministic quality benchmark.
 

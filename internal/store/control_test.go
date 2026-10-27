@@ -23,6 +23,50 @@ func controlTestMessage(t *testing.T, h *History, text string, at time.Time) str
 	return r
 }
 
+func TestInitiativeAndContactLimitCommandsPersistAndValidate(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	h, err := OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	if got := controlTestMessage(t, h, "/主动性 100", at); !strings.Contains(got, "100/100") {
+		t.Fatal(got)
+	}
+	if got := controlTestMessage(t, h, "/联系上限 5", at); !strings.Contains(got, "上限：5") {
+		t.Fatal(got)
+	}
+	if got := controlTestMessage(t, h, "/主动性 101", at); !strings.Contains(got, "用法") {
+		t.Fatal(got)
+	}
+	if got := controlTestMessage(t, h, "/联系上限 21", at); !strings.Contains(got, "用法") {
+		t.Fatal(got)
+	}
+	if err := h.Close(); err != nil {
+		t.Fatal(err)
+	}
+	h, err = OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	tuning, err := h.CharacterTuning(ctx)
+	if err != nil || tuning.Initiative != 100 {
+		t.Fatal(tuning, err)
+	}
+	policy, err := h.ContactPolicy(ctx)
+	if err != nil || policy.DailyLimit != 5 {
+		t.Fatal(policy, err)
+	}
+	if got := controlTestMessage(t, h, "/状态", at); !strings.Contains(got, "主动性：100/100") || !strings.Contains(got, "每日上限：5") {
+		t.Fatal(got)
+	}
+	if got := controlTestMessage(t, h, "/initiative 0", at); !strings.Contains(got, "0/100") {
+		t.Fatal(got)
+	}
+}
+
 func TestDiagnosticEntryExpiryIsolationAndRestore(t *testing.T) {
 	ctx := context.Background()
 	h, err := OpenHistory(ctx, t.TempDir())

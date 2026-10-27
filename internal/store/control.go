@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,6 +51,19 @@ func commandName(text string) string {
 	case "/返回角色", "/resume":
 		return "resume"
 	}
+	parts := strings.Fields(strings.TrimSpace(text))
+	if len(parts) > 0 {
+		switch parts[0] {
+		case "/主动性", "/initiative":
+			return "initiative"
+		case "/联系上限":
+			return "contact_limit"
+		case "/contact":
+			if len(parts) > 1 && parts[1] == "limit" {
+				return "contact_limit"
+			}
+		}
+	}
 	return "unknown"
 }
 
@@ -57,6 +71,8 @@ const helpZH = `【控制台】
 /状态 — 查看运行状态和联系限制
 /暂停 · /唤醒 — 暂停或恢复人物对话，保留记忆
 /勿扰 · /允许主动 — 关闭或允许主动联系，仍遵守安静时段
+/主动性 [0–100] — 查看或调整人物主动性；25 是默认值，100 可用于高频试验
+/联系上限 [1–20] — 查看或调整每天最多主动发几条；勿扰时段仍生效
 /诊断 — 申请进入诊断；60 秒内 /确认诊断，或 /取消
 诊断内：/人物 · /作息 · /记忆 · /心境 · /挂念
 /返回角色 — 退出诊断，恢复进入前的状态
@@ -67,6 +83,8 @@ const helpEN = `Control console
 /status — runtime and contact limits
 /freeze · /wake — pause or resume character dialogue, preserving memory
 /quiet · /contact on — disable or allow proactive contact, respecting quiet hours
+/initiative [0–100] — show or adjust initiative; 25 is the default
+/contact limit [1–20] — show or adjust the daily proactive-message limit
 /diagnostics — request inspection; /diagnostics confirm within 60s, or /cancel
 Inside diagnostics: /persona · /routine · /memories · /state · /threads
 /resume — leave diagnostics and restore the previous mode
@@ -101,13 +119,17 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			var start, end string
 			var limit int
 			err = tx.QueryRowContext(ctx, "SELECT paused,quiet_start,quiet_end,daily_limit FROM contact_settings WHERE id=1").Scan(&paused, &start, &end, &limit)
+			var initiative int
+			if err == nil {
+				err = tx.QueryRowContext(ctx, "SELECT initiative FROM character_tuning WHERE id=1").Scan(&initiative)
+			}
 			labels := map[string]string{"running": "人物运行中", "paused": "人物已暂停", "diagnostic": "诊断中"}
 			contactZH := "允许（由人物决定是否联系）"
 			if paused {
 				contactZH = "已关闭"
 			}
-			zh = fmt.Sprintf("【控制台】%s\n主动联系：%s\n安静时段：%s–%s（配置时区）；每日上限：%d\n暂停和诊断期间不会主动联系。", labels[mode], contactZH, start, end, limit)
-			en = fmt.Sprintf("Mode: %s\nProactive contact disabled: %t\nQuiet hours: %s–%s (configured timezone); daily limit: %d\nPaused and diagnostic modes block proactive contact.", mode, paused, start, end, limit)
+			zh = fmt.Sprintf("【控制台】%s\n主动联系：%s；主动性：%d/100\n安静时段：%s–%s（配置时区）；每日上限：%d\n暂停和诊断期间不会主动联系。", labels[mode], contactZH, initiative, start, end, limit)
+			en = fmt.Sprintf("Mode: %s\nProactive contact disabled: %t; initiative: %d/100\nQuiet hours: %s–%s (configured timezone); daily limit: %d\nPaused and diagnostic modes block proactive contact.", mode, paused, initiative, start, end, limit)
 			if err == nil {
 				var kind string
 				var until int64
@@ -146,6 +168,58 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			} else {
 				zh, en = "【控制台】已允许主动联系，仍遵守安静时段、每日上限和人物当前状态；不会强制立即发消息。", "Proactive contact allowed, subject to quiet hours, daily limits and character mode. This does not force an immediate message."
 			}
+		case "initiative":
+			parts := strings.Fields(strings.TrimSpace(text))
+			var level int
+			err = tx.QueryRowContext(ctx, "SELECT initiative FROM character_tuning WHERE id=1").Scan(&level)
+			if err != nil {
+				break
+			}
+			if len(parts) == 2 {
+				value, parseErr := strconv.Atoi(parts[1])
+				if parseErr != nil || value < 0 || value > 100 {
+					zh, en = "【控制台】用法：/主动性 0–100。", "Usage: /initiative 0–100."
+					break
+				}
+				err = setInitiativeTx(ctx, tx, value, at)
+				level = value
+			} else if len(parts) > 2 {
+				zh, en = "【控制台】用法：/主动性 0–100。", "Usage: /initiative 0–100."
+				break
+			}
+			var limit int
+			if err == nil {
+				err = tx.QueryRowContext(ctx, "SELECT daily_limit FROM contact_settings WHERE id=1").Scan(&limit)
+			}
+			zh = fmt.Sprintf("【控制台】主动性 %d/100。0 关闭自主发起；调高后会更常考虑联系，未收到回复时也可能再次开口。每日上限仍为 %d，勿扰时段照常生效。", level, limit)
+			en = fmt.Sprintf("Initiative %d/100. Higher levels consider contact more often and may follow up after no reply. Daily limit remains %d; quiet hours still apply.", level, limit)
+		case "contact_limit":
+			parts := strings.Fields(strings.TrimSpace(text))
+			var limit int
+			err = tx.QueryRowContext(ctx, "SELECT daily_limit FROM contact_settings WHERE id=1").Scan(&limit)
+			if err != nil {
+				break
+			}
+			valueText := ""
+			if len(parts) == 2 && parts[0] == "/联系上限" {
+				valueText = parts[1]
+			} else if len(parts) == 3 && parts[0] == "/contact" && parts[1] == "limit" {
+				valueText = parts[2]
+			} else if len(parts) != 1 && !(len(parts) == 2 && parts[0] == "/contact" && parts[1] == "limit") {
+				zh, en = "【控制台】用法：/联系上限 1–20。", "Usage: /contact limit 1–20."
+				break
+			}
+			if valueText != "" {
+				value, parseErr := strconv.Atoi(valueText)
+				if parseErr != nil || value < 1 || value > 20 {
+					zh, en = "【控制台】用法：/联系上限 1–20。", "Usage: /contact limit 1–20."
+					break
+				}
+				err = exec("UPDATE contact_settings SET daily_limit=? WHERE id=1", value)
+				limit = value
+			}
+			zh = fmt.Sprintf("【控制台】每日主动联系上限：%d。人物仍会自行决定是否发送；勿扰时段继续生效。", limit)
+			en = fmt.Sprintf("Daily proactive-message limit: %d. The character still chooses whether to send; quiet hours remain active.", limit)
 		case "diagnostics":
 			if mode == "diagnostic" {
 				zh, en = "【诊断】已在诊断中。/人物 /记忆 /心境 /挂念；/返回角色 退出。", "Already in diagnostics. /persona /memories /state /threads; /resume to leave."

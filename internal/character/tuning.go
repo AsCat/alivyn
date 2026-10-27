@@ -30,9 +30,14 @@ func ProfileForInitiative(level int) InitiativeProfile {
 	if level <= 25 {
 		profile.ConsiderationGap = time.Duration(360-(level*240/25)) * time.Minute
 		profile.FirstContactGap = time.Duration(120-(level*90/25)) * time.Minute
-	} else {
+	} else if level < 75 {
 		profile.ConsiderationGap = time.Duration(120-((level-25)*100/75)) * time.Minute
 		profile.FirstContactGap = time.Duration(30-((level-25)*20/75)) * time.Minute
+	} else {
+		// The top end is an intentionally responsive disposition. Its upper
+		// bound should be useful for observing natural follow-ups in one sitting.
+		profile.ConsiderationGap = time.Duration(54-(level-75)*50/25) * time.Minute
+		profile.FirstContactGap = time.Duration(17-(level-75)*15/25) * time.Minute
 	}
 	profile.FollowupGap = profile.ConsiderationGap
 	profile.RoutineDailyChecks = 4 + (level-25)*8/75

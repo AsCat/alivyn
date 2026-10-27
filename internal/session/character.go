@@ -182,7 +182,7 @@ func (s Session) composeCharacterContactAt(ctx context.Context, occasion string,
 	}
 	c.InitiativeLevel = tuning.Initiative
 	c.Occasion = occasion
-	t, err := character.Generate(ctx, s.Client, s.Config.Model, c)
+	t, err := character.GenerateChecked(ctx, s.Client, s.Config.Model, c)
 	if err != nil {
 		return "", err
 	}
@@ -231,10 +231,17 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 			}
 			c.Frame.Recent = append(c.Frame.Recent, model.Message{Role: e.Role, Content: content})
 			c.LastChatAt = e.CreatedAt.Format(time.RFC3339)
+			if e.Role == "user" {
+				c.LastUserAt = e.CreatedAt.Format(time.RFC3339)
+			}
 			if i >= len(entries)-12 {
 				references = append(references, actor.Evidence{ID: fmt.Sprintf("chat:%d", e.ID), Provenance: "observed_chat", At: e.CreatedAt.Format(time.RFC3339), Text: e.Role + ": " + content})
 			}
 		}
+	}
+	c.OutreachHistory, err = s.History.RecentOutreach(ctx, now, 8)
+	if err != nil {
+		return c, nil, err
 	}
 	state, momentAt, err := s.History.CharacterStateBefore(ctx, sourceID+1, now)
 	c.Moment = state.Moment

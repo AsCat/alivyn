@@ -171,7 +171,11 @@ WHERE source_message_id=? AND committed=1 AND json_extract(turn_json,'$.mode')='
 	if unanswered > 0 {
 		gap = profile.FollowupGap
 	}
-	gap += time.Duration((check.SourceID+int64(unanswered)*7)%11) * time.Minute
+	variation := 11
+	if check.Level > 75 {
+		variation = 11 - (check.Level-75)*7/25
+	}
+	gap += time.Duration((check.SourceID+int64(unanswered)*7)%int64(variation)) * time.Minute
 	if !check.TestRequest && now.Sub(lastAt) < gap {
 		check.Reason = "conversation still recent"
 		return check, nil
@@ -232,9 +236,15 @@ func (h *History) ClaimInitiative(ctx context.Context, now time.Time, zone *time
 		return c, nil
 	}
 	if !c.TestRequest && now.UnixNano() < next {
-		c.Ready = false
-		c.Reason = "consideration cooldown"
-		return c, nil
+		fresh, err := initiativeHasNewConversationTx(ctx, tx, c.SourceID)
+		if err != nil {
+			return c, err
+		}
+		if !fresh {
+			c.Ready = false
+			c.Reason = "consideration cooldown"
+			return c, nil
+		}
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE initiative_clock SET next_check_ns=?,budget_day=?,checks=? WHERE id=1", now.Add(profile.ConsiderationGap).UnixNano(), today, count+1); err != nil {
 		return c, err
@@ -282,8 +292,14 @@ func (h *History) InitiativeStatus(ctx context.Context, now time.Time, zone *tim
 		c.Ready = false
 		c.Reason = "daily consideration budget"
 	} else if !c.TestRequest && now.UnixNano() < next {
-		c.Ready = false
-		c.Reason = "consideration cooldown"
+		fresh, err := initiativeHasNewConversationTx(ctx, tx, c.SourceID)
+		if err != nil {
+			return c, err
+		}
+		if !fresh {
+			c.Ready = false
+			c.Reason = "consideration cooldown"
+		}
 	}
 	return c, nil
 }
@@ -341,7 +357,11 @@ WHERE c.topic_key=? AND c.at_ns>? AND i.state IN ('pending','sent')`, initiative
 	}
 	var intentID any
 	if outcome == "queued" {
-		due := now.Add(time.Duration(p.AfterMinutes) * time.Minute)
+		delay := p.AfterMinutes
+		if c.Level >= 90 && delay > 3 {
+			delay = 3
+		}
+		due := now.Add(time.Duration(delay) * time.Minute)
 		if c.TestRequest {
 			due = now
 		}
@@ -363,7 +383,23 @@ VALUES('initiative',?,?,?,?,?)`, due.UnixNano(), now.Add(3*time.Hour).UnixNano()
 	if _, err := tx.ExecContext(ctx, "UPDATE initiative_checks SET outcome=?,reason=?,proposal_json=?,topic_key=?,intent_id=? WHERE id=?", outcome, p.Reason, string(data), initiativeTopicKey(p, c.Unanswered), intentID, c.ID); err != nil {
 		return false, err
 	}
+	if outcome == "wait" && p.ReconsiderIn > 0 {
+		if _, err := tx.ExecContext(ctx, "UPDATE initiative_clock SET next_check_ns=? WHERE id=1", now.Add(time.Duration(p.ReconsiderIn)*time.Minute).UnixNano()); err != nil {
+			return false, err
+		}
+	}
 	return outcome == "queued", tx.Commit()
+}
+
+func initiativeHasNewConversationTx(ctx context.Context, tx *sql.Tx, sourceID int64) (bool, error) {
+	var previous int64
+	if err := tx.QueryRowContext(ctx, "SELECT source_message_id FROM initiative_checks ORDER BY id DESC LIMIT 1").Scan(&previous); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return true, nil
+		}
+		return false, err
+	}
+	return previous != sourceID, nil
 }
 
 func initiativeTopicKey(p character.Initiative, unanswered int) string {
@@ -415,6 +451,43 @@ WHERE i.idempotency_key=? AND i.state='pending' AND c.outcome='queued'`, key).Sc
 	var p character.Initiative
 	err = json.Unmarshal([]byte(raw), &p)
 	return p, err
+}
+
+// RecentOutreach returns the character's actual decisions and delivery result.
+// A later consideration can continue an impulse, change course, or drop it.
+func (h *History) RecentOutreach(ctx context.Context, now time.Time, limit int) ([]character.OutreachBeat, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	rows, err := h.db.QueryContext(ctx, `SELECT c.at_ns,c.outcome,c.reason,c.proposal_json,COALESCE(i.state,'')
+FROM initiative_checks c LEFT JOIN contact_intents i ON i.id=c.intent_id
+WHERE c.at_ns>=? AND c.outcome IN ('wait','queued')
+ORDER BY c.id DESC LIMIT ?`, now.Add(-72*time.Hour).UnixNano(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []character.OutreachBeat
+	for rows.Next() {
+		var at int64
+		var outcome, reason, raw, state string
+		if err := rows.Scan(&at, &outcome, &reason, &raw, &state); err != nil {
+			return nil, err
+		}
+		beat := character.OutreachBeat{At: time.Unix(0, at).Format(time.RFC3339), Action: outcome, Reason: reason, Delivered: state == "sent"}
+		var proposal character.Initiative
+		if raw != "" && json.Unmarshal([]byte(raw), &proposal) == nil {
+			beat.Kind = proposal.Kind
+		}
+		result = append(result, beat)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+	return result, nil
 }
 
 // CancelChannelContact consumes a deliberate no-message choice, without retry.

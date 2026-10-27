@@ -161,6 +161,78 @@ func TestHighInitiativeCanFollowUpSeveralTimesAndResetsAfterReply(t *testing.T) 
 	}
 }
 
+func TestOutreachHistoryDistinguishesChoiceFromDelivery(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedInitiative(t, h, now)
+	if err := h.SetInitiative(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.ClaimInitiative(ctx, now, time.UTC)
+	if err != nil || !c.Ready {
+		t.Fatalf("claim: %+v %v", c, err)
+	}
+	if queued, err := h.FinishInitiative(ctx, c, proposedContact(), now, time.UTC); err != nil || !queued {
+		t.Fatalf("queue: %t %v", queued, err)
+	}
+	beats, err := h.RecentOutreach(ctx, now.Add(time.Minute), 8)
+	if err != nil || len(beats) != 1 || beats[0].Delivered || beats[0].Action != "queued" {
+		t.Fatalf("undelivered intention: %+v %v", beats, err)
+	}
+	item, ready, err := h.NextChannelContact(ctx, now.Add(4*time.Minute), time.UTC, "zh-CN")
+	if err != nil || !ready {
+		t.Fatalf("next contact: %+v %t %v", item, ready, err)
+	}
+	if ok, err := h.FinalizeChannelContact(ctx, item.IntentID, "想起那幅画了。", now.Add(4*time.Minute), time.UTC); err != nil || !ok {
+		t.Fatalf("finalize: %t %v", ok, err)
+	}
+	if err := h.MarkChannelContactSent(ctx, item.IntentID, now.Add(4*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	beats, err = h.RecentOutreach(ctx, now.Add(5*time.Minute), 8)
+	if err != nil || len(beats) != 1 || !beats[0].Delivered || beats[0].Kind != "follow_up" {
+		t.Fatalf("sent history: %+v %v", beats, err)
+	}
+}
+
+func TestCharacterChosenWaitIsRevisitedForNewConversation(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedInitiative(t, h, now)
+	if err := h.SetInitiative(ctx, 100); err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.ClaimInitiative(ctx, now, time.UTC)
+	if err != nil || !c.Ready {
+		t.Fatalf("claim: %+v %v", c, err)
+	}
+	if _, err := h.FinishInitiative(ctx, c, character.Initiative{Action: "wait", Reason: "want to do something else", ReconsiderIn: 60}, now, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.ClaimInitiative(ctx, now.Add(10*time.Minute), time.UTC); err != nil || c.Ready || c.Reason != "consideration cooldown" {
+		t.Fatalf("wait horizon ignored: %+v %v", c, err)
+	}
+	if err := h.AddUserMessage(ctx, "我回来了", now.Add(11*time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Add(ctx, "assistant", "回来了呀。", now.Add(11*time.Minute+time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.ClaimInitiative(ctx, now.Add(31*time.Minute), time.UTC); err != nil || !c.Ready {
+		t.Fatalf("new conversation did not refresh consideration: %+v %v", c, err)
+	}
+}
+
 func TestInitiativeTuningCannotBypassQuietHoursOrDailyLimit(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)

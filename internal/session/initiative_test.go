@@ -7,8 +7,57 @@ import (
 	"time"
 
 	"github.com/AsCat/alivyn/internal/config"
+	"github.com/AsCat/alivyn/internal/model"
 	"github.com/AsCat/alivyn/internal/store"
 )
+
+type proactiveReviewScript struct {
+	dialogue []string
+	reviews  []string
+}
+
+func (s *proactiveReviewScript) Complete(_ context.Context, _ string, _ []model.Message) (string, error) {
+	r := s.dialogue[0]
+	s.dialogue = s.dialogue[1:]
+	return r, nil
+}
+
+func (s *proactiveReviewScript) CompleteJSON(_ context.Context, _ string, _ []model.Message) (string, error) {
+	r := s.reviews[0]
+	s.reviews = s.reviews[1:]
+	return r, nil
+}
+
+func TestProactiveContactReviewsContradictoryLifeClaimBeforeDelivery(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if err := h.AddUserMessage(ctx, "今晚还在工作", now.Add(-time.Hour), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Add(ctx, "assistant", "这么晚啊。", now.Add(-time.Hour+time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	client := &proactiveReviewScript{
+		dialogue: []string{
+			`{"mode":"say","reply":"我已经睡了，可我还没睡。","absence":null}`,
+			`{"mode":"say","reply":"我又想到你刚才说的工作了。","absence":null}`,
+		},
+		reviews: []string{
+			`{"valid":false,"issue":"same message makes contradictory sleep claims"}`,
+			`{"valid":true,"issue":""}`,
+		},
+	}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", WorldPack: "none", Timezone: "UTC"}, History: h, Client: client}
+	reply, err := s.composeCharacterContactAt(ctx, "想起对方说的工作", now)
+	if err != nil || reply != "我又想到你刚才说的工作了。" || len(client.dialogue) != 0 || len(client.reviews) != 0 {
+		t.Fatalf("unreviewed proactive reply: %q %v %+v", reply, err, client)
+	}
+}
 
 func TestInitiativeFromIdleToMessageAndQuietChoice(t *testing.T) {
 	for _, choice := range []string{"contact", "wait", "invalid"} {

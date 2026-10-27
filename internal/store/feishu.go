@@ -68,6 +68,18 @@ FROM feishu_inbox WHERE state IN ('pending','ready') ORDER BY received_ns, rowid
 	return item, err == nil, err
 }
 
+// HasLaterFeishuInput lets an invalid draft yield to a newer contribution in
+// the same private chat. The older user's text remains in conversation history.
+func (h *History) HasLaterFeishuInput(ctx context.Context, eventID string) (bool, error) {
+	var newer bool
+	err := h.db.QueryRowContext(ctx, `SELECT EXISTS(
+		SELECT 1 FROM feishu_inbox current JOIN feishu_inbox next
+		ON next.chat_id=current.chat_id
+		AND (next.received_ns>current.received_ns OR (next.received_ns=current.received_ns AND next.rowid>current.rowid))
+		WHERE current.event_id=? AND next.state IN ('pending','ready'))`, eventID).Scan(&newer)
+	return newer, err
+}
+
 // SetFeishuReply commits generated text to the local conversation and inbox
 // together. A send retry reuses the same text instead of asking the model again.
 func (h *History) SetFeishuReply(ctx context.Context, eventID, reply string, at time.Time) error {
@@ -148,8 +160,9 @@ WHERE through_message_id=? AND intent_id IN (SELECT intent_id FROM initiative_te
 	return tx.Commit()
 }
 
-// SkipFeishuReply consumes a user turn when the actor chooses silence. The
-// unique inbox event remains as a retry tombstone and no assistant turn exists.
+// SkipFeishuReply consumes a turn without a visible assistant message. This
+// covers chosen silence and an invalid old draft superseded by a newer user
+// contribution. The inbox event remains as a retry tombstone.
 func (h *History) SkipFeishuReply(ctx context.Context, eventID string) error {
 	tx, err := h.db.BeginTx(ctx, nil)
 	if err != nil {

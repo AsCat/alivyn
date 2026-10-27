@@ -55,6 +55,18 @@ func TestIndependentReviewRevisesInconsistentDialogueAction(t *testing.T) {
 	}
 }
 
+func TestTimedDepartureWithClosingLineKeepsAwayMode(t *testing.T) {
+	s := &reviewedScript{
+		dialogue: []string{`{"mode":"away","reply":"晚安，我先睡了","absence":{"kind":"sleep","until":"2026-10-27T08:00:00+08:00","reason":"到了休息时间"}}`},
+		reviews:  []string{`{"valid":true,"issue":""}`},
+	}
+	c := Context{CanLeave: true, Frame: actor.Frame{Now: "2026-10-27T01:00:00+08:00", Language: "zh-CN"}}
+	turn, err := GenerateChecked(context.Background(), s, "mock", c)
+	if err != nil || turn.Mode != "away" || turn.Absence == nil || turn.Reply != "晚安，我先睡了" {
+		t.Fatalf("departure action lost: %+v %v", turn, err)
+	}
+}
+
 func TestIndependentReviewRejectsTwoConflictingActions(t *testing.T) {
 	s := &reviewedScript{
 		dialogue: []string{

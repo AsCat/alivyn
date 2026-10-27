@@ -27,6 +27,45 @@ type actorQueueCompleter struct {
 	calls int
 }
 
+type conflictingDialogueCompleter struct{ calls int }
+
+func (f *conflictingDialogueCompleter) Complete(_ context.Context, _ string, _ []model.Message) (string, error) {
+	f.calls++
+	return `{"mode":"say","reply":"我现在要睡了","absence":null}`, nil
+}
+
+func (f *conflictingDialogueCompleter) CompleteJSON(_ context.Context, _ string, _ []model.Message) (string, error) {
+	return `{"valid":false,"issue":"leaving words conflict with say"}`, nil
+}
+
+func TestInvalidDialogueYieldsToNewerUserMessage(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Now().Add(-time.Minute)
+	if _, err := h.EnqueueFeishu(ctx, "old", "chat", "m1", "晚安", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if item, ok, err := h.NextFeishuBatchWithPause(ctx, at.Add(5*time.Second), 4*time.Second); err != nil || !ok || item.EventID != "old" {
+		t.Fatalf("first contribution was not claimed: %+v %t %v", item, ok, err)
+	}
+	if _, err := h.EnqueueFeishu(ctx, "new", "chat", "m2", "还有一件事", at.Add(10*time.Second), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &conflictingDialogueCompleter{}
+	s := session.Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", PersonaPack: "vivid", WorldPack: "none"}, History: h, Client: client}
+	if err := processFeishuOnce(ctx, h, s, &bubbleSender{}); err != nil {
+		t.Fatal(err)
+	}
+	item, ok, err := h.NextFeishu(ctx)
+	if err != nil || !ok || item.EventID != "new" || client.calls != 2 {
+		t.Fatalf("newer input stayed blocked: %+v %v, calls=%d", item, err, client.calls)
+	}
+}
+
 func (f *actorQueueCompleter) Complete(_ context.Context, _ string, messages []model.Message) (string, error) {
 	f.calls++
 	switch (f.calls - 1) % 3 {

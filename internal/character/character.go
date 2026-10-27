@@ -267,6 +267,9 @@ func Generate(ctx context.Context, client actor.Completer, modelID string, c Con
 	if reply == "" || len([]rune(reply)) > 1000 || strings.HasPrefix(reply, "{") || strings.HasPrefix(reply, "```") {
 		return Turn{}, errors.New("invalid plain dialogue reply")
 	}
+	if absence != nil {
+		return Turn{Mode: "away", Reply: reply, Absence: absence}, nil
+	}
 	return Turn{Mode: "say", Reply: reply, Absence: absence}, nil
 }
 

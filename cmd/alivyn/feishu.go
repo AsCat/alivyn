@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AsCat/alivyn/internal/character"
 	"github.com/AsCat/alivyn/internal/config"
 	"github.com/AsCat/alivyn/internal/display"
 	"github.com/AsCat/alivyn/internal/session"
@@ -288,9 +289,6 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 	var err error
 	if s.Config.EffectiveEngine() == "character_v2" {
 		pause := 4 * time.Second
-		if s.Config.EffectivePersonaPack() == "dafeiyu-astrbot" {
-			pause = 7 * time.Second
-		}
 		item, ok, err = h.NextFeishuBatchWithPause(ctx, time.Now(), pause)
 	} else {
 		item, ok, err = h.NextFeishu(ctx)
@@ -301,6 +299,17 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 	if item.State == "pending" {
 		reply, err := s.ComposeReplyFor(ctx, item.UserMessageID)
 		if err != nil {
+			if errors.Is(err, character.ErrDialogueConflict) {
+				newer, lookupErr := h.HasLaterFeishuInput(ctx, item.EventID)
+				if lookupErr != nil {
+					return lookupErr
+				}
+				if newer {
+					// No line passed review. Let the later user contribution
+					// receive an answer that can use both messages as context.
+					return h.SkipFeishuReply(ctx, item.EventID)
+				}
+			}
 			return err
 		}
 		if strings.TrimSpace(reply) == "" {

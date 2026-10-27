@@ -14,6 +14,8 @@ type jsonCompleter interface {
 	CompleteJSON(context.Context, string, []model.Message) (string, error)
 }
 
+var ErrDialogueConflict = errors.New("dialogue action still conflicts with the spoken reply")
+
 // GenerateChecked keeps the character's own first choice, then independently
 // checks action consistency and whether the line answers the conversational
 // move. The reviewer does not write a replacement line or choose for her.
@@ -36,7 +38,7 @@ func GenerateChecked(ctx context.Context, client actor.Completer, modelID string
 		}
 		c.Revision = feedback
 	}
-	return Turn{}, errors.New("dialogue action still conflicts with the spoken reply")
+	return Turn{}, ErrDialogueConflict
 }
 
 func reviewTurn(ctx context.Context, client jsonCompleter, modelID string, c Context, t Turn) (bool, string, error) {

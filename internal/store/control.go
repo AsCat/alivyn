@@ -56,11 +56,16 @@ func commandName(text string) string {
 		switch parts[0] {
 		case "/主动性", "/initiative":
 			return "initiative"
+		case "/安静时段":
+			return "quiet_hours"
 		case "/联系上限":
 			return "contact_limit"
 		case "/contact":
 			if len(parts) > 1 && parts[1] == "limit" {
 				return "contact_limit"
+			}
+			if len(parts) > 1 && parts[1] == "hours" {
+				return "quiet_hours"
 			}
 		}
 	}
@@ -73,6 +78,7 @@ const helpZH = `【控制台】
 /勿扰 · /允许主动 — 关闭或允许主动联系，仍遵守安静时段
 /主动性 [0–100] — 查看或调整人物主动性；25 是默认值，100 可用于高频试验
 /联系上限 [1–20] — 查看或调整每天最多主动发几条；勿扰时段仍生效
+/安静时段 [HH:MM HH:MM] — 查看或调整免打扰时间；00:00 00:00 表示关闭时段限制
 /诊断 — 申请进入诊断；60 秒内 /确认诊断，或 /取消
 诊断内：/人物 · /作息 · /记忆 · /心境 · /挂念
 /返回角色 — 退出诊断，恢复进入前的状态
@@ -85,6 +91,7 @@ const helpEN = `Control console
 /quiet · /contact on — disable or allow proactive contact, respecting quiet hours
 /initiative [0–100] — show or adjust initiative; 25 is the default
 /contact limit [1–20] — show or adjust the daily proactive-message limit
+/contact hours [HH:MM HH:MM] — show or change quiet hours; 00:00 00:00 disables time restriction
 /diagnostics — request inspection; /diagnostics confirm within 60s, or /cancel
 Inside diagnostics: /persona · /routine · /memories · /state · /threads
 /resume — leave diagnostics and restore the previous mode
@@ -220,6 +227,35 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			}
 			zh = fmt.Sprintf("【控制台】每日主动联系上限：%d。人物仍会自行决定是否发送；勿扰时段继续生效。", limit)
 			en = fmt.Sprintf("Daily proactive-message limit: %d. The character still chooses whether to send; quiet hours remain active.", limit)
+		case "quiet_hours":
+			parts := strings.Fields(strings.TrimSpace(text))
+			var start, end string
+			err = tx.QueryRowContext(ctx, "SELECT quiet_start,quiet_end FROM contact_settings WHERE id=1").Scan(&start, &end)
+			if err != nil {
+				break
+			}
+			if len(parts) == 3 && parts[0] == "/安静时段" || len(parts) == 4 && parts[0] == "/contact" && parts[1] == "hours" {
+				newStart, newEnd := parts[len(parts)-2], parts[len(parts)-1]
+				if _, parseErr := time.Parse("15:04", newStart); parseErr != nil {
+					zh, en = "【控制台】用法：/安静时段 HH:MM HH:MM。", "Usage: /contact hours HH:MM HH:MM."
+					break
+				}
+				if _, parseErr := time.Parse("15:04", newEnd); parseErr != nil {
+					zh, en = "【控制台】用法：/安静时段 HH:MM HH:MM。", "Usage: /contact hours HH:MM HH:MM."
+					break
+				}
+				err = exec("UPDATE contact_settings SET quiet_start=?,quiet_end=? WHERE id=1", newStart, newEnd)
+				start, end = newStart, newEnd
+			} else if len(parts) != 1 && !(len(parts) == 2 && parts[0] == "/contact" && parts[1] == "hours") {
+				zh, en = "【控制台】用法：/安静时段 HH:MM HH:MM。", "Usage: /contact hours HH:MM HH:MM."
+				break
+			}
+			statusZH, statusEN := "", ""
+			if start == end {
+				statusZH, statusEN = "（全天不限制）", " (no time restriction)"
+			}
+			zh = fmt.Sprintf("【控制台】安静时段：%s–%s%s。每日联系上限和人物自己的选择继续生效。", start, end, statusZH)
+			en = fmt.Sprintf("Quiet hours: %s–%s%s. The daily limit and character choice still apply.", start, end, statusEN)
 		case "diagnostics":
 			if mode == "diagnostic" {
 				zh, en = "【诊断】已在诊断中。/人物 /记忆 /心境 /挂念；/返回角色 退出。", "Already in diagnostics. /persona /memories /state /threads; /resume to leave."

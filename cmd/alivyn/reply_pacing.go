@@ -13,6 +13,9 @@ func replyReadyAt(receivedAt time.Time, eventID, reply string) time.Time {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(eventID))
 	length := len([]rune(reply))
+	if length <= 6 {
+		return receivedAt.Add(time.Duration(150+h.Sum32()%350) * time.Millisecond)
+	}
 	if length > 80 {
 		length = 80
 	}

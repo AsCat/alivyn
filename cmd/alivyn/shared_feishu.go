@@ -128,7 +128,8 @@ func runSharedFeishu(out io.Writer) error {
 	}
 	s := session.Session{Config: c, History: h, Client: modelClient}
 	defer s.StartCharacterReflection(ctx)()
-	go workFeishu(ctx, h, s, sharedSender{client: client}, out)
+	wakeReplies := make(chan struct{}, 1)
+	go workFeishu(ctx, h, s, sharedSender{client: client}, out, wakeReplies)
 	go workChannelContact(ctx, h, s, zone, c.Language, func() bool { return true }, client.SendProactive, out)
 	fmt.Fprintln(out, "Shared Feishu bot connected. / 共享飞书机器人已连接。")
 	for ctx.Err() == nil {
@@ -146,9 +147,12 @@ func runSharedFeishu(out io.Writer) error {
 			continue
 		}
 		for _, message := range messages {
-			_, err := h.EnqueueFeishu(ctx, message.EventID, message.ChatID, message.MessageID, message.Text, time.Now(), zone)
+			added, err := h.EnqueueFeishu(ctx, message.EventID, message.ChatID, message.MessageID, message.Text, time.Now(), zone)
 			if err != nil {
 				return err
+			}
+			if added {
+				notifyFeishuReply(wakeReplies)
 			}
 			if err := client.Ack(ctx, []string{message.EventID}); err != nil {
 				return err

@@ -7,8 +7,8 @@ import (
 
 // NextFeishuBatch waits for a small conversational pause, then durably binds
 // consecutive messages to their last source. Every user message remains in the
-// transcript. A claimed batch, cached generation or prepared send is immutable
-// across retries and restarts. The worker must have only one consumer.
+// transcript. A claimed batch or prepared send is immutable across retries
+// and restarts. The worker must have only one consumer.
 func (h *History) NextFeishuBatch(ctx context.Context, now time.Time) (FeishuInboxItem, bool, error) {
 	return h.NextFeishuBatchWithPause(ctx, now, 4*time.Second)
 }
@@ -17,6 +17,17 @@ func (h *History) NextFeishuBatch(ctx context.Context, now time.Time) (FeishuInb
 // to hear a few consecutive thoughts as one contribution. The pause is
 // bounded so a stream of messages cannot postpone the reply indefinitely.
 func (h *History) NextFeishuBatchWithPause(ctx context.Context, now time.Time, pause time.Duration) (FeishuInboxItem, bool, error) {
+	return h.nextFeishuBatch(ctx, now, pause, true)
+}
+
+// NextFeishuReady claims the messages already available at this instant.
+// Generation starts immediately; a newer input can supersede the unsent draft
+// at the preparation boundary instead of making every single message wait.
+func (h *History) NextFeishuReady(ctx context.Context, now time.Time) (FeishuInboxItem, bool, error) {
+	return h.nextFeishuBatch(ctx, now, 4*time.Second, false)
+}
+
+func (h *History) nextFeishuBatch(ctx context.Context, now time.Time, pause time.Duration, waitForQuiet bool) (FeishuInboxItem, bool, error) {
 	if pause < time.Second || pause > 10*time.Second {
 		pause = 4 * time.Second
 	}
@@ -74,9 +85,9 @@ ORDER BY f.received_ns,f.rowid LIMIT 8`, now.UnixNano())
 	if locked {
 		return anchor, true, tx.Commit()
 	}
-	// Bound the wait even when someone keeps typing. No sleep or model call
-	// holds the database transaction open.
-	if now.Sub(anchor.ReceivedAt) < pause && now.Sub(batch[0].ReceivedAt) < window && len(batch) < 8 {
+	// Legacy quiet-window mode bounds the wait even when someone keeps typing.
+	// No sleep or model call holds the database transaction open.
+	if waitForQuiet && now.Sub(anchor.ReceivedAt) < pause && now.Sub(batch[0].ReceivedAt) < window && len(batch) < 8 {
 		return FeishuInboxItem{}, false, nil
 	}
 	for _, item := range batch {

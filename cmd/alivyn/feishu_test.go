@@ -136,6 +136,44 @@ type heldCompleter struct {
 	calls   int
 }
 
+func TestNewMessageSupersedesInFlightCharacterDraft(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Now()
+	if _, err := h.EnqueueFeishu(ctx, "old", "chat", "m1", "第一句", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &heldCompleter{started: make(chan struct{}), release: make(chan struct{})}
+	s := session.Session{Config: config.Config{Name: "意续", Language: "zh-CN", Engine: "character_v2", Model: "mock", WorldPack: "none"}, History: h, Client: client}
+	sender := &flakySender{}
+	done := make(chan error, 1)
+	go func() { done <- processFeishuOnce(ctx, h, s, sender) }()
+	select {
+	case <-client.started:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	if _, err := h.EnqueueFeishu(ctx, "new", "chat", "m2", "补充一句", at.Add(time.Second), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	close(client.release)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if sender.calls != 0 {
+		t.Fatal("stale reply was sent")
+	}
+	item, ready, err := h.NextFeishuReady(ctx, at.Add(2*time.Second))
+	if err != nil || !ready || item.EventID != "new" {
+		t.Fatalf("new contribution did not take over: %+v %t %v", item, ready, err)
+	}
+}
+
 func (f *heldCompleter) Complete(ctx context.Context, _ string, _ []model.Message) (string, error) {
 	f.calls++
 	close(f.started)

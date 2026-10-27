@@ -202,6 +202,7 @@ func runSelfFeishu(out io.Writer) error {
 	ch.OnReady(func() {
 		fmt.Fprintln(out, "Feishu connected. Send a private text message to your bot. / 飞书已连接，请给机器人发私聊文字。")
 	})
+	wakeReplies := make(chan struct{}, 1)
 	var connectionMu sync.Mutex
 	ch.OnMessage(func(eventCtx context.Context, msg *types.NormalizedMessage) error {
 		if !acceptFeishuMessage(connection.OwnerOpenID, msg) {
@@ -212,9 +213,12 @@ func runSelfFeishu(out io.Writer) error {
 		if connection.ChatID != "" && connection.ChatID != msg.ChatID {
 			return nil
 		}
-		_, err := h.EnqueueFeishu(eventCtx, msg.EventID, msg.ChatID, msg.MessageID, msg.Content, time.Now(), zone)
+		added, err := h.EnqueueFeishu(eventCtx, msg.EventID, msg.ChatID, msg.MessageID, msg.Content, time.Now(), zone)
 		if err != nil {
 			return err
+		}
+		if added {
+			notifyFeishuReply(wakeReplies)
 		}
 		if connection.ChatID == "" {
 			updated := connection
@@ -229,7 +233,7 @@ func runSelfFeishu(out io.Writer) error {
 	})
 	s := session.Session{Config: c, History: h, Client: client}
 	defer s.StartCharacterReflection(ctx)()
-	go workFeishu(ctx, h, s, ch, out)
+	go workFeishu(ctx, h, s, ch, out, wakeReplies)
 	go workChannelContact(ctx, h, s, zone, c.Language, func() bool {
 		connectionMu.Lock()
 		defer connectionMu.Unlock()
@@ -258,7 +262,14 @@ func newFeishuWSClient(appID, appSecret string) *larkws.Client {
 		larkws.WithEventHandler(dispatcher.NewEventDispatcher("", "")))
 }
 
-func workFeishu(ctx context.Context, h *store.History, s session.Session, ch feishuSender, out io.Writer) {
+func notifyFeishuReply(wake chan<- struct{}) {
+	select {
+	case wake <- struct{}{}:
+	default:
+	}
+}
+
+func workFeishu(ctx context.Context, h *store.History, s session.Session, ch feishuSender, out io.Writer, wake <-chan struct{}) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	nextAttempt := time.Time{}
@@ -274,6 +285,7 @@ func workFeishu(ctx context.Context, h *store.History, s session.Session, ch fei
 		select {
 		case <-ctx.Done():
 			return
+		case <-wake:
 		case <-ticker.C:
 		}
 	}
@@ -288,8 +300,7 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 	var ok bool
 	var err error
 	if s.Config.EffectiveEngine() == "character_v2" {
-		pause := 4 * time.Second
-		item, ok, err = h.NextFeishuBatchWithPause(ctx, time.Now(), pause)
+		item, ok, err = h.NextFeishuReady(ctx, time.Now())
 	} else {
 		item, ok, err = h.NextFeishu(ctx)
 	}
@@ -312,6 +323,12 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 			}
 			return err
 		}
+		if s.Config.EffectiveEngine() == "character_v2" {
+			superseded, err := h.SupersedeFeishuDraftIfNewer(ctx, item.EventID)
+			if err != nil || superseded {
+				return err
+			}
+		}
 		if strings.TrimSpace(reply) == "" {
 			if deferred, err := h.DeferFeishuReply(ctx, item.EventID); err != nil || deferred {
 				return err
@@ -328,12 +345,25 @@ func processFeishuOnce(ctx context.Context, h *store.History, s session.Session,
 				parts = display.Bubbles(reply)
 			}
 		}
-		if err := h.SetFeishuReplyParts(ctx, item.EventID, reply, parts, time.Now()); err != nil {
+		// Keep the draft replaceable through any remaining send pacing. A
+		// newer message received during that interval joins the next attempt.
+		if err := waitForReplyPace(ctx, item.ReceivedAt, item.EventID, reply); err != nil {
 			return err
 		}
+		prepared := true
+		if s.Config.EffectiveEngine() == "character_v2" {
+			prepared, err = h.PrepareFeishuReplyPartsIfCurrent(ctx, item.EventID, reply, parts, time.Now())
+		} else {
+			err = h.SetFeishuReplyParts(ctx, item.EventID, reply, parts, time.Now())
+		}
+		if err != nil {
+			return err
+		}
+		if !prepared {
+			return nil
+		}
 		item.Reply = reply
-	}
-	if err := waitForReplyPace(ctx, item.ReceivedAt, item.EventID, item.Reply); err != nil {
+	} else if err := waitForReplyPace(ctx, item.ReceivedAt, item.EventID, item.Reply); err != nil {
 		return err
 	}
 	return h.DeliverFeishuParts(ctx, item.EventID, func(index int, body string) error {

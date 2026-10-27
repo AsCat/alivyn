@@ -478,6 +478,7 @@ ORDER BY c.id DESC LIMIT ?`, now.Add(-72*time.Hour).UnixNano(), limit)
 		var proposal character.Initiative
 		if raw != "" && json.Unmarshal([]byte(raw), &proposal) == nil {
 			beat.Kind = proposal.Kind
+			beat.Impulses = proposal.Impulses
 		}
 		result = append(result, beat)
 	}

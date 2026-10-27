@@ -40,7 +40,9 @@ func ProfileForInitiative(level int) InitiativeProfile {
 		profile.FirstContactGap = time.Duration(17-(level-75)*15/25) * time.Minute
 	}
 	profile.FollowupGap = profile.ConsiderationGap
-	profile.RoutineDailyChecks = 4 + (level-25)*8/75
+	// A highly outgoing character needs opportunities across a waking day.
+	// Fewer checks than this exhaust in under an hour at the fastest cadence.
+	profile.RoutineDailyChecks = 4 + (level-25)*44/75
 	if profile.RoutineDailyChecks < 2 {
 		profile.RoutineDailyChecks = 2
 	}

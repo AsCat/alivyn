@@ -46,10 +46,10 @@ ORDER BY source_message_id DESC LIMIT 1`).Scan(&raw, &stamp)
 	reasonZH, reasonEN := "", ""
 	choiceAtZH, choiceAtEN := "", ""
 	var at int64
-	var outcome, reason, delivery string
-	err = tx.QueryRowContext(ctx, `SELECT c.at_ns,c.outcome,c.reason,COALESCE(i.state,'')
+	var outcome, reason, delivery, proposalRaw string
+	err = tx.QueryRowContext(ctx, `SELECT c.at_ns,c.outcome,c.reason,c.proposal_json,COALESCE(i.state,'')
 FROM initiative_checks c LEFT JOIN contact_intents i ON i.id=c.intent_id
-WHERE c.outcome IN ('wait','queued') ORDER BY c.id DESC LIMIT 1`).Scan(&at, &outcome, &reason, &delivery)
+WHERE c.outcome IN ('wait','queued') ORDER BY c.id DESC LIMIT 1`).Scan(&at, &outcome, &reason, &proposalRaw, &delivery)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", "", err
 	}
@@ -71,6 +71,15 @@ WHERE c.outcome IN ('wait','queued') ORDER BY c.id DESC LIMIT 1`).Scan(&at, &out
 	if choiceAtZH != "" {
 		zh += "\n决定时间：" + choiceAtZH + "\n当时理由：" + reasonZH
 		en += "\nChoice recorded: " + choiceAtEN + "\nReason at the time: " + reasonEN
+		var proposal character.Initiative
+		if json.Unmarshal([]byte(proposalRaw), &proposal) == nil && len(proposal.Impulses) > 0 {
+			zh += "\n当时浮现的念头："
+			en += "\nImpulses at that time:"
+			for _, impulse := range proposal.Impulses {
+				zh += "\n· " + impulse.Want + "（" + impulse.Subject + "）"
+				en += "\n· " + impulse.Want + " (" + impulse.Subject + ")"
+			}
+		}
 	}
 	zh += "\n这是保存的状态与行动摘要；进入诊断后主动联系已暂停，不代表此刻仍在实时思考。"
 	en += "\nSaved state and action summary. Diagnostics pauses outreach; this is not live thought."

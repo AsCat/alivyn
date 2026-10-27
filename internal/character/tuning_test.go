@@ -7,7 +7,7 @@ import (
 
 func TestMaxInitiativeIsObservableWithinMinutes(t *testing.T) {
 	p := ProfileForInitiative(100)
-	if p.FirstContactGap != 2*time.Minute || p.FollowupGap != 4*time.Minute || p.ConsiderationGap != 4*time.Minute || p.MaxUnanswered != 4 {
+	if p.FirstContactGap != 2*time.Minute || p.FollowupGap != 4*time.Minute || p.ConsiderationGap != 4*time.Minute || p.MaxUnanswered != 4 || p.RoutineDailyChecks != 48 {
 		t.Fatalf("unexpected maximum initiative: %+v", p)
 	}
 	defaultProfile := ProfileForInitiative(25)

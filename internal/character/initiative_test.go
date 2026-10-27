@@ -54,3 +54,36 @@ func TestInitiativeRequiresRealReferencesAndAllowsSilence(t *testing.T) {
 		t.Fatal(p, err)
 	}
 }
+
+func TestImpulseFormationRequiresSourcedConcreteWants(t *testing.T) {
+	refs := []actor.Evidence{{ID: "self:character", Provenance: "authored_character", Text: "Likes old songs"}, {ID: "chat:7", Provenance: "observed_chat", Text: "user: I am working"}}
+	valid := `{"impulses":[{"kind":"share","want":"想再聊两句","subject":"那首旧歌里有趣的一句","evidence_ids":["self:character"]}]}`
+	impulses, err := ParseImpulses(valid, refs)
+	if err != nil || len(impulses) != 1 || impulses[0].Kind != "share" {
+		t.Fatalf("valid self-driven impulse rejected: %+v %v", impulses, err)
+	}
+	for _, raw := range []string{
+		`{"impulses":[{"kind":"share","want":"想聊","subject":"她刚看的电影","evidence_ids":["world:missing"]}]}`,
+		`{"impulses":[{"kind":"share","want":"","subject":"旧歌","evidence_ids":["self:character"]}]}`,
+		`{"impulses":[{"kind":"share","want":"想聊","subject":"旧歌","evidence_ids":[]}]}`,
+	} {
+		if _, err := ParseImpulses(raw, refs); err == nil {
+			t.Fatalf("unsupported impulse accepted: %s", raw)
+		}
+	}
+}
+
+func TestDistinctSubjectsFromSameCharacterEvidenceHaveDistinctKeys(t *testing.T) {
+	impulses := []Impulse{
+		{Kind: "share", Subject: "听到的一句旧歌", EvidenceIDs: []string{"self:character"}},
+		{Kind: "share", Subject: "想起那本乱写的本子", EvidenceIDs: []string{"self:character"}},
+	}
+	a := Initiative{Action: "contact", Kind: "share", EvidenceIDs: []string{"self:character"}}
+	a.Subject = ChosenSubject(a, impulses)
+	b := a
+	b.ImpulseIndex = 2
+	b.Subject = ChosenSubject(b, impulses)
+	if a.Subject != impulses[0].Subject || b.Subject != impulses[1].Subject || a.TopicKey() == b.TopicKey() {
+		t.Fatalf("different self-driven subjects collapsed: %q %q", a.Subject, b.Subject)
+	}
+}

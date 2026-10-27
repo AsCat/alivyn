@@ -56,11 +56,12 @@ type Episode struct {
 // It lets later decisions follow an evolving social impulse instead of
 // treating each timer tick as a fresh conversation.
 type OutreachBeat struct {
-	At        string `json:"at"`
-	Action    string `json:"action"`
-	Kind      string `json:"kind,omitempty"`
-	Reason    string `json:"reason"`
-	Delivered bool   `json:"delivered"`
+	At        string    `json:"at"`
+	Action    string    `json:"action"`
+	Kind      string    `json:"kind,omitempty"`
+	Reason    string    `json:"reason"`
+	Delivered bool      `json:"delivered"`
+	Impulses  []Impulse `json:"impulses,omitempty"`
 }
 
 type Turn struct {
@@ -99,7 +100,8 @@ type Context struct {
 	UnansweredOutreach int    // Delivered proactive messages since the last user message.
 	LastUserAt         string // Last actual user message, excluding control commands.
 	OutreachHistory    []OutreachBeat
-	TestRequest        bool // Explicit operator preview, outside character memory.
+	Impulses           []Impulse // Current authored wants, formed before choosing whether to act.
+	TestRequest        bool      // Explicit operator preview, outside character memory.
 }
 
 func Setting(language string) string {

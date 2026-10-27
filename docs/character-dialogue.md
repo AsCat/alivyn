@@ -74,7 +74,7 @@ Send a command as a separate message. Actions execute locally during ingestion, 
 | `/memories` | `/记忆` | Inspect up to 20 active extracted facts and source IDs |
 | `/state` | `/心境` | Inspect the latest saved state and timestamp |
 | `/threads` | `/挂念` | Inspect unfinished subjects and their sources |
-| `/mind` | `/内心` | Inspect saved relationship inclination, intention and last outreach decision |
+| `/mind` | `/内心` | Inspect saved relationship inclination, intention, recent impulses and outreach decision |
 | `/resume` | `/返回角色` | Leave diagnostics, restoring the prior running/paused mode |
 | `/reset` | `/清除记忆` | Immediately perform the local reset described below |
 
@@ -102,14 +102,14 @@ The character can explicitly leave a completed or uninteresting optional exchang
 
 ## Spontaneous contact
 
-With v2 and the Feishu runtime running, an independent loop considers whether the character has a concrete reason to reach out. It uses the character card, current state, ordered conversation, sourced memories and world events. It can follow up, share or reconnect, or decide to leave things quiet. A proposal contains a brief subject and source IDs; it is not hidden reasoning. Ordinary replies use a direct draft followed by consistency review.
+With v2 and the Feishu runtime running, an independent loop first forms up to three current impulses from the character card, current state, ordered conversation, sourced memories and world events. A separate choice then decides whether to reach out and which subject to use. Each impulse cites actual sources; it cannot invent a real-world experience. Impulses and waits are persisted for the next choice, so leaving one subject alone does not freeze every other possible desire to speak. No impulse is also valid when the character has little interest, low energy or a boundary to respect. These records are authored state summaries, not hidden reasoning or a claim of consciousness. Delivery still uses the queue and consistency review.
 
 Initiative is a separate persistent character setting. It changes how often the character considers contact and how many unanswered messages she may follow up on; the character still decides whether and what to say based on the relationship, current state and recent messages. Its default is 25:
 
 - The relationship must be beyond stranger and not reserved. A latest conversation older than 72 hours is not a trigger.
 - Wait at least 30 minutes after a familiar conversation, or 45 minutes for an acquaintance, plus 0–10 minutes of stable variation. A completed quiet turn also counts as a handled conversation.
-- Respect pause, quiet hours, daily contact cap and pending private replies before making an API call. At the default level, considerations are at least two hours apart. Four routine checks are allowed per local day; up to two more require a new conversation. The default hard limit is six model checks per day. Higher initiative shortens the gap but retains a daily budget, including across restarts.
-- A valid proposal cites 1–3 available references and proposes a delay of 5–60 minutes. It expires after three hours. An identical kind/source set is suppressed for 72 hours.
+- Respect pause, quiet hours, daily contact cap and pending private replies before making an API call. At the default level, considerations are at least two hours apart. Four routine checks are allowed per local day; up to two more require a new conversation. At maximum initiative, 48 routine checks are allowed, with two more reserved for a new conversation. The budget survives restarts. Each consideration uses up to two model calls, to form impulses and choose an action; higher initiative can increase API cost.
+- A valid proposal cites 1–3 available references and proposes a delay of 5–60 minutes. It expires after three hours. An identical kind, concrete subject and source set is suppressed for 72 hours.
 - Recheck the conversation after judgment, before composition and before sending. New user messages cancel pending spontaneous proposals. Composition can also choose silence.
 - At the default level, one unanswered proactive delivery makes her wait. At initiative levels 50, 75 and 90, the maximum number of consecutive unanswered proactive messages becomes 2, 3 and 4 respectively. Every attempt still needs a fresh model judgment, elapsed time and delivery checks. She may naturally wonder where the user went, or stay quiet. Silence cannot become a debt, a threat or a repeated demand. A user reply resets the unanswered count.
 - With the `vivid` or isolated DaFeiYu guest persona and initiative at least 75, a single spontaneous turn can naturally unfold as two or three short Feishu messages about a second apart. A one-line thought stays one message; extra text is not added to fill a quota. The group counts as one proactive contact. Each bubble's delivery is persisted separately, and an incoming user reply or contact-policy change stops the remaining bubbles while keeping already delivered text in history.

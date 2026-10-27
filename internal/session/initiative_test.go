@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,7 +116,11 @@ func TestInitiativeFromIdleToMessageAndQuietChoice(t *testing.T) {
 			if choice == "invalid" {
 				response = " "
 			}
-			client := &characterScript{replies: []string{response, "[[wait]]"}}
+			impulses := `{"impulses":[]}`
+			if choice == "contact" {
+				impulses = `{"impulses":[{"kind":"follow_up","want":"想再听他聊画画","subject":"旧书店的画面","evidence_ids":["chat:3"]}]}`
+			}
+			client := &characterScript{replies: []string{impulses, response, "[[wait]]"}}
 			s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", WorldPack: "none", Timezone: "UTC"}, History: h, Client: client}
 			outcome, err := s.ConsiderInitiative(ctx, now)
 			if choice == "invalid" {
@@ -125,10 +130,19 @@ func TestInitiativeFromIdleToMessageAndQuietChoice(t *testing.T) {
 			} else if err != nil {
 				t.Fatal(err)
 			}
-			if len(client.calls) != 1 {
+			if len(client.calls) != 2 {
 				t.Fatalf("unexpected calls: %d", len(client.calls))
 			}
-			if _, err := s.ConsiderInitiative(ctx, now.Add(time.Minute)); err != nil || len(client.calls) != 1 {
+			if choice == "contact" {
+				if got := client.calls[1][1].Content; !strings.Contains(got, "想再听他聊画画") {
+					t.Fatalf("current impulse missing from action choice: %s", got)
+				}
+				beats, err := h.RecentOutreach(ctx, now, 1)
+				if err != nil || len(beats) != 1 || len(beats[0].Impulses) != 1 {
+					t.Fatalf("impulse history missing: %+v %v", beats, err)
+				}
+			}
+			if _, err := s.ConsiderInitiative(ctx, now.Add(time.Minute)); err != nil || len(client.calls) != 2 {
 				t.Fatal("cooldown made another model call", err)
 			}
 			items, err := h.ContactIntents(ctx, 10)

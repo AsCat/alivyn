@@ -139,6 +139,12 @@ SELECT user_message_id, ? FROM feishu_inbox WHERE event_id = ?`, assistantID, ev
 	if err != nil {
 		return err
 	}
+	// The test command is outside character history. Its console acknowledgement
+	// must not invalidate the initiative that the command just advanced.
+	if _, err := tx.ExecContext(ctx, `UPDATE initiative_checks SET through_message_id=?
+WHERE through_message_id=? AND intent_id IN (SELECT intent_id FROM initiative_test_intents)`, assistantID, sourceID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 

@@ -32,6 +32,8 @@ func commandName(text string) string {
 		return "quiet"
 	case "/允许主动", "/contact on":
 		return "contact_on"
+	case "/测试主动", "/contact test":
+		return "test_contact"
 	case "/诊断", "/diagnostics":
 		return "diagnostics"
 	case "/确认诊断", "/diagnostics confirm":
@@ -79,6 +81,7 @@ const helpZH = `【控制台】
 /主动性 [0–100] — 查看或调整人物主动性；25 是默认值，100 可用于高频试验
 /联系上限 [1–20] — 查看或调整每天最多主动发几条；勿扰时段仍生效
 /安静时段 [HH:MM HH:MM] — 查看或调整免打扰时间；00:00 00:00 表示关闭时段限制
+/测试主动 — 立即试一次人物主动联系；不进入人物记忆
 /诊断 — 申请进入诊断；60 秒内 /确认诊断，或 /取消
 诊断内：/人物 · /作息 · /记忆 · /心境 · /挂念
 /返回角色 — 退出诊断，恢复进入前的状态
@@ -92,6 +95,7 @@ const helpEN = `Control console
 /initiative [0–100] — show or adjust initiative; 25 is the default
 /contact limit [1–20] — show or adjust the daily proactive-message limit
 /contact hours [HH:MM HH:MM] — show or change quiet hours; 00:00 00:00 disables time restriction
+/contact test — try spontaneous contact now, outside character memory
 /diagnostics — request inspection; /diagnostics confirm within 60s, or /cancel
 Inside diagnostics: /persona · /routine · /memories · /state · /threads
 /resume — leave diagnostics and restore the previous mode
@@ -109,6 +113,7 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 	}
 	name := commandName(text)
 	zh, en := "", ""
+	testEligible := false
 	exec := func(query string, args ...any) error { _, err := tx.ExecContext(ctx, query, args...); return err }
 	var err error
 	if !isControlInput(text) {
@@ -175,6 +180,25 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			} else {
 				zh, en = "【控制台】已允许主动联系，仍遵守安静时段、每日上限和人物当前状态；不会强制立即发消息。", "Proactive contact allowed, subject to quiet hours, daily limits and character mode. This does not force an immediate message."
 			}
+		case "test_contact":
+			if mode != "running" {
+				zh, en = "【控制台】人物目前已暂停；先用 /唤醒 或 /返回角色 恢复。", "Character dialogue is paused; use /wake or /resume first."
+				break
+			}
+			var paused bool
+			var level int
+			err = tx.QueryRowContext(ctx, "SELECT paused FROM contact_settings WHERE id=1").Scan(&paused)
+			if err == nil {
+				err = tx.QueryRowContext(ctx, "SELECT initiative FROM character_tuning WHERE id=1").Scan(&level)
+			}
+			if err != nil {
+				break
+			}
+			if paused || level == 0 {
+				zh, en = "【控制台】主动联系目前已关闭；先用 /允许主动 并把 /主动性 设为大于 0。", "Proactive contact is disabled; use /contact on and set /initiative above 0 first."
+				break
+			}
+			testEligible = true
 		case "initiative":
 			parts := strings.Fields(strings.TrimSpace(text))
 			var level int
@@ -312,6 +336,20 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 	id, err := r.LastInsertId()
 	if err != nil {
 		return 0, true, err
+	}
+	if testEligible {
+		result, requestErr := requestInitiativeTestTx(ctx, tx, at, id)
+		if requestErr != nil {
+			return 0, true, requestErr
+		}
+		switch result {
+		case "advanced":
+			zh, en = "【控制台】已把排队中的主动联系提前到现在。后台会尽快生成并发送；人物仍可能选择不发，勿扰和每日上限仍生效。", "A queued spontaneous contact was moved to now. The character may still choose silence; quiet hours and the daily limit still apply."
+		case "processing":
+			zh, en = "【控制台】已有一条主动联系正在生成或发送，请稍等。", "A spontaneous contact is already being composed or delivered."
+		default:
+			zh, en = "【控制台】已请求人物现在考虑主动联系。通常几十秒内会有结果；人物仍可选择不发，勿扰和每日上限仍生效。", "Asked the character to consider spontaneous contact now. It may choose silence; quiet hours and the daily limit still apply."
+		}
 	}
 	if err = exec("INSERT INTO local_commands(source_message_id,command) VALUES(?,?)", id, name); err == nil {
 		err = exec("INSERT INTO command_results(source_message_id,zh,en) VALUES(?,?,?)", id, zh, en)

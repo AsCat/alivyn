@@ -442,6 +442,10 @@ OR EXISTS(SELECT 1 FROM character_control WHERE mode='running' AND blocked_throu
 		if _, err := tx.ExecContext(ctx, "INSERT INTO assistant_turns(source_message_id,assistant_message_id) VALUES(?,?)", sourceID, id); err != nil {
 			return err
 		}
+		if _, err := tx.ExecContext(ctx, `UPDATE initiative_checks SET through_message_id=?
+WHERE through_message_id=? AND intent_id IN (SELECT intent_id FROM initiative_test_intents)`, id, sourceID); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

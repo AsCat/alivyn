@@ -123,6 +123,14 @@ CREATE TABLE IF NOT EXISTS initiative_clock (
   checks INTEGER NOT NULL DEFAULT 0
 );
 INSERT OR IGNORE INTO initiative_clock(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS initiative_test_request (
+  id INTEGER PRIMARY KEY CHECK(id=1),
+  requested_ns INTEGER NOT NULL,
+  expires_ns INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS initiative_test_intents (
+  intent_id INTEGER PRIMARY KEY REFERENCES contact_intents(id)
+);
 CREATE TABLE IF NOT EXISTS contact_intents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   topic TEXT NOT NULL,

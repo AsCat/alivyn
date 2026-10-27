@@ -32,6 +32,7 @@ func (s Session) ConsiderInitiative(ctx context.Context, now time.Time) (string,
 	}
 	c.InitiativeLevel = check.Level
 	c.UnansweredOutreach = check.Unanswered
+	c.TestRequest = check.TestRequest
 	p, err := character.ConsiderContact(ctx, s.Client, s.Config.Model, c, refs)
 	if err != nil {
 		s.History.FailInitiative(ctx, check.ID)

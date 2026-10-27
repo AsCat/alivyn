@@ -43,7 +43,8 @@ func ConsiderContact(ctx context.Context, client actor.Completer, modelID string
 		References   []actor.Evidence `json:"references"`
 		Initiative   int              `json:"initiative_level"`
 		Unanswered   int              `json:"unanswered_outreach"`
-	}{c.Frame.Name, c.Persona, c.Frame.Canon, c.Frame.Now, c.LastChatAt, c.Frame.Relationship, c.Moment, c.OpenThreads, c.Frame.Recent, references, c.InitiativeLevel, c.UnansweredOutreach})
+		Preview      bool             `json:"operator_preview_requested"`
+	}{c.Frame.Name, c.Persona, c.Frame.Canon, c.Frame.Now, c.LastChatAt, c.Frame.Relationship, c.Moment, c.OpenThreads, c.Frame.Recent, references, c.InitiativeLevel, c.UnansweredOutreach, c.TestRequest})
 	if err != nil {
 		return Initiative{}, err
 	}
@@ -57,6 +58,9 @@ Return only JSON: {"action":"wait","kind":"","reason":"brief explanation","evide
 Respect the person's boundaries and the actual relationship. If your previous unsolicited message has no reply, you can sometimes check again after a real interval, including a brief natural "where did you go?" when familiarity supports it. Your initiative level affects how often that possibility appeals to you; it does not require a message. A prior "I'm busy" or "I'm going to sleep" means give room. Explicit requests for distance, a completed topic with nothing new, or a repeated question favor wait. Never turn silence into proof of abandonment or use guilt, jealousy or threats to extract attention.
 For contact choose kind follow_up, share or reconnect and cite 1–3 actual reference IDs supporting its subject. Do not invent user events, a meeting, real device actions or news. Fictional world records are fictional. Write a brief concrete subject in reason, not the eventual message. after_minutes must be 5–60; runtime quiet hours and daily limits still apply. For wait set kind="", evidence_ids=[], after_minutes=0.
 Return only JSON: {"action":"wait","kind":"","reason":"brief explanation","evidence_ids":[],"after_minutes":0}. For contact action="contact" and kind is follow_up, share or reconnect. Keep reason under 240 characters, in the conversation's language.`
+	}
+	if c.TestRequest {
+		instruction += "\nAn operator requested a one-shot preview of spontaneous contact. This request is outside the relationship and should not be mentioned in the message. If the character has a plausible personal impulse grounded in the existing exchange, choose contact now; still choose wait when boundaries or current state make contact inappropriate."
 	}
 	messages := []model.Message{
 		{Role: "system", Content: instruction},

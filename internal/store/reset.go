@@ -27,7 +27,7 @@ func resetCharacterTx(ctx context.Context, tx *sql.Tx, command string, at time.T
 	}
 	for _, table := range []string{
 		"character_absence", "reply_deferrals",
-		"feishu_reply_parts", "feishu_reply_groups", "feishu_inbox", "initiative_checks", "contact_events", "contact_outbox", "contact_delivery_parts", "contact_delivery", "contact_intents",
+		"feishu_reply_parts", "feishu_reply_groups", "feishu_inbox", "initiative_test_intents", "initiative_test_request", "initiative_checks", "contact_events", "contact_outbox", "contact_delivery_parts", "contact_delivery", "contact_intents",
 		"goal_world_engagements", "actor_decisions", "actor_continuity", "character_self_facts", "character_turns", "assistant_turns", "command_results", "local_commands",
 		"personal_memory", "memory_revisions", "relationship_snapshots", "relationship_state",
 		"goal_world_events", "goal_world_state", "world_events", "world_state", "messages",

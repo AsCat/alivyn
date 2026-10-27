@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -245,6 +246,86 @@ func TestTuningCommandDoesNotBecomeAConversationOrResetUnansweredContact(t *test
 	}
 	if queued, err := h.FinishInitiative(ctx, check, proposedContact(), now.Add(40*time.Minute), time.UTC); err != nil || !queued {
 		t.Fatalf("follow-up after command: %t %v", queued, err)
+	}
+}
+
+func TestContactTestCommandAdvancesQueuedInitiativeAfterFeishuAck(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedInitiative(t, h, now)
+	c, err := h.ClaimInitiative(ctx, now, time.UTC)
+	if err != nil || !c.Ready {
+		t.Fatal(c, err)
+	}
+	if queued, err := h.FinishInitiative(ctx, c, proposedContact(), now, time.UTC); err != nil || !queued {
+		t.Fatal(queued, err)
+	}
+	requested := now.Add(time.Minute)
+	if _, err := h.EnqueueFeishu(ctx, "test-contact-event", "chat", "message", "/测试主动", requested, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	inbox, ready, err := h.NextFeishu(ctx)
+	if err != nil || !ready {
+		t.Fatal(inbox, ready, err)
+	}
+	reply, found, err := h.CommandReply(ctx, inbox.UserMessageID, "zh-CN")
+	if err != nil || !found {
+		t.Fatal(reply, found, err)
+	}
+	if err := h.SetFeishuReplyParts(ctx, inbox.EventID, reply, []string{reply}, requested); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.DeliverFeishuParts(ctx, inbox.EventID, func(int, string) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	item, ready, err := h.NextChannelContact(ctx, requested.Add(time.Second), time.UTC, "zh-CN")
+	if err != nil || !ready || item.Topic != "initiative" {
+		t.Fatalf("test command did not advance contact: %+v %t %v", item, ready, err)
+	}
+}
+
+func TestContactTestCommandBypassesCadenceOnceButKeepsDailyPolicy(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedInitiative(t, h, now)
+	if err := h.AddUserMessage(ctx, "那张画我刚画完", now.Add(-2*time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Add(ctx, "assistant", "我想看看你怎么处理那块招牌。", now.Add(-2*time.Minute+time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if c, err := h.ClaimInitiative(ctx, now, time.UTC); err != nil || c.Ready || c.Reason != "conversation still recent" {
+		t.Fatalf("normal cadence: %+v %v", c, err)
+	}
+	if reply := controlTestMessage(t, h, "/测试主动", now); !strings.Contains(reply, "现在考虑") {
+		t.Fatal(reply)
+	}
+	if pending, err := h.HasInitiativeTestRequest(ctx, now); err != nil || !pending {
+		t.Fatal(pending, err)
+	}
+	c, err := h.ClaimInitiative(ctx, now.Add(time.Second), time.UTC)
+	if err != nil || !c.Ready || !c.TestRequest {
+		t.Fatalf("test did not bypass cadence: %+v %v", c, err)
+	}
+	if queued, err := h.FinishInitiative(ctx, c, proposedContact(), now.Add(2*time.Second), time.UTC); err != nil || !queued {
+		t.Fatalf("test proposal not queued: %t %v", queued, err)
+	}
+	item, ready, err := h.NextChannelContact(ctx, now.Add(3*time.Second), time.UTC, "zh-CN")
+	if err != nil || !ready || item.Topic != "initiative" {
+		t.Fatalf("test contact not due now: %+v %t %v", item, ready, err)
+	}
+	if pending, err := h.HasInitiativeTestRequest(ctx, now.Add(3*time.Second)); err != nil || pending {
+		t.Fatal(pending, err)
 	}
 }
 

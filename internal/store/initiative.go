@@ -15,13 +15,14 @@ import (
 )
 
 type InitiativeCheck struct {
-	ID         int64
-	SourceID   int64
-	ThroughID  int64
-	Unanswered int
-	Level      int
-	Reason     string
-	Ready      bool
+	ID          int64
+	SourceID    int64
+	ThroughID   int64
+	Unanswered  int
+	Level       int
+	TestRequest bool
+	Reason      string
+	Ready       bool
 }
 
 // Repeated consideration of an unchanged conversation cannot consume the
@@ -44,8 +45,14 @@ func initiativeBudgetExhaustedTx(ctx context.Context, tx *sql.Tx, count int, sou
 
 // initiativeWindowTx is shared by proposal creation and the final send gate.
 // No model call can override these checks.
-func initiativeWindowTx(ctx context.Context, tx *sql.Tx, now time.Time, zone *time.Location, excludeIntent int64) (InitiativeCheck, error) {
+func initiativeWindowTx(ctx context.Context, tx *sql.Tx, now time.Time, zone *time.Location, excludeIntent int64, allowGap bool) (InitiativeCheck, error) {
 	var check InitiativeCheck
+	check.TestRequest = allowGap
+	if !check.TestRequest {
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM initiative_test_request WHERE expires_ns>?)", now.UnixNano()).Scan(&check.TestRequest); err != nil {
+			return check, err
+		}
+	}
 	var running bool
 	if err := tx.QueryRowContext(ctx, "SELECT mode='running' FROM character_control WHERE id=1").Scan(&running); err != nil {
 		return check, err
@@ -165,7 +172,7 @@ WHERE source_message_id=? AND committed=1 AND json_extract(turn_json,'$.mode')='
 		gap = profile.FollowupGap
 	}
 	gap += time.Duration((check.SourceID+int64(unanswered)*7)%11) * time.Minute
-	if now.Sub(lastAt) < gap {
+	if !check.TestRequest && now.Sub(lastAt) < gap {
 		check.Reason = "conversation still recent"
 		return check, nil
 	}
@@ -200,7 +207,7 @@ func (h *History) ClaimInitiative(ctx context.Context, now time.Time, zone *time
 	if _, err := tx.ExecContext(ctx, "UPDATE initiative_clock SET checks=checks WHERE id=1"); err != nil {
 		return InitiativeCheck{}, err
 	}
-	c, err := initiativeWindowTx(ctx, tx, now, zone, 0)
+	c, err := initiativeWindowTx(ctx, tx, now, zone, 0, false)
 	if err != nil || !c.Ready {
 		return c, err
 	}
@@ -224,7 +231,7 @@ func (h *History) ClaimInitiative(ctx context.Context, now time.Time, zone *time
 		c.Reason = "daily consideration budget"
 		return c, nil
 	}
-	if now.UnixNano() < next {
+	if !c.TestRequest && now.UnixNano() < next {
 		c.Ready = false
 		c.Reason = "consideration cooldown"
 		return c, nil
@@ -240,6 +247,11 @@ func (h *History) ClaimInitiative(ctx context.Context, now time.Time, zone *time
 	if err != nil {
 		return c, err
 	}
+	if c.TestRequest {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM initiative_test_request WHERE id=1"); err != nil {
+			return c, err
+		}
+	}
 	return c, tx.Commit()
 }
 
@@ -249,7 +261,7 @@ func (h *History) InitiativeStatus(ctx context.Context, now time.Time, zone *tim
 		return InitiativeCheck{}, err
 	}
 	defer tx.Rollback()
-	c, err := initiativeWindowTx(ctx, tx, now, zone, 0)
+	c, err := initiativeWindowTx(ctx, tx, now, zone, 0, false)
 	if err != nil || !c.Ready {
 		return c, err
 	}
@@ -269,7 +281,7 @@ func (h *History) InitiativeStatus(ctx context.Context, now time.Time, zone *tim
 	if exhausted {
 		c.Ready = false
 		c.Reason = "daily consideration budget"
-	} else if now.UnixNano() < next {
+	} else if !c.TestRequest && now.UnixNano() < next {
 		c.Ready = false
 		c.Reason = "consideration cooldown"
 	}
@@ -303,7 +315,7 @@ func (h *History) FinishInitiative(ctx context.Context, c InitiativeCheck, p cha
 		outcome = "superseded"
 	}
 	if p.Action == "contact" && outcome != "superseded" {
-		fresh, err := initiativeWindowTx(ctx, tx, now, zone, 0)
+		fresh, err := initiativeWindowTx(ctx, tx, now, zone, 0, c.TestRequest)
 		if err != nil {
 			return false, err
 		}
@@ -329,14 +341,23 @@ WHERE c.topic_key=? AND c.at_ns>? AND i.state IN ('pending','sent')`, initiative
 	}
 	var intentID any
 	if outcome == "queued" {
+		due := now.Add(time.Duration(p.AfterMinutes) * time.Minute)
+		if c.TestRequest {
+			due = now
+		}
 		r, err := tx.ExecContext(ctx, `INSERT INTO contact_intents(topic,due_ns,expires_ns,idempotency_key,created_ns,updated_ns)
-VALUES('initiative',?,?,?,?,?)`, now.Add(time.Duration(p.AfterMinutes)*time.Minute).UnixNano(), now.Add(3*time.Hour).UnixNano(), fmt.Sprintf("initiative:%d", c.ID), now.UnixNano(), now.UnixNano())
+VALUES('initiative',?,?,?,?,?)`, due.UnixNano(), now.Add(3*time.Hour).UnixNano(), fmt.Sprintf("initiative:%d", c.ID), now.UnixNano(), now.UnixNano())
 		if err != nil {
 			return false, err
 		}
 		intentID, err = r.LastInsertId()
 		if err != nil {
 			return false, err
+		}
+		if c.TestRequest {
+			if _, err := tx.ExecContext(ctx, "INSERT INTO initiative_test_intents(intent_id) VALUES(?)", intentID); err != nil {
+				return false, err
+			}
 		}
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE initiative_checks SET outcome=?,reason=?,proposal_json=?,topic_key=?,intent_id=? WHERE id=?", outcome, p.Reason, string(data), initiativeTopicKey(p, c.Unanswered), intentID, c.ID); err != nil {
@@ -370,7 +391,11 @@ func initiativeCurrentTx(ctx context.Context, tx *sql.Tx, item ContactIntent, no
 	if latest != throughID {
 		return contact.Decision{Final: true, Reason: "conversation changed"}, nil
 	}
-	c, err := initiativeWindowTx(ctx, tx, now, zone, item.ID)
+	var allowGap bool
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM initiative_test_intents WHERE intent_id=?)", item.ID).Scan(&allowGap); err != nil {
+		return contact.Decision{}, err
+	}
+	c, err := initiativeWindowTx(ctx, tx, now, zone, item.ID, allowGap)
 	if err != nil {
 		return contact.Decision{}, err
 	}

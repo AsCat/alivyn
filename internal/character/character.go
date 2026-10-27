@@ -85,6 +85,7 @@ type Context struct {
 	Revision           string // Bounded feedback from the independent action review.
 	InitiativeLevel    int    // Persistent disposition used for contact consideration.
 	UnansweredOutreach int    // Delivered proactive messages since the last user message.
+	TestRequest        bool   // Explicit operator preview, outside character memory.
 }
 
 func Setting(language string) string {

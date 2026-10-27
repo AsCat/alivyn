@@ -53,7 +53,11 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 				continue
 			}
 		}
-		if !now.Before(nextInitiativeCheck) {
+		testRequested, testErr := h.HasInitiativeTestRequest(ctx, now)
+		if testErr != nil && ctx.Err() == nil {
+			fmt.Fprintf(out, "Initiative test request check failed: %v\n", testErr)
+		}
+		if !now.Before(nextInitiativeCheck) || testRequested {
 			if _, err := s.ConsiderInitiative(ctx, now); err != nil && ctx.Err() == nil {
 				fmt.Fprintf(out, "Initiative consideration deferred: %v\n", err)
 			}

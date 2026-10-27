@@ -65,7 +65,7 @@ go run ./cmd/alivyn replay scenarios/pause-stops-outbound.json
 
 The interview replay extracts its dates from the same user-message parser used by the TUI and plain chat. Replay still does not send messages, and the extractor currently covers only a narrow set of interview phrases.
 
-Send `/help` for controls. Use `/freeze`, `/wake` and `/quiet` directly; `/diagnostics` → `/diagnostics confirm` opens saved character, routine, memory and state views, and `/resume` exits. Feishu v2 supports chosen absences with durable deferred replies. See [controls and availability](docs/character-dialogue.md#mood-routine-and-availability).
+Send `/help` for controls. Use `/freeze`, `/wake` and `/quiet` directly; `/diagnostics` → `/diagnostics confirm` opens saved state, and `/mind` shows relationship inclination and the last spontaneous-contact decision. `/resume` exits. Feishu v2 supports chosen absences with durable deferred replies. See [controls and availability](docs/character-dialogue.md#mood-routine-and-availability).
 
 Send `/reset` (or `/清除记忆`) as a separate message in Feishu or terminal chat to immediately clear local conversation, memories, relationship and simulated life progress. The initial character settings, model configuration and connection remain. The command is handled locally without a model call. See [reset scope and character choices](docs/character-dialogue.md#reset-to-the-initial-character).
 

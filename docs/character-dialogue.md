@@ -74,10 +74,11 @@ Send a command as a separate message. Actions execute locally during ingestion, 
 | `/memories` | `/记忆` | Inspect up to 20 active extracted facts and source IDs |
 | `/state` | `/心境` | Inspect the latest saved state and timestamp |
 | `/threads` | `/挂念` | Inspect unfinished subjects and their sources |
+| `/mind` | `/内心` | Inspect saved relationship inclination, intention and last outreach decision |
 | `/resume` | `/返回角色` | Leave diagnostics, restoring the prior running/paused mode |
 | `/reset` | `/清除记忆` | Immediately perform the local reset described below |
 
-Internal views require diagnostic entry. They show saved settings and records, not generated self-analysis or hidden chain-of-thought. Snapshots may be stale; extracted facts are not the entire conversation. An expired request cannot enter diagnostics. Modes survive restarts. Pausing or entering diagnostics cancels unsent ordinary replies and proactive contact; a rapid wake cannot revive an old generation. A send already in progress completes before the command. Run one channel process per database.
+Internal views require diagnostic entry. They show saved settings and records, not generated self-analysis or hidden chain-of-thought. `/mind` combines the latest state snapshot and actual outreach decision, showing whether she chose contact or waiting at that time; it is not live mind reading, and diagnostics pauses initiative. Snapshots may be stale; extracted facts are not the entire conversation. An expired request cannot enter diagnostics. Modes survive restarts. Pausing or entering diagnostics cancels unsent ordinary replies and proactive contact; a rapid wake cannot revive an old generation. A send already in progress completes before the command. Run one channel process per database.
 
 The inspection ritual takes inspiration from Westworld's analysis mode, suspension and returning to character, using explicit slash commands. See [Ars Technica's episode discussion](https://arstechnica.com/video/watch/all-things-gaming-decrypted-westworld-episode-02-step-into-analysis-mode-please/) and [WIRED's recap](https://www.wired.com/story/westworld-recap-season-2-episode-6/); this does not reproduce the show's claims about consciousness.
 

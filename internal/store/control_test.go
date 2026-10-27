@@ -117,6 +117,51 @@ func TestDiagnosticEntryExpiryIsolationAndRestore(t *testing.T) {
 	}
 }
 
+func TestMindInspectionShowsSavedConnectionAndContactChoice(t *testing.T) {
+	ctx := context.Background()
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
+	if got := controlTestMessage(t, h, "/内心", at); !strings.Contains(got, "需先进入诊断") {
+		t.Fatal(got)
+	}
+	if err := h.AddUserMessage(ctx, "今晚还在忙", at, time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := h.Recent(ctx, 1)
+	if err != nil || len(entries) != 1 {
+		t.Fatal(entries, err)
+	}
+	sourceID := entries[0].ID
+	turn := character.Turn{Mode: "say", Reply: "那我先陪你聊会儿。", StateUpdated: true, StateVersion: 2,
+		Moment: character.Moment{Feeling: "有点好奇", Connection: "愿意再靠近一点", Intention: "想再说两句"}}
+	if err := h.SaveCharacterTurn(ctx, sourceID, turn, at); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.CommitCharacterReply(ctx, sourceID, turn.Reply, at); err != nil {
+		t.Fatal(err)
+	}
+	var throughID int64
+	if err := h.db.QueryRowContext(ctx, "SELECT MAX(id) FROM messages").Scan(&throughID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.db.ExecContext(ctx, `INSERT INTO initiative_checks(source_message_id,through_message_id,at_ns,outcome,reason)
+VALUES(?,?,?,'wait','想继续聊，但这一刻先留点空隙')`, sourceID, throughID, at.Add(time.Minute).UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	controlTestMessage(t, h, "/诊断", at.Add(2*time.Minute))
+	controlTestMessage(t, h, "/确认诊断", at.Add(2*time.Minute+time.Second))
+	got := controlTestMessage(t, h, "/内心", at.Add(2*time.Minute+2*time.Second))
+	for _, expected := range []string{"愿意再靠近一点", "想再说两句", "那时决定先不联系", "这一刻先留点空隙", "不代表此刻仍在实时思考"} {
+		if !strings.Contains(got, expected) {
+			t.Fatalf("mind missing %q: %s", expected, got)
+		}
+	}
+}
+
 func TestPauseFencesPreparedAndInflightRepliesAcrossWakeAndRestart(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()

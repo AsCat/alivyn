@@ -47,13 +47,9 @@ func runInspect(ctx context.Context, args []string, out io.Writer) error {
 }
 
 func recentExperience(ctx context.Context, h *store.History, count int) ([]extension.Event, error) {
-	seq, err := h.EventSequence(ctx)
+	start, err := h.RecentEventCursor(ctx, 200)
 	if err != nil {
 		return nil, err
-	}
-	start := seq - 200
-	if start < 0 {
-		start = 0
 	}
 	events, err := h.ReadEvents(ctx, extension.EventQuery{After: start, Limit: 200})
 	if err != nil {

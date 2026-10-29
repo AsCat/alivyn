@@ -185,3 +185,55 @@ func TestRecentWorldEventsSurviveBusyConversation(t *testing.T) {
 		t.Fatalf("world event was lost behind chat volume: %+v %v", events, err)
 	}
 }
+
+func TestExperienceReopenPreservesCursorAndRecentRowsHandleGaps(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	h, err := OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	if err := h.Add(ctx, "user", "第一条", at); err != nil {
+		t.Fatal(err)
+	}
+	first, err := h.EventSequence(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		h, err = OpenHistory(ctx, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := h.EventSequence(ctx)
+		if err != nil || got != first {
+			t.Fatalf("reopening changed the event cursor: got=%d want=%d err=%v", got, first, err)
+		}
+		if err := h.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h, err = OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if _, err := h.db.ExecContext(ctx, "UPDATE sqlite_sequence SET seq=5000 WHERE name='experience_events'"); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Add(ctx, "user", "第二条", at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	cursor, err := h.RecentEventCursor(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := h.ReadEvents(ctx, extension.EventQuery{After: cursor, Limit: 2})
+	if err != nil || len(events) != 2 || events[0].ID != "chat:1" || events[1].ID != "chat:2" {
+		t.Fatalf("recent event view lost events across cursor gap: %+v %v", events, err)
+	}
+}

@@ -73,21 +73,27 @@ CREATE TRIGGER IF NOT EXISTS experience_contact_insert AFTER INSERT ON contact_e
     'interaction_policy','runtime_decision','owner');
 END;
 INSERT OR IGNORE INTO experience_events(event_id,source_table,source_id,happened_at,domain,provenance,visibility)
-SELECT 'chat:'||id,'messages',id,created_at,'conversation','observed_chat','private' FROM messages ORDER BY id;
+SELECT 'chat:'||src.id,'messages',src.id,src.created_at,'conversation','observed_chat','private' FROM messages src
+WHERE NOT EXISTS(SELECT 1 FROM experience_events e WHERE e.source_table='messages' AND e.source_id=src.id) ORDER BY src.id;
 INSERT OR IGNORE INTO experience_events(event_id,source_table,source_id,happened_at,domain,world_id,provenance,visibility,parent_id)
 SELECT 'worldv2:'||id,'goal_world_events',id,local_date,'simulated_world','tidehaven',provenance,'character',
-  CASE WHEN parent_event_id IS NULL THEN '' ELSE 'worldv2:'||parent_event_id END FROM goal_world_events ORDER BY id;
+  CASE WHEN src.parent_event_id IS NULL THEN '' ELSE 'worldv2:'||src.parent_event_id END FROM goal_world_events src
+WHERE NOT EXISTS(SELECT 1 FROM experience_events e WHERE e.source_table='goal_world_events' AND e.source_id=src.id) ORDER BY src.id;
 INSERT OR IGNORE INTO experience_events(event_id,source_table,source_id,happened_at,domain,world_id,provenance,visibility)
-SELECT 'worldv1:'||id,'world_events',id,local_date,'simulated_world','tidehaven','authored_v1','character' FROM world_events ORDER BY id;
+SELECT 'worldv1:'||src.id,'world_events',src.id,src.local_date,'simulated_world','tidehaven','authored_v1','character' FROM world_events src
+WHERE NOT EXISTS(SELECT 1 FROM experience_events e WHERE e.source_table='world_events' AND e.source_id=src.id) ORDER BY src.id;
 INSERT OR IGNORE INTO experience_events(event_id,source_table,source_id,happened_at,domain,provenance,visibility)
-SELECT 'reading:'||id,'life_readings',id,local_date,'observed_real','external_excerpt','character' FROM life_readings ORDER BY id;
+SELECT 'reading:'||src.id,'life_readings',src.id,src.local_date,'observed_real','external_excerpt','character' FROM life_readings src
+WHERE NOT EXISTS(SELECT 1 FROM experience_events e WHERE e.source_table='life_readings' AND e.source_id=src.id) ORDER BY src.id;
 INSERT OR IGNORE INTO experience_events(event_id,source_table,source_id,happened_at,domain,world_id,provenance,visibility,parent_id)
-SELECT 'worldsim:'||id,'simulated_events',id,datetime(occurred_ns/1000000000,'unixepoch'),
-  'simulated_world',world_id,'simulator','character',
-  CASE WHEN parent_event_id IS NULL THEN '' ELSE 'worldsim:'||parent_event_id END FROM simulated_events ORDER BY id;
+SELECT 'worldsim:'||src.id,'simulated_events',src.id,datetime(src.occurred_ns/1000000000,'unixepoch'),
+  'simulated_world',src.world_id,'simulator','character',
+  CASE WHEN src.parent_event_id IS NULL THEN '' ELSE 'worldsim:'||src.parent_event_id END FROM simulated_events src
+WHERE NOT EXISTS(SELECT 1 FROM experience_events e WHERE e.source_table='simulated_events' AND e.source_id=src.id) ORDER BY src.id;
 INSERT OR IGNORE INTO experience_events(event_id,source_table,source_id,happened_at,domain,provenance,visibility)
-SELECT 'contact:'||id,'contact_events',id,datetime(at_ns/1000000000,'unixepoch'),
-  'interaction_policy','runtime_decision','owner' FROM contact_events ORDER BY id;
+SELECT 'contact:'||src.id,'contact_events',src.id,datetime(src.at_ns/1000000000,'unixepoch'),
+  'interaction_policy','runtime_decision','owner' FROM contact_events src
+WHERE NOT EXISTS(SELECT 1 FROM experience_events e WHERE e.source_table='contact_events' AND e.source_id=src.id) ORDER BY src.id;
 `)
 	return err
 }
@@ -97,6 +103,21 @@ func (h *History) EventSequence(ctx context.Context) (int64, error) {
 	var sequence int64
 	err := h.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(sequence),0) FROM experience_events`).Scan(&sequence)
 	return sequence, err
+}
+
+// RecentEventCursor locates the last actual rows rather than subtracting
+// from an autoincrement value, which may contain gaps after ignored inserts.
+func (h *History) RecentEventCursor(ctx context.Context, limit int) (int64, error) {
+	if limit < 1 || limit > 200 {
+		return 0, errors.New("invalid recent event limit")
+	}
+	var first sql.NullInt64
+	err := h.db.QueryRowContext(ctx, `SELECT MIN(sequence) FROM (
+SELECT sequence FROM experience_events ORDER BY sequence DESC LIMIT ?)`, limit).Scan(&first)
+	if err != nil || !first.Valid {
+		return 0, err
+	}
+	return first.Int64 - 1, nil
 }
 
 // RecentWorldEvents is unaffected by a busy conversation adding many chat

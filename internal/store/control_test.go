@@ -65,7 +65,16 @@ func TestInitiativeAndContactLimitCommandsPersistAndValidate(t *testing.T) {
 	if err != nil || policy.DailyLimit != 5 || policy.QuietStart != "00:00" || policy.QuietEnd != "00:00" {
 		t.Fatal(policy, err)
 	}
-	if got := controlTestMessage(t, h, "/状态", at); !strings.Contains(got, "主动性：100/100") || !strings.Contains(got, "每日上限：5") {
+	if got := controlTestMessage(t, h, "/状态", at); !strings.Contains(got, "主动性：100/100") || !strings.Contains(got, "固定每日上限 5") {
+		t.Fatal(got)
+	}
+	if got := controlTestMessage(t, h, "/联系自动", at); !strings.Contains(got, "自适应联系节奏") {
+		t.Fatal(got)
+	}
+	if policy, err := h.ContactPolicy(ctx); err != nil || !policy.Adaptive || policy.DailyLimit != 12 {
+		t.Fatal(policy, err)
+	}
+	if got := controlTestMessage(t, h, "/状态", at); !strings.Contains(got, "自适应节奏") {
 		t.Fatal(got)
 	}
 	if got := controlTestMessage(t, h, "/initiative 0", at); !strings.Contains(got, "0/100") {

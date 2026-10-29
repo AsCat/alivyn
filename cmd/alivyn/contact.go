@@ -22,7 +22,7 @@ func runContact(ctx context.Context, args []string, out io.Writer) error {
 		return runInitiativeDemo(ctx, out)
 	}
 	if len(args) == 0 {
-		return errors.New("usage: alivyn contact status|pause|resume|policy <start> <end> <daily-limit>|intents|audit|outbox|simulate")
+		return errors.New("usage: alivyn contact status|pause|resume|auto|policy <start> <end> <daily-limit>|intents|audit|outbox|simulate")
 	}
 	c, h, err := openConfiguredHistory(ctx)
 	if err != nil {
@@ -42,8 +42,12 @@ func runContact(ctx context.Context, args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "paused=%t quiet=%s-%s daily_limit=%d timezone=%s serve_transport=local-outbox feishu_run_transport=feishu\n",
-			p.Paused, p.QuietStart, p.QuietEnd, p.DailyLimit, zone)
+		mode := "fixed"
+		if p.Adaptive {
+			mode = "adaptive"
+		}
+		fmt.Fprintf(out, "paused=%t quiet=%s-%s frequency=%s safety_daily_limit=%d timezone=%s serve_transport=local-outbox feishu_run_transport=feishu\n",
+			p.Paused, p.QuietStart, p.QuietEnd, mode, p.DailyLimit, zone)
 		tuning, err := h.CharacterTuning(ctx)
 		if err != nil {
 			return err
@@ -65,6 +69,14 @@ func runContact(ctx context.Context, args []string, out io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(out, "paused=%t\n", paused)
+	case "auto":
+		if len(args) != 1 {
+			return errors.New("usage: alivyn contact auto")
+		}
+		if err := h.SetAdaptiveContactPolicy(ctx); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "frequency=adaptive safety_daily_limit=12")
 	case "policy":
 		if len(args) != 4 {
 			return errors.New("usage: alivyn contact policy <quiet-start HH:MM> <quiet-end HH:MM> <daily-limit>")
@@ -119,7 +131,7 @@ func runContact(ctx context.Context, args []string, out io.Writer) error {
 				message.IntentID, message.Topic, message.IdempotencyKey, display.Clean(message.Body))
 		}
 	default:
-		return errors.New("usage: alivyn contact status|pause|resume|policy <start> <end> <daily-limit>|intents|audit|outbox|simulate")
+		return errors.New("usage: alivyn contact status|pause|resume|auto|policy <start> <end> <daily-limit>|intents|audit|outbox|simulate")
 	}
 	return nil
 }

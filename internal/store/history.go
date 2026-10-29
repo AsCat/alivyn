@@ -108,7 +108,8 @@ CREATE TABLE IF NOT EXISTS contact_settings (
   paused INTEGER NOT NULL DEFAULT 0 CHECK(paused IN (0,1)),
   quiet_start TEXT NOT NULL DEFAULT '22:00',
   quiet_end TEXT NOT NULL DEFAULT '08:00',
-  daily_limit INTEGER NOT NULL DEFAULT 2
+  daily_limit INTEGER NOT NULL DEFAULT 12,
+  limit_mode TEXT NOT NULL DEFAULT 'adaptive' CHECK(limit_mode IN ('adaptive','fixed'))
 );
 INSERT OR IGNORE INTO contact_settings(id) VALUES(1);
 CREATE TABLE IF NOT EXISTS character_tuning (
@@ -336,6 +337,10 @@ CREATE INDEX IF NOT EXISTS life_readings_time ON life_readings(occurred_ns);
 `); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)
+	}
+	if err := h.ensureContactPolicy(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("initialize contact policy: %w", err)
 	}
 	if err := h.ensureRelationship(ctx); err != nil {
 		db.Close()

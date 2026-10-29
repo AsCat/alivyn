@@ -12,6 +12,7 @@ type Policy struct {
 	QuietStart string
 	QuietEnd   string
 	DailyLimit int
+	Adaptive   bool
 	Paused     bool
 }
 

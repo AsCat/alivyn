@@ -64,7 +64,12 @@ func commandName(text string) string {
 			return "quiet_hours"
 		case "/联系上限":
 			return "contact_limit"
+		case "/联系自动":
+			return "contact_auto"
 		case "/contact":
+			if len(parts) > 1 && parts[1] == "auto" {
+				return "contact_auto"
+			}
 			if len(parts) > 1 && parts[1] == "limit" {
 				return "contact_limit"
 			}
@@ -81,7 +86,8 @@ const helpZH = `【控制台】
 /暂停 · /唤醒 — 暂停或恢复人物对话，保留记忆
 /勿扰 · /允许主动 — 关闭或允许主动联系，仍遵守安静时段
 /主动性 [0–100] — 查看或调整人物主动性；25 是默认值，100 可用于高频试验
-/联系上限 [1–20] — 查看或调整每天最多主动发几条；勿扰时段仍生效
+/联系自动 — 按互动节奏决定何时主动联系（默认）；每天 12 条为防误发上限
+/联系上限 [1–20] — 改为固定每日上限，适合需要严格限制时
 /安静时段 [HH:MM HH:MM] — 查看或调整免打扰时间；00:00 00:00 表示关闭时段限制
 /测试主动 — 立即试一次人物主动联系；不进入人物记忆
 /诊断 — 申请进入诊断；60 秒内 /确认诊断，或 /取消
@@ -95,7 +101,8 @@ const helpEN = `Control console
 /freeze · /wake — pause or resume character dialogue, preserving memory
 /quiet · /contact on — disable or allow proactive contact, respecting quiet hours
 /initiative [0–100] — show or adjust initiative; 25 is the default
-/contact limit [1–20] — show or adjust the daily proactive-message limit
+/contact auto — adapt contact cadence to reciprocity (default); 12/day emergency ceiling
+/contact limit [1–20] — set a strict daily proactive-message limit
 /contact hours [HH:MM HH:MM] — show or change quiet hours; 00:00 00:00 disables time restriction
 /contact test — try spontaneous contact now, outside character memory
 /diagnostics — request inspection; /diagnostics confirm within 60s, or /cancel
@@ -130,9 +137,9 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			zh, en = helpZH, helpEN
 		case "status":
 			var paused bool
-			var start, end string
+			var start, end, limitMode string
 			var limit int
-			err = tx.QueryRowContext(ctx, "SELECT paused,quiet_start,quiet_end,daily_limit FROM contact_settings WHERE id=1").Scan(&paused, &start, &end, &limit)
+			err = tx.QueryRowContext(ctx, "SELECT paused,quiet_start,quiet_end,daily_limit,limit_mode FROM contact_settings WHERE id=1").Scan(&paused, &start, &end, &limit, &limitMode)
 			var initiative int
 			if err == nil {
 				err = tx.QueryRowContext(ctx, "SELECT initiative FROM character_tuning WHERE id=1").Scan(&initiative)
@@ -142,8 +149,14 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			if paused {
 				contactZH = "已关闭"
 			}
-			zh = fmt.Sprintf("【控制台】%s\n主动联系：%s；主动性：%d/100\n安静时段：%s–%s（配置时区）；每日上限：%d\n暂停和诊断期间不会主动联系。", labels[mode], contactZH, initiative, start, end, limit)
-			en = fmt.Sprintf("Mode: %s\nProactive contact disabled: %t; initiative: %d/100\nQuiet hours: %s–%s (configured timezone); daily limit: %d\nPaused and diagnostic modes block proactive contact.", mode, paused, initiative, start, end, limit)
+			frequencyZH := fmt.Sprintf("固定每日上限 %d", limit)
+			frequencyEN := fmt.Sprintf("fixed daily limit %d", limit)
+			if limitMode == "adaptive" {
+				frequencyZH = "自适应节奏（防误发上限 12/日）"
+				frequencyEN = "adaptive cadence (emergency ceiling 12/day)"
+			}
+			zh = fmt.Sprintf("【控制台】%s\n主动联系：%s；主动性：%d/100\n安静时段：%s–%s（配置时区）；联系频率：%s\n暂停和诊断期间不会主动联系。", labels[mode], contactZH, initiative, start, end, frequencyZH)
+			en = fmt.Sprintf("Mode: %s\nProactive contact disabled: %t; initiative: %d/100\nQuiet hours: %s–%s (configured timezone); frequency: %s\nPaused and diagnostic modes block proactive contact.", mode, paused, initiative, start, end, frequencyEN)
 			if err == nil {
 				var kind string
 				var until int64
@@ -180,7 +193,7 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 			if name == "quiet" {
 				zh, en = "【控制台】已关闭主动联系，你仍可以正常找她聊天。", "Proactive contact disabled. You can still start a conversation."
 			} else {
-				zh, en = "【控制台】已允许主动联系，仍遵守安静时段、每日上限和人物当前状态；不会强制立即发消息。", "Proactive contact allowed, subject to quiet hours, daily limits and character mode. This does not force an immediate message."
+				zh, en = "【控制台】已允许主动联系，仍遵守安静时段、联系频率和人物当前状态；不会强制立即发消息。", "Proactive contact allowed, subject to quiet hours, contact cadence and character mode. This does not force an immediate message."
 			}
 		case "test_contact":
 			if mode != "running" {
@@ -221,15 +234,27 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 				break
 			}
 			var limit int
+			var limitMode string
 			if err == nil {
-				err = tx.QueryRowContext(ctx, "SELECT daily_limit FROM contact_settings WHERE id=1").Scan(&limit)
+				err = tx.QueryRowContext(ctx, "SELECT daily_limit,limit_mode FROM contact_settings WHERE id=1").Scan(&limit, &limitMode)
 			}
-			zh = fmt.Sprintf("【控制台】主动性 %d/100。0 关闭自主发起；调高后会更常考虑联系，未收到回复时也可能再次开口。每日上限仍为 %d，勿扰时段照常生效。", level, limit)
-			en = fmt.Sprintf("Initiative %d/100. Higher levels consider contact more often and may follow up after no reply. Daily limit remains %d; quiet hours still apply.", level, limit)
+			frequencyZH := fmt.Sprintf("固定每日上限 %d", limit)
+			frequencyEN := fmt.Sprintf("fixed daily limit %d", limit)
+			if limitMode == "adaptive" {
+				frequencyZH = "自适应节奏"
+				frequencyEN = "adaptive cadence"
+			}
+			zh = fmt.Sprintf("【控制台】主动性 %d/100。0 关闭自主发起；调高后会更常考虑联系，未收到回复时也可能再次开口。联系频率：%s；勿扰时段照常生效。", level, frequencyZH)
+			en = fmt.Sprintf("Initiative %d/100. Higher levels consider contact more often and may follow up after no reply. Frequency: %s; quiet hours still apply.", level, frequencyEN)
+		case "contact_auto":
+			if _, err = tx.ExecContext(ctx, "UPDATE contact_settings SET limit_mode='adaptive',daily_limit=12 WHERE id=1"); err == nil {
+				zh, en = "【控制台】已启用自适应联系节奏：根据互动和未回复情况决定何时再联系；每天 12 条仅作为防误发上限。勿扰和暂停照常生效。", "Adaptive contact cadence enabled. Reciprocity and unanswered messages guide timing; 12/day is only an emergency ceiling. Quiet hours and pause still apply."
+			}
 		case "contact_limit":
 			parts := strings.Fields(strings.TrimSpace(text))
 			var limit int
-			err = tx.QueryRowContext(ctx, "SELECT daily_limit FROM contact_settings WHERE id=1").Scan(&limit)
+			var limitMode string
+			err = tx.QueryRowContext(ctx, "SELECT daily_limit,limit_mode FROM contact_settings WHERE id=1").Scan(&limit, &limitMode)
 			if err != nil {
 				break
 			}
@@ -248,11 +273,16 @@ func controlMessageTx(ctx context.Context, tx *sql.Tx, text string, at time.Time
 					zh, en = "【控制台】用法：/联系上限 1–20。", "Usage: /contact limit 1–20."
 					break
 				}
-				err = exec("UPDATE contact_settings SET daily_limit=? WHERE id=1", value)
+				err = exec("UPDATE contact_settings SET daily_limit=?,limit_mode='fixed' WHERE id=1", value)
 				limit = value
+				limitMode = "fixed"
 			}
-			zh = fmt.Sprintf("【控制台】每日主动联系上限：%d。人物仍会自行决定是否发送；勿扰时段继续生效。", limit)
-			en = fmt.Sprintf("Daily proactive-message limit: %d. The character still chooses whether to send; quiet hours remain active.", limit)
+			if limitMode == "adaptive" {
+				zh, en = "【控制台】当前使用自适应联系节奏；每天 12 条仅作为防误发上限。", "Adaptive contact cadence is active; 12/day is only an emergency ceiling."
+			} else {
+				zh = fmt.Sprintf("【控制台】固定每日主动联系上限：%d。输入 /联系自动 可恢复自适应节奏。勿扰时段继续生效。", limit)
+				en = fmt.Sprintf("Fixed daily proactive-message limit: %d. Use /contact auto for adaptive cadence. Quiet hours remain active.", limit)
+			}
 		case "quiet_hours":
 			parts := strings.Fields(strings.TrimSpace(text))
 			var start, end string

@@ -27,7 +27,7 @@ ALIVYN_AUDITION_PACK=vivid   alivyn actor audition character_v2 "bad day"
 
 With `character_v2`, original Alivyn chooses one public feed excerpt during the local 10:00–21:00 window each day. Candidates come from BBC science, BBC arts, and NASA RSS feeds, up to four per source. The character picks according to her identity and recent reading history. The source title, excerpt, and URL are stored separately from her tentative private reaction. She has read an excerpt, not the full article. Feed or model failures retry later without fabricating an experience; this worker does not block direct chat replies.
 
-A later conversation can refer to the reading. If there was real conversation in the preceding 72 hours and the relationship has moved beyond first acquaintance, the new reading may also queue a proactive message after three minutes. The usual pause, quiet hours, daily limit, pending reply, and fresh user message checks still apply. The character can choose not to send. The standalone guest persona does not share this life history.
+A later conversation can refer to the reading. If there was real conversation in the preceding 72 hours and the relationship has moved beyond first acquaintance, the new reading may also queue a proactive message after three minutes. The usual pause, quiet hours, contact cadence, pending reply, and fresh user message checks still apply. The character can choose not to send. The standalone guest persona does not share this life history.
 
 ```sh
 alivyn life status

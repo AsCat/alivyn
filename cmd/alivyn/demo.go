@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/AsCat/alivyn/internal/contact"
 	"github.com/AsCat/alivyn/internal/store"
 )
 
@@ -27,6 +28,10 @@ func runDemo(ctx context.Context, out io.Writer, language string) error {
 		return err
 	}
 	defer h.Close()
+	// The time-advanced story exercises the original fixed policy explicitly.
+	if err := h.SetContactPolicy(ctx, contact.Policy{QuietStart: "22:00", QuietEnd: "08:00", DailyLimit: 2}); err != nil {
+		return err
+	}
 	at := func(day, hour int) time.Time {
 		return time.Date(2026, 10, day, hour, 0, 0, 0, zone)
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AsCat/alivyn/internal/character"
 	"github.com/AsCat/alivyn/internal/contact"
 	"modernc.org/sqlite"
 )
@@ -79,12 +80,50 @@ func cancelPendingTopicTx(ctx context.Context, tx *sql.Tx, topic string, at time
 	return nil
 }
 
+// Existing installations had only a fixed default of two. Moving them to
+// adaptive mode preserves pause and quiet hours while removing that accidental
+// ceiling. A later explicit /contact limit selects fixed mode.
+func (h *History) ensureContactPolicy(ctx context.Context) error {
+	rows, err := h.db.QueryContext(ctx, "PRAGMA table_info(contact_settings)")
+	if err != nil {
+		return err
+	}
+	found := false
+	for rows.Next() {
+		var id, notNull, primary int
+		var name, kind string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&id, &name, &kind, &notNull, &defaultValue, &primary); err != nil {
+			rows.Close()
+			return err
+		}
+		found = found || name == "limit_mode"
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil || found {
+		return err
+	}
+	if _, err := h.db.ExecContext(ctx, "ALTER TABLE contact_settings ADD COLUMN limit_mode TEXT NOT NULL DEFAULT 'adaptive' CHECK(limit_mode IN ('adaptive','fixed'))"); err != nil {
+		return err
+	}
+	// Values other than the old default were explicitly configured and stay
+	// strict. The old default becomes the adaptive safety ceiling.
+	if _, err := h.db.ExecContext(ctx, "UPDATE contact_settings SET limit_mode='fixed' WHERE id=1 AND daily_limit<>2"); err != nil {
+		return err
+	}
+	_, err = h.db.ExecContext(ctx, "UPDATE contact_settings SET daily_limit=12 WHERE id=1 AND daily_limit=2")
+	return err
+}
+
 func (h *History) ContactPolicy(ctx context.Context) (contact.Policy, error) {
 	var p contact.Policy
 	var paused int
-	err := h.db.QueryRowContext(ctx, "SELECT paused, quiet_start, quiet_end, daily_limit FROM contact_settings WHERE id = 1").
-		Scan(&paused, &p.QuietStart, &p.QuietEnd, &p.DailyLimit)
+	var mode string
+	err := h.db.QueryRowContext(ctx, "SELECT paused, quiet_start, quiet_end, daily_limit, limit_mode FROM contact_settings WHERE id = 1").
+		Scan(&paused, &p.QuietStart, &p.QuietEnd, &p.DailyLimit, &mode)
 	p.Paused = paused != 0
+	p.Adaptive = mode == "adaptive"
 	return p, err
 }
 
@@ -97,8 +136,13 @@ func (h *History) SetContactPolicy(ctx context.Context, p contact.Policy) error 
 		paused = 1
 	}
 	_, err := h.db.ExecContext(ctx, `UPDATE contact_settings
-SET paused = ?, quiet_start = ?, quiet_end = ?, daily_limit = ? WHERE id = 1`,
-		paused, p.QuietStart, p.QuietEnd, p.DailyLimit)
+SET paused = ?, quiet_start = ?, quiet_end = ?, daily_limit = ?, limit_mode = ? WHERE id = 1`,
+		paused, p.QuietStart, p.QuietEnd, p.DailyLimit, map[bool]string{true: "adaptive", false: "fixed"}[p.Adaptive])
+	return err
+}
+
+func (h *History) SetAdaptiveContactPolicy(ctx context.Context) error {
+	_, err := h.db.ExecContext(ctx, "UPDATE contact_settings SET limit_mode='adaptive',daily_limit=12 WHERE id=1")
 	return err
 }
 
@@ -535,12 +579,14 @@ WHERE topic = ? ORDER BY id DESC LIMIT 1`, item.Topic).Scan(&latest, &action, &p
 		current = latest == item.SourceRevision.Int64 && action == "upsert" && provenance == "user_stated"
 	}
 	var paused int
+	var mode string
 	var policy contact.Policy
-	if err := tx.QueryRowContext(ctx, "SELECT paused, quiet_start, quiet_end, daily_limit FROM contact_settings WHERE id = 1").
-		Scan(&paused, &policy.QuietStart, &policy.QuietEnd, &policy.DailyLimit); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT paused, quiet_start, quiet_end, daily_limit, limit_mode FROM contact_settings WHERE id = 1").
+		Scan(&paused, &policy.QuietStart, &policy.QuietEnd, &policy.DailyLimit, &mode); err != nil {
 		return contact.Decision{}, err
 	}
 	policy.Paused = paused != 0
+	policy.Adaptive = mode == "adaptive"
 	if err := policy.Validate(); err != nil {
 		return contact.Decision{}, err
 	}
@@ -559,7 +605,56 @@ AND d.intent_id != ?`, start.UnixNano(), end.UnixNano(), excludedDeliveryID).Sca
 		return contact.Decision{}, err
 	}
 	sentToday += channelToday
-	return contact.Evaluate(at, zone, policy, contact.Intent{Due: item.Due, Expires: item.Expires, Current: current}, sentToday), nil
+	decision := contact.Evaluate(at, zone, policy, contact.Intent{Due: item.Due, Expires: item.Expires, Current: current}, sentToday)
+	if !decision.Ready || !policy.Adaptive {
+		return decision, nil
+	}
+	return adaptiveContactDecisionTx(ctx, tx, at)
+}
+
+// Adaptive cadence uses reciprocity and elapsed time. A generous daily
+// backstop remains, but the ordinary decision is whether this person has room
+// for another contact now, not whether an arbitrary two slots were spent.
+func adaptiveContactDecisionTx(ctx context.Context, tx *sql.Tx, now time.Time) (contact.Decision, error) {
+	var latestUser sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT MAX(created_at) FROM messages WHERE role='user'
+AND NOT EXISTS(SELECT 1 FROM local_commands WHERE source_message_id=messages.id)`).Scan(&latestUser); err != nil {
+		return contact.Decision{}, err
+	}
+	if !latestUser.Valid {
+		return contact.Decision{Reason: "no conversation"}, nil
+	}
+	userAt, err := time.Parse(time.RFC3339Nano, latestUser.String)
+	if err != nil {
+		return contact.Decision{}, err
+	}
+	var unanswered int
+	if err := tx.QueryRowContext(ctx, `SELECT
+ (SELECT COUNT(*) FROM contact_delivery WHERE state='sent' AND sent_ns>?) +
+ (SELECT COUNT(*) FROM contact_outbox WHERE sent_ns>?)`, userAt.UnixNano(), userAt.UnixNano()).Scan(&unanswered); err != nil {
+		return contact.Decision{}, err
+	}
+	var level int
+	if err := tx.QueryRowContext(ctx, "SELECT initiative FROM character_tuning WHERE id=1").Scan(&level); err != nil {
+		return contact.Decision{}, err
+	}
+	profile := character.ProfileForInitiative(level)
+	if !profile.Enabled {
+		return contact.Decision{Reason: "initiative disabled"}, nil
+	}
+	if unanswered >= profile.MaxUnanswered {
+		return contact.Decision{Reason: "waiting for user to return"}, nil
+	}
+	var lastSent sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT MAX(stamp) FROM (
+ SELECT MAX(sent_ns) AS stamp FROM contact_delivery WHERE state='sent'
+ UNION ALL SELECT MAX(sent_ns) FROM contact_outbox)`).Scan(&lastSent); err != nil {
+		return contact.Decision{}, err
+	}
+	if lastSent.Valid && now.Sub(time.Unix(0, lastSent.Int64)) < profile.FirstContactGap {
+		return contact.Decision{Reason: "contact still recent"}, nil
+	}
+	return contact.Decision{Ready: true}, nil
 }
 
 func updateIntentAndLog(ctx context.Context, tx *sql.Tx, id int64, state, reason string, event ContactEvent) error {

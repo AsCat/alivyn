@@ -108,6 +108,9 @@ func TestUserReplyStopsRemainingProactiveBurst(t *testing.T) {
 
 func seedChannelIntent(t *testing.T, h *History, at time.Time, key string) {
 	t.Helper()
+	if err := h.SetContactPolicy(context.Background(), contact.Policy{QuietStart: "22:00", QuietEnd: "08:00", DailyLimit: 2}); err != nil {
+		t.Fatal(err)
+	}
 	_, err := h.db.ExecContext(context.Background(), `INSERT INTO contact_intents(topic, due_ns, expires_ns, idempotency_key, created_ns, updated_ns) VALUES ('time_gap', ?, ?, ?, ?, ?)`, at.UnixNano(), at.Add(6*time.Hour).UnixNano(), key, at.UnixNano(), at.UnixNano())
 	if err != nil {
 		t.Fatal(err)

@@ -32,7 +32,7 @@ func (s Session) ExploreLife(ctx context.Context, now time.Time, force bool) (li
 		return life.Reading{}, err
 	}
 	defer s.History.ReleaseLifeReading(context.Background(), generation, local.Format("2006-01-02"))
-	candidates, err := life.Fetch(ctx, nil)
+	candidates, err := s.readingCandidates(ctx, now)
 	if err != nil {
 		return life.Reading{}, err
 	}

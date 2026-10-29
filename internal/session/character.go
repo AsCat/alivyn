@@ -92,24 +92,20 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 		f.Canon = character.Setting(s.Config.Language)
 	}
 	characterProfile := s.characterPersona()
-	state, at, err := s.History.CharacterStateBefore(ctx, f.SourceMessageID, now)
+	moment, threads, at, err := s.characterAffect(ctx, f.SourceMessageID, now)
 	if err != nil {
 		return character.Context{}, err
 	}
-	threadSources, err := s.History.OpenThreadSources(ctx, state.OpenThreads)
+	threadSources, err := s.History.OpenThreadSources(ctx, threads)
 	if err != nil {
 		return character.Context{}, err
 	}
 	sources = append(sources, threadSources...)
-	c := character.Context{Frame: f, Persona: characterProfile, Moment: state.Moment, LastChatAt: lastChat, OpenThreads: state.OpenThreads, Sources: sources}
+	c := character.Context{Frame: f, Persona: characterProfile, Moment: moment, LastChatAt: lastChat, OpenThreads: threads, Sources: sources}
 	selected, _ := persona.Get(s.Config.EffectivePersonaPack())
 	c.DirectPersona = selected.Standalone
 	c.AllowBubbles = s.Config.EffectivePersonaPack() == "vivid" || selected.Standalone
-	c.SelfFacts, err = s.History.CharacterSelfFactsBefore(ctx, f.SourceMessageID)
-	if err != nil {
-		return character.Context{}, err
-	}
-	c.Episodes, err = s.History.CharacterEpisodesBefore(ctx, f.SourceMessageID)
+	c.SelfFacts, c.Episodes, err = s.characterMemory(ctx, f.SourceMessageID, now)
 	if err != nil {
 		return character.Context{}, err
 	}
@@ -297,11 +293,11 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 	if err != nil {
 		return c, nil, err
 	}
-	state, momentAt, err := s.History.CharacterStateBefore(ctx, sourceID+1, now)
-	c.Moment = state.Moment
-	c.OpenThreads = state.OpenThreads
+	moment, threads, momentAt, err := s.characterAffect(ctx, sourceID+1, now)
+	c.Moment = moment
+	c.OpenThreads = threads
 	if err == nil {
-		more, sourceErr := s.History.OpenThreadSources(ctx, state.OpenThreads)
+		more, sourceErr := s.History.OpenThreadSources(ctx, threads)
 		if sourceErr != nil {
 			return c, nil, sourceErr
 		}
@@ -311,10 +307,7 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 		c.MomentAt = momentAt.Format(time.RFC3339)
 	}
 	if err == nil {
-		c.SelfFacts, err = s.History.CharacterSelfFactsBefore(ctx, sourceID+1)
-	}
-	if err == nil {
-		c.Episodes, err = s.History.CharacterEpisodesBefore(ctx, sourceID+1)
+		c.SelfFacts, c.Episodes, err = s.characterMemory(ctx, sourceID+1, now)
 	}
 	return c, references, err
 }

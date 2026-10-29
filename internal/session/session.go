@@ -14,6 +14,7 @@ import (
 	"github.com/AsCat/alivyn/internal/relationship"
 	"github.com/AsCat/alivyn/internal/store"
 	"github.com/AsCat/alivyn/internal/world"
+	"github.com/AsCat/alivyn/pkg/extension"
 )
 
 type Completer interface {
@@ -21,9 +22,10 @@ type Completer interface {
 }
 
 type Session struct {
-	Config  config.Config
-	History *store.History
-	Client  Completer
+	Config     config.Config
+	History    *store.History
+	Client     Completer
+	Extensions *extension.Registry
 }
 
 func (s Session) commandReply(ctx context.Context, id int64) (string, bool, error) {

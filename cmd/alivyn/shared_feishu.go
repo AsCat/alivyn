@@ -128,6 +128,9 @@ func runSharedFeishu(out io.Writer) error {
 	}
 	s := session.Session{Config: c, History: h, Client: modelClient}
 	defer s.StartCharacterReflection(ctx)()
+	defer s.StartLifeLoop(ctx, func(err error) {
+		fmt.Fprintf(out, "Life reading deferred: %v\n", err)
+	})()
 	wakeReplies := make(chan struct{}, 1)
 	go workFeishu(ctx, h, s, sharedSender{client: client}, out, wakeReplies)
 	go workChannelContact(ctx, h, s, zone, c.Language, func() bool { return true }, client.SendProactive, out)

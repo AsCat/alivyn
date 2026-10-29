@@ -200,6 +200,11 @@ func (s Session) ComposeContactForAt(ctx context.Context, topic, key string, now
 		}
 		occasion = store.InitiativeOccasion(proposal)
 	case "time_gap":
+		if s.Config.EffectiveEngine() == "character_v2" {
+			// A process resuming is not by itself a social reason to interrupt
+			// someone. The elapsed time remains available in the next chat.
+			return "", ErrContactWait
+		}
 		occasion = "The runtime has resumed after a long gap. Acknowledge the gap gently if useful; do not pretend you lived through events while offline."
 	case "interview":
 		occasion = "The user's previously mentioned interview time has passed. Check in about that interview without treating approximate time as an exact appointment."
@@ -217,6 +222,19 @@ func (s Session) ComposeContactForAt(ctx context.Context, topic, key string, now
 			content = event.Zh
 		}
 		occasion = "A fictional event in your own ongoing life became relevant to a topic the user previously discussed with you. Share one specific new detail from this exact sourced event, in your own voice: " + content + ". You need no reply from the user. Do not say they ignored you, and do not invent another event."
+	case "life_reading":
+		if s.Config.EffectiveEngine() != "character_v2" || !s.lifeEnabled() {
+			return "", ErrContactWait
+		}
+		id, err := strconv.ParseInt(strings.TrimPrefix(key, "reading:"), 10, 64)
+		if !strings.HasPrefix(key, "reading:") || err != nil || id < 1 {
+			return "", errors.New("reading contact has no valid source")
+		}
+		reading, err := s.History.LifeReading(ctx, id)
+		if err != nil || reading.At.After(now) {
+			return "", errors.New("reading contact source is unavailable")
+		}
+		occasion = fmt.Sprintf("You have just had some time with your own reading. Consider whether to share one concrete thought from reading:%d with this person. The source excerpt and your tentative note are in sourced records. You read an excerpt, not the full article. Attribute external events only when the excerpt explicitly identifies who did what; a title or your tentative thought does not prove an actor or motive. Speak only if it matters to you; one short personal message is enough. Do not require an answer or invent extra facts.", id)
 	default:
 		return "", errors.New("unknown contact topic")
 	}

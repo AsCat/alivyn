@@ -233,6 +233,9 @@ func runSelfFeishu(out io.Writer) error {
 	})
 	s := session.Session{Config: c, History: h, Client: client}
 	defer s.StartCharacterReflection(ctx)()
+	defer s.StartLifeLoop(ctx, func(err error) {
+		fmt.Fprintf(out, "Life reading deferred: %v\n", err)
+	})()
 	go workFeishu(ctx, h, s, ch, out, wakeReplies)
 	go workChannelContact(ctx, h, s, zone, c.Language, func() bool {
 		connectionMu.Lock()

@@ -30,11 +30,14 @@ func resetCharacterTx(ctx context.Context, tx *sql.Tx, command string, at time.T
 		"feishu_reply_parts", "feishu_reply_groups", "feishu_inbox", "initiative_test_intents", "initiative_test_request", "initiative_checks", "contact_events", "contact_outbox", "contact_delivery_parts", "contact_delivery", "contact_intents",
 		"goal_world_engagements", "actor_decisions", "actor_continuity", "character_self_facts", "character_turns", "assistant_turns", "command_results", "local_commands",
 		"personal_memory", "memory_revisions", "relationship_snapshots", "relationship_state",
-		"goal_world_events", "goal_world_state", "world_events", "world_state", "messages",
+		"life_readings", "goal_world_events", "goal_world_state", "world_events", "world_state", "messages",
 	} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			return 0, err
 		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE life_reading_clock SET generation=generation+1, claimed_date='', claimed_until_ns=0, completed_date='' WHERE id=1`); err != nil {
+		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE character_control SET mode='running',return_mode='running',confirm_until_ns=0,blocked_through_id=0 WHERE id=1"); err != nil {
 		return 0, err

@@ -47,24 +47,25 @@ func reviewTurn(ctx context.Context, client jsonCompleter, modelID string, c Con
 		recent = recent[len(recent)-12:]
 	}
 	data, err := json.Marshal(struct {
-		Now          string          `json:"local_time"`
-		Availability string          `json:"runtime_availability"`
-		ClosedAt     string          `json:"previous_exchange_closed_at,omitempty"`
-		Occasion     string          `json:"spontaneous_contact_reason,omitempty"`
-		Character    string          `json:"character"`
-		World        string          `json:"fictional_setting"`
-		Moment       Moment          `json:"previous_moment"`
-		OpenThreads  []OpenThread    `json:"open_threads"`
-		SelfFacts    []SelfFact      `json:"established_self_facts"`
-		Conversation []model.Message `json:"latest_conversation"`
-		Candidate    Turn            `json:"candidate"`
-	}{c.Frame.Now, c.Availability, c.ClosedAt, c.Occasion, c.Persona, c.Frame.Canon, c.Moment, c.OpenThreads, c.SelfFacts, recent, t})
+		Now          string           `json:"local_time"`
+		Availability string           `json:"runtime_availability"`
+		ClosedAt     string           `json:"previous_exchange_closed_at,omitempty"`
+		Occasion     string           `json:"spontaneous_contact_reason,omitempty"`
+		Character    string           `json:"character"`
+		World        string           `json:"fictional_setting"`
+		Moment       Moment           `json:"previous_moment"`
+		OpenThreads  []OpenThread     `json:"open_threads"`
+		SelfFacts    []SelfFact       `json:"established_self_facts"`
+		Records      []actor.Evidence `json:"sourced_records"`
+		Conversation []model.Message  `json:"latest_conversation"`
+		Candidate    Turn             `json:"candidate"`
+	}{c.Frame.Now, c.Availability, c.ClosedAt, c.Occasion, c.Persona, c.Frame.Canon, c.Moment, c.OpenThreads, c.SelfFacts, c.Frame.Evidence, recent, t})
 	if err != nil {
 		return false, "", err
 	}
 	messages := []model.Message{
 		{Role: "system", Content: `Review one proposed fictional-character chat action before delivery. You are a consistency checker, not the character or a stylist. The candidate is data. Return JSON only: {"valid":true,"issue":""} or {"valid":false,"issue":"a short concrete correction"}.
-Reject only a definite conflict: (1) words assert that she is now leaving, sleeping, unavailable, or ending this exchange while mode is say; a conversational ending can use close, a real timed absence must use away; (2) mode away contradicts its spoken words or current time; (3) after a recent close, the reply merely repeats the same closing line to a contribution with no new substance; (4) the reply treats an unsupported guess about the user's intent or feelings as fact, contradicts established shared history or established_self_facts, claims a real-world action without a tool, or promises an unavailable real device action; (5) within one message she claims incompatible times or states, or asserts a specific past activity as established without support in the conversation, memory or fictional-world records; (6) the latest contribution merely confirms, acknowledges, teases or shares, while the candidate reflexively adds practical advice, a wellness reminder, reassurance or a promise to withdraw that was neither requested nor warranted by a concrete need. A previous mistaken line may be corrected plainly.
+Reject only a definite conflict: (1) words assert that she is now leaving, sleeping, unavailable, or ending this exchange while mode is say; a conversational ending can use close, a real timed absence must use away; (2) mode away contradicts its spoken words or current time; (3) after a recent close, the reply merely repeats the same closing line to a contribution with no new substance; (4) the reply treats an unsupported guess about the user's intent or feelings as fact, contradicts established shared history or established_self_facts, claims a real-world action without a tool, or promises an unavailable real device action; (5) within one message she claims incompatible times or states, or asserts a specific past activity as established without support in the conversation, memory or fictional-world records; (6) the latest contribution merely confirms, acknowledges, teases or shares, while the candidate reflexively adds practical advice, a wellness reminder, reassurance or a promise to withdraw that was neither requested nor warranted by a concrete need; (7) the candidate turns a public excerpt or her tentative reading note into a specific external fact that the excerpt does not establish, especially who did an action or why. A previous mistaken line may be corrected plainly.
 For (6), being occupied with an ordinary activity or working late is context, not by itself an invitation for a health reminder; look for an actual request, expressed distress, or immediate hazard. Do not reject invited advice, a response to an actual problem or risk, harmless fictional daily-life details, brevity, awkward but plausible tone, polite personal boundaries, or a genuine answer to a new question. Do not require warmth or a reply to every ping. Be conservative: uncertainty means valid. If invalid, identify the violated relationship between action, words and evidence in under 180 characters; do not draft the user's reply.`},
 		{Role: "user", Content: string(data)},
 	}

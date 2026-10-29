@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/AsCat/alivyn/internal/contact"
@@ -264,7 +266,7 @@ func (h *History) processDue(ctx context.Context, at time.Time, zone *time.Locat
 		return nil, errors.New("contact timezone is required")
 	}
 	rows, err := h.db.QueryContext(ctx, `SELECT id FROM contact_intents
-WHERE state = 'pending' AND topic != 'initiative' AND due_ns <= ? AND NOT EXISTS
+WHERE state = 'pending' AND topic NOT IN ('initiative','life_reading') AND due_ns <= ? AND NOT EXISTS
   (SELECT 1 FROM contact_delivery WHERE contact_delivery.intent_id = contact_intents.id)
 ORDER BY due_ns, id`, at.UnixNano())
 	if err != nil {
@@ -452,7 +454,7 @@ func evaluateIntentTxExcluding(ctx context.Context, tx *sql.Tx, item ContactInte
 			return decision, err
 		}
 	}
-	if item.Topic == "world_update" {
+	if item.Topic == "world_update" || item.Topic == "life_reading" {
 		// An unsolicited update must never overtake a direct reply that is still
 		// queued for the same person.
 		var pendingReplies int
@@ -461,6 +463,34 @@ func evaluateIntentTxExcluding(ctx context.Context, tx *sql.Tx, item ContactInte
 		}
 		if pendingReplies > 0 {
 			return contact.Decision{Reason: "private reply pending"}, nil
+		}
+	}
+	if item.Topic == "life_reading" {
+		id, err := strconv.ParseInt(strings.TrimPrefix(item.IdempotencyKey, "reading:"), 10, 64)
+		if !strings.HasPrefix(item.IdempotencyKey, "reading:") || err != nil {
+			return contact.Decision{Final: true, Reason: "reading source unavailable"}, nil
+		}
+		var occurred int64
+		if err := tx.QueryRowContext(ctx, "SELECT occurred_ns FROM life_readings WHERE id=?", id).Scan(&occurred); errors.Is(err, sql.ErrNoRows) {
+			return contact.Decision{Final: true, Reason: "reading source unavailable"}, nil
+		} else if err != nil {
+			return contact.Decision{}, err
+		}
+		var latestUser string
+		err = tx.QueryRowContext(ctx, `SELECT created_at FROM messages WHERE role='user'
+AND NOT EXISTS(SELECT 1 FROM local_commands WHERE source_message_id=messages.id)
+ORDER BY id DESC LIMIT 1`).Scan(&latestUser)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return contact.Decision{}, err
+		}
+		if err == nil {
+			lastAt, err := time.Parse(time.RFC3339Nano, latestUser)
+			if err != nil {
+				return contact.Decision{}, err
+			}
+			if lastAt.UnixNano() > occurred {
+				return contact.Decision{Final: true, Reason: "conversation resumed after reading"}, nil
+			}
 		}
 	}
 	if item.SourceRevision.Valid {
@@ -510,7 +540,7 @@ func updateIntentAndLog(ctx context.Context, tx *sql.Tx, id int64, state, reason
 }
 
 func contactBody(topic, language string) string {
-	if topic == "initiative" {
+	if topic == "initiative" || topic == "life_reading" {
 		return ""
 	} // A personal initiative always needs composed text.
 	if language == "zh-CN" {

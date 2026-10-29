@@ -311,6 +311,28 @@ CREATE TABLE IF NOT EXISTS goal_world_engagements (
   at_ns INTEGER NOT NULL,
   PRIMARY KEY(source_message_id, object_id)
 );
+CREATE TABLE IF NOT EXISTS life_reading_clock (
+  id INTEGER PRIMARY KEY CHECK(id=1),
+  generation INTEGER NOT NULL DEFAULT 0,
+  claimed_date TEXT NOT NULL DEFAULT '',
+  claimed_until_ns INTEGER NOT NULL DEFAULT 0,
+  completed_date TEXT NOT NULL DEFAULT ''
+);
+INSERT OR IGNORE INTO life_reading_clock(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS life_readings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  local_date TEXT NOT NULL,
+  occurred_ns INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  excerpt TEXT NOT NULL,
+  thought TEXT NOT NULL,
+  feeling TEXT NOT NULL,
+  question TEXT NOT NULL,
+  UNIQUE(local_date),
+  UNIQUE(source_url)
+);
+CREATE INDEX IF NOT EXISTS life_readings_time ON life_readings(occurred_ns);
 `); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)

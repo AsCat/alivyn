@@ -73,6 +73,21 @@ func (s Session) characterContext(ctx context.Context, now time.Time, sourceID i
 		records = append(records, e)
 	}
 	f.Evidence = records
+	// A queued reply may be composed after a later reading. It may only know
+	// about activities that had happened when this user message arrived.
+	if s.lifeEnabled() {
+		cutoff, parseErr := time.Parse(time.RFC3339, f.Latest.At)
+		if parseErr != nil {
+			return character.Context{}, parseErr
+		}
+		readings, readErr := s.History.LifeReadingsBefore(ctx, cutoff, 3)
+		if readErr != nil {
+			return character.Context{}, readErr
+		}
+		for _, reading := range readings {
+			f.Evidence = append(f.Evidence, readingEvidence(reading)...)
+		}
+	}
 	if s.Config.EffectiveWorldPack() == "tidehaven" {
 		f.Canon = character.Setting(s.Config.Language)
 	}
@@ -229,6 +244,25 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 	}
 	// Proactive contact includes the last response, unlike a source-bound reply.
 	c.Frame.Recent = nil
+	// A proactive turn happens after the last inbound message. New activities
+	// in that gap are visible here even though ordinary replies are source-bound.
+	if s.lifeEnabled() {
+		readings, readErr := s.History.LifeReadingsBefore(ctx, now, 3)
+		if readErr != nil {
+			return character.Context{}, nil, readErr
+		}
+		seen := map[string]bool{}
+		for _, evidence := range c.Frame.Evidence {
+			seen[evidence.ID] = true
+		}
+		for _, reading := range readings {
+			for _, evidence := range readingEvidence(reading) {
+				if !seen[evidence.ID] {
+					c.Frame.Evidence = append(c.Frame.Evidence, evidence)
+				}
+			}
+		}
+	}
 	references := append(append([]actor.Evidence(nil), c.Frame.Evidence...), c.Sources...)
 	// A character can initiate from an established preference or her own
 	// recorded state, without pretending a new external event happened.

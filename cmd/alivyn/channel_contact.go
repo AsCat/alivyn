@@ -79,7 +79,7 @@ func workChannelContact(ctx context.Context, h *store.History, s session.Session
 					}
 					continue
 				} else if ctx.Err() == nil {
-					if item.Topic == "world_update" || s.Config.EffectiveEngine() == "character_v2" {
+					if item.Topic == "world_update" || item.Topic == "life_reading" || s.Config.EffectiveEngine() == "character_v2" {
 						fmt.Fprintf(out, "Contact composition delayed: %v\n", err)
 						if resetErr := h.RetryChannelComposition(ctx, item.IntentID); resetErr != nil {
 							fmt.Fprintf(out, "Contact composition reset failed: %v\n", resetErr)

@@ -259,6 +259,21 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 			}
 		}
 	}
+	// The latest private-world scene may have happened after the last user
+	// message; a proactive contact sees it only if she actually witnessed it.
+	scenes, err := s.simulatedSceneEvidence(ctx, now)
+	if err != nil {
+		return character.Context{}, nil, err
+	}
+	seenScenes := map[string]bool{}
+	for _, event := range c.Frame.Evidence {
+		seenScenes[event.ID] = true
+	}
+	for _, event := range scenes {
+		if !seenScenes[event.ID] {
+			c.Frame.Evidence = append(c.Frame.Evidence, event)
+		}
+	}
 	references := append(append([]actor.Evidence(nil), c.Frame.Evidence...), c.Sources...)
 	// A character can initiate from an established preference or her own
 	// recorded state, without pretending a new external event happened.

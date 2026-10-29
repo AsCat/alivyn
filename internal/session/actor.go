@@ -227,6 +227,13 @@ func (s Session) actorFrame(ctx context.Context, now time.Time, sourceMessageID 
 			}
 			frame.Evidence = append(frame.Evidence, actor.Evidence{ID: fmt.Sprintf("worldv2:%d", event.ID), Provenance: "simulated_world", At: event.Date, Text: content, ObjectID: event.ObjectID, ParentID: parent, Action: event.Action})
 		}
+		// A simulator may know more than the character. Only scenes that this
+		// actor witnessed before the inbound message may enter her context.
+		sensed, err := s.simulatedSceneEvidence(ctx, latest.CreatedAt)
+		if err != nil {
+			return actor.Frame{}, err
+		}
+		frame.Evidence = append(sensed, frame.Evidence...)
 	}
 	facts, err := s.History.ActiveFacts(ctx)
 	if err != nil {

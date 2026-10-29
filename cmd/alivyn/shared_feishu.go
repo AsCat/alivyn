@@ -126,8 +126,15 @@ func runSharedFeishu(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	s := session.Session{Config: c, History: h, Client: modelClient}
+	worldModules, err := worldExtensions(c, modelClient)
+	if err != nil {
+		return err
+	}
+	s := session.Session{Config: c, History: h, Client: modelClient, Extensions: worldModules}
 	defer s.StartCharacterReflection(ctx)()
+	defer s.StartWorldSimulation(ctx, func(err error) {
+		fmt.Fprintf(out, "World simulation deferred: %v\n", err)
+	})()
 	defer s.StartLifeLoop(ctx, func(err error) {
 		fmt.Fprintf(out, "Life reading deferred: %v\n", err)
 	})()

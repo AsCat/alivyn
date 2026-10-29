@@ -24,7 +24,7 @@ func run(args []string) error {
 	if len(args) == 0 {
 		return runTUI()
 	}
-	if args[0] != "model" && args[0] != "replay" && args[0] != "memory" && args[0] != "contact" && args[0] != "persona" && args[0] != "channel" && args[0] != "relay" && args[0] != "serve" && args[0] != "demo" && args[0] != "world" && args[0] != "actor" && args[0] != "life" && len(args) != 1 {
+	if args[0] != "model" && args[0] != "replay" && args[0] != "memory" && args[0] != "contact" && args[0] != "persona" && args[0] != "channel" && args[0] != "relay" && args[0] != "serve" && args[0] != "demo" && args[0] != "world" && args[0] != "actor" && args[0] != "life" && args[0] != "inspect" && len(args) != 1 {
 		return fmt.Errorf("unexpected arguments for %q", args[0])
 	}
 
@@ -53,6 +53,8 @@ func run(args []string) error {
 		return runActor(context.Background(), args[1:], os.Stdout)
 	case "life":
 		return runLife(context.Background(), args[1:], os.Stdout)
+	case "inspect":
+		return runInspect(context.Background(), args[1:], os.Stdout)
 	case "memory":
 		return runMemory(context.Background(), args[1:], os.Stdout)
 	case "contact":
@@ -113,7 +115,7 @@ func run(args []string) error {
 
 func usage() {
 	fmt.Println("Alivyn · 意续 — persistent conversation preview")
-	fmt.Println("Usage: alivyn [tui|init|chat|history|life explore|status|actor status|actor set legacy|actor_v1|character_v2|actor audition [character_v2|actor_v1] [all|scenario-name]|actor eval [quick|all]|world show|world timeline|world set tidehaven|none|world demo [actor] [en|zh-CN]|memory ...|contact ...|persona show|persona set natural|romantic|companion|persona pack list|show|set natural|vivid|dafeiyu-astrbot|persona background show|set <text>|persona routine show|set <text>|persona tune initiative [0..100]|channel feishu connect [relay-url]|channel feishu pair [relay-url]|channel feishu run|channel feishu status|channel feishu add|relay serve|serve [once]|model check|model key import|replay|doctor|demo [en|zh-CN|tui]|version|help]")
+	fmt.Println("Usage: alivyn [tui|init|chat|history|inspect timeline|person|graph|demo|life explore|status|actor status|actor set legacy|actor_v1|character_v2|actor audition [character_v2|actor_v1] [all|scenario-name]|actor eval [quick|all]|world show|world timeline|world simulate|world set tidehaven|none|world demo [actor] [en|zh-CN]|memory ...|contact ...|persona show|persona set natural|romantic|companion|persona pack list|show|set natural|vivid|dafeiyu-astrbot|persona background show|set <text>|persona routine show|set <text>|persona tune initiative [0..100]|channel feishu connect [relay-url]|channel feishu pair [relay-url]|channel feishu run|channel feishu status|channel feishu add|relay serve|serve [once]|model check|model key import|replay|doctor|demo [en|zh-CN|tui]|version|help]")
 }
 
 type demoModel struct{}

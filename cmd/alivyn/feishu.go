@@ -231,8 +231,15 @@ func runSelfFeishu(out io.Writer) error {
 		}
 		return nil
 	})
-	s := session.Session{Config: c, History: h, Client: client}
+	worldModules, err := worldExtensions(c, client)
+	if err != nil {
+		return err
+	}
+	s := session.Session{Config: c, History: h, Client: client, Extensions: worldModules}
 	defer s.StartCharacterReflection(ctx)()
+	defer s.StartWorldSimulation(ctx, func(err error) {
+		fmt.Fprintf(out, "World simulation deferred: %v\n", err)
+	})()
 	defer s.StartLifeLoop(ctx, func(err error) {
 		fmt.Fprintf(out, "Life reading deferred: %v\n", err)
 	})()

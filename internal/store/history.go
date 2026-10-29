@@ -341,6 +341,10 @@ CREATE INDEX IF NOT EXISTS life_readings_time ON life_readings(occurred_ns);
 		db.Close()
 		return nil, fmt.Errorf("initialize relationship: %w", err)
 	}
+	if err := h.ensureExperienceEvents(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("initialize experience events: %w", err)
+	}
 	return h, nil
 }
 

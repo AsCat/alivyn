@@ -95,6 +95,7 @@ type SimulationRequest struct {
 }
 
 type EventProposal struct {
+	ProposalID  string          `json:"proposal_id"`
 	Kind        string          `json:"kind"`
 	SubjectID   string          `json:"subject_id"`
 	At          time.Time       `json:"at"`

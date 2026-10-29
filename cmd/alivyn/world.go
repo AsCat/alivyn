@@ -10,13 +10,46 @@ import (
 
 	"github.com/AsCat/alivyn/internal/actor"
 	"github.com/AsCat/alivyn/internal/config"
+	"github.com/AsCat/alivyn/internal/session"
 	"github.com/AsCat/alivyn/internal/store"
 	"github.com/AsCat/alivyn/internal/world"
 )
 
 func runWorld(ctx context.Context, args []string, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: alivyn world show|timeline|demo [actor] [en|zh-CN]")
+		return errors.New("usage: alivyn world show|timeline|simulate|demo [actor] [en|zh-CN]")
+	}
+	if args[0] == "simulate" {
+		if len(args) != 1 {
+			return errors.New("usage: alivyn world simulate")
+		}
+		c, h, err := openConfiguredHistory(ctx)
+		if err != nil {
+			return err
+		}
+		defer h.Close()
+		client, err := configuredClient(c)
+		if err != nil {
+			return err
+		}
+		r, err := worldExtensions(c, client)
+		if err != nil {
+			return err
+		}
+		if r == nil {
+			return errors.New("world simulation requires character_v2 and the tidehaven world pack")
+		}
+		s := session.Session{Config: c, History: h, Client: client, Extensions: r}
+		ids, err := s.AdvanceWorldModule(ctx, "tidehaven", time.Now())
+		if err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			fmt.Fprintln(out, "No new world scene today / 今天没有新的世界事件")
+			return nil
+		}
+		fmt.Fprintf(out, "Recorded world event: %s. Inspect with 'alivyn inspect timeline'.\n", ids[0])
+		return nil
 	}
 	if args[0] == "demo" {
 		if len(args) >= 2 && args[1] == "actor" {
@@ -49,7 +82,7 @@ func runWorld(ctx context.Context, args []string, out io.Writer) error {
 		return nil
 	}
 	if len(args) != 1 || (args[0] != "show" && args[0] != "timeline") {
-		return errors.New("usage: alivyn world show|timeline|demo [actor] [en|zh-CN]")
+		return errors.New("usage: alivyn world show|timeline|simulate|demo [actor] [en|zh-CN]")
 	}
 	c, h, err := openConfiguredHistory(ctx)
 	if err != nil {

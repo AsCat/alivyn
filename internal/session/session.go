@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -224,6 +225,27 @@ func (s Session) ComposeContactForAt(ctx context.Context, topic, key string, now
 			content = event.Zh
 		}
 		occasion = "A fictional event in your own ongoing life became relevant to a topic the user previously discussed with you. Share one specific new detail from this exact sourced event, in your own voice: " + content + ". You need no reply from the user. Do not say they ignored you, and do not invent another event."
+	case "world_scene":
+		if s.Config.EffectiveEngine() != "character_v2" {
+			return "", ErrContactWait
+		}
+		id, err := strconv.ParseInt(strings.TrimPrefix(key, "worldsim:"), 10, 64)
+		if !strings.HasPrefix(key, "worldsim:") || err != nil || id < 1 {
+			return "", errors.New("scene contact has no valid source event")
+		}
+		event, err := s.History.SimulatedScene(ctx, id)
+		if err != nil || event.At.After(now) || event.WorldID != "tidehaven" {
+			return "", errors.New("scene contact source is unavailable")
+		}
+		var scene store.Scene
+		if err := json.Unmarshal(event.Payload, &scene); err != nil {
+			return "", err
+		}
+		content := scene.En
+		if s.Config.Language == "zh-CN" {
+			content = scene.Zh
+		}
+		occasion = "You witnessed this specific event in your fictional world. Consider whether it is worth sharing one concrete detail, without turning it into a report or requiring a reply: " + content
 	case "life_reading":
 		if s.Config.EffectiveEngine() != "character_v2" || !s.lifeEnabled() {
 			return "", ErrContactWait

@@ -1,6 +1,6 @@
 # World and Person Runtime (RFC 04)
 
-Status: **architecture target with initial live module seams, not a completed plugin host**. The experimental `pkg/extension` `v1alpha1` contract supports explicit registration and selection. `character_v2` can use selected memory retrieval and current-state projection modules, and the daily reading loop can use a selected perception module. Existing SQLite and public RSS implementations remain the defaults. ADB, vision, audio, physical devices, the 2D world, and the graph console are future modules.
+Status: **architecture target with one runnable world–person event path, not a completed plugin host**. The experimental `pkg/extension` `v1alpha1` contract supports explicit registration and selection. `character_v2` can use selected memory retrieval and current-state projection modules, and the daily reading loop can use a selected perception module. Chat, recording-world progress, readings, contact decisions, and new simulated scenes enter one source-reference event index. The built-in Tidehaven simulator asks the user-configured model for one bounded daily scene; only a witnessed scene reaches the character's dialogue evidence. `alivyn inspect demo|timeline|person|graph` is the terminal acceptance path. Existing SQLite and public RSS implementations remain the defaults; ADB, vision, audio, physical devices, the 2D world, and the graphical console are future modules.
 
 ## Model
 
@@ -57,8 +57,8 @@ Built-in modules can initially register Go interfaces. Installable third-party m
 
 ## Migration path
 
-1. **Done:** experimental contract and explicit registry; character memory, affect, and public-reading perception have selected-module seams with SQLite and RSS defaults. The live Feishu character has not been switched to an external module.
-2. Add a unified append-only event ledger with adapters for existing chat, reading, world, proactive-contact, and delivery tables. Verify restart and forgetting against old behavior.
+1. **Done:** experimental contract and explicit registry; character memory, affect, and public-reading perception have selected-module seams with SQLite and RSS defaults. A source-reference event index covers old chat, recording-world progress, readings, contact decisions, and validated simulated scenes without copying private chat text. Reset clears the index. A model-backed Tidehaven module may propose one scene per day in the Feishu runtime. A terminal timeline, person view, Mermaid graph, and isolated world–person demo are available.
+2. Complete the event index for delivery receipts and reflection. Existing source tables still own their records. Continue verifying restart, correction, forgetting, and replay.
 3. Project relationship, interests, goals, attention, and affect from the same person-visible events; ordinary and proactive decisions consume the same state.
 4. Wrap the existing recording task as the first world module, then admit validated simulator proposals. Build the console and 2D view as read-only event consumers first.
 5. Add read-only phone perception, images, and voice. Add ADB actions only after authorization, idempotency, and receipts work; physical devices follow the same boundary.

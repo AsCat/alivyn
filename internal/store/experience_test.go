@@ -149,6 +149,18 @@ func TestWitnessedSceneCanCreateSourcedContactCandidate(t *testing.T) {
 	if err != nil || len(intents) != 1 {
 		t.Fatalf("duplicate scene created a second contact: %+v %v", intents, err)
 	}
+	// A new user turn makes the scheduled outreach stale, even though the
+	// underlying scene remains a valid experience for the next reply.
+	if err := h.AddUserMessage(ctx, "你今天在忙什么？", at.Add(time.Minute), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if _, ready, err := h.NextChannelContact(ctx, at.Add(16*time.Minute), time.UTC, "zh-CN"); err != nil || ready {
+		t.Fatalf("stale world scene contact became ready: ready=%v err=%v", ready, err)
+	}
+	intents, err = h.ContactIntents(ctx, 10)
+	if err != nil || len(intents) != 1 || intents[0].State != "canceled" || intents[0].Reason != "conversation resumed after world scene" {
+		t.Fatalf("stale world scene contact was not canceled: %+v %v", intents, err)
+	}
 }
 
 func TestRecentWorldEventsSurviveBusyConversation(t *testing.T) {

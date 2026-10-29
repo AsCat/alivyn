@@ -454,7 +454,7 @@ func evaluateIntentTxExcluding(ctx context.Context, tx *sql.Tx, item ContactInte
 			return decision, err
 		}
 	}
-	if item.Topic == "world_update" || item.Topic == "life_reading" {
+	if item.Topic == "world_update" || item.Topic == "world_scene" || item.Topic == "life_reading" {
 		// An unsolicited update must never overtake a direct reply that is still
 		// queued for the same person.
 		var pendingReplies int
@@ -463,6 +463,37 @@ func evaluateIntentTxExcluding(ctx context.Context, tx *sql.Tx, item ContactInte
 		}
 		if pendingReplies > 0 {
 			return contact.Decision{Reason: "private reply pending"}, nil
+		}
+	}
+	if item.Topic == "world_scene" {
+		id, err := strconv.ParseInt(strings.TrimPrefix(item.IdempotencyKey, "worldsim:"), 10, 64)
+		if !strings.HasPrefix(item.IdempotencyKey, "worldsim:") || err != nil || id < 1 {
+			return contact.Decision{Final: true, Reason: "world scene source unavailable"}, nil
+		}
+		var occurred int64
+		err = tx.QueryRowContext(ctx, `SELECT occurred_ns FROM simulated_events WHERE id=? AND world_id='tidehaven'
+AND EXISTS(SELECT 1 FROM json_each(observer_ids_json) WHERE value='default')`, id).Scan(&occurred)
+		if errors.Is(err, sql.ErrNoRows) {
+			return contact.Decision{Final: true, Reason: "world scene source unavailable"}, nil
+		}
+		if err != nil {
+			return contact.Decision{}, err
+		}
+		var latestUser string
+		err = tx.QueryRowContext(ctx, `SELECT created_at FROM messages WHERE role='user'
+AND NOT EXISTS(SELECT 1 FROM local_commands WHERE source_message_id=messages.id)
+ORDER BY id DESC LIMIT 1`).Scan(&latestUser)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return contact.Decision{}, err
+		}
+		if err == nil {
+			lastAt, err := time.Parse(time.RFC3339Nano, latestUser)
+			if err != nil {
+				return contact.Decision{}, err
+			}
+			if lastAt.UnixNano() > occurred {
+				return contact.Decision{Final: true, Reason: "conversation resumed after world scene"}, nil
+			}
 		}
 	}
 	if item.Topic == "life_reading" {

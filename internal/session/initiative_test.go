@@ -130,7 +130,11 @@ func TestInitiativeFromIdleToMessageAndQuietChoice(t *testing.T) {
 			} else if err != nil {
 				t.Fatal(err)
 			}
-			if len(client.calls) != 2 {
+			expectedCalls := 2
+			if choice == "invalid" {
+				expectedCalls = 3 // One bounded plain-completion retry.
+			}
+			if len(client.calls) != expectedCalls {
 				t.Fatalf("unexpected calls: %d", len(client.calls))
 			}
 			if choice == "contact" {
@@ -142,7 +146,7 @@ func TestInitiativeFromIdleToMessageAndQuietChoice(t *testing.T) {
 					t.Fatalf("impulse history missing: %+v %v", beats, err)
 				}
 			}
-			if _, err := s.ConsiderInitiative(ctx, now.Add(time.Minute)); err != nil || len(client.calls) != 2 {
+			if _, err := s.ConsiderInitiative(ctx, now.Add(time.Minute)); err != nil || len(client.calls) != expectedCalls {
 				t.Fatal("cooldown made another model call", err)
 			}
 			items, err := h.ContactIntents(ctx, 10)

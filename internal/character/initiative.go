@@ -63,7 +63,23 @@ func ImagineImpulses(ctx context.Context, client actor.Completer, modelID string
 	instruction := `You are updating a fictional character's current wants before any decision to message. Output JSON only: {"impulses":[{"kind":"follow_up|share|reconnect","want":"her own brief desire","subject":"specific possible subject","evidence_ids":["existing reference ID"]}]}.
 Offer zero to three different plausible impulses. Consider her character, current interest in this person, elapsed time, recent contact decisions, energy, her own interests and unfinished subjects. A wish not to repeat one subject only retires that subject; it does not prove she wants no contact at all. If she is outgoing and likes this person, consider whether she wants to return with a different small thought, a playful nudge, or something from her own established life. If she is distant, tired, occupied, or the person requested space, zero impulses is valid. An impulse can persist or change after a wait; do not copy an old wait as today's whole state. Do not invent an external event, physical encounter, user feeling, or tool activity. Each impulse must cite one to three supplied reference IDs that support its subject. These are authored state summaries, not messages to send or private reasoning. Keep want and subject each under 120 characters.`
 	messages := []model.Message{{Role: "system", Content: instruction}, {Role: "user", Content: string(data)}}
+	raw, err := completeSourcedJSON(ctx, client, modelID, messages, func(raw string) error {
+		_, err := ParseImpulses(raw, references)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ParseImpulses(raw, references)
+}
+
+// A provider's JSON mode can occasionally return an empty or malformed body.
+// Retry once in ordinary completion mode with the same source boundaries; a
+// semantic validation error (including invented evidence) is never repaired
+// by silently trusting a new answer.
+func completeSourcedJSON(ctx context.Context, client actor.Completer, modelID string, messages []model.Message, validate func(string) error) (string, error) {
 	var raw string
+	var err error
 	if jsonClient, ok := client.(interface {
 		CompleteJSON(context.Context, string, []model.Message) (string, error)
 	}); ok {
@@ -71,10 +87,23 @@ Offer zero to three different plausible impulses. Consider her character, curren
 	} else {
 		raw, err = client.Complete(ctx, modelID, messages)
 	}
-	if err != nil {
-		return nil, err
+	if err == nil {
+		err = validate(raw)
 	}
-	return ParseImpulses(raw, references)
+	if err == nil || !recoverableJSONFailure(err) {
+		return raw, err
+	}
+	retry := append(append([]model.Message(nil), messages...), model.Message{Role: "user", Content: "The previous response was missing or malformed JSON. Return exactly one complete JSON object matching the requested schema; cite only supplied references."})
+	raw, err = client.Complete(ctx, modelID, retry)
+	if err != nil {
+		return "", err
+	}
+	return raw, validate(raw)
+}
+
+func recoverableJSONFailure(err error) bool {
+	var syntax *json.SyntaxError
+	return errors.As(err, &syntax) || err.Error() == "provider returned empty content" || err.Error() == "provider output reached its token limit"
 }
 
 func ParseImpulses(raw string, references []actor.Evidence) ([]Impulse, error) {
@@ -82,7 +111,7 @@ func ParseImpulses(raw string, references []actor.Evidence) ([]Impulse, error) {
 		Impulses []Impulse `json:"impulses"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &result); err != nil {
-		return nil, errors.New("invalid impulse JSON")
+		return nil, fmt.Errorf("invalid impulse JSON (%d bytes): %w", len(raw), err)
 	}
 	if len(result.Impulses) > 3 {
 		return nil, errors.New("too many impulses")
@@ -183,14 +212,10 @@ Return only JSON: {"action":"wait","kind":"","reason":"brief explanation","evide
 		{Role: "system", Content: instruction},
 		{Role: "user", Content: string(data)},
 	}
-	var raw string
-	if jsonClient, ok := client.(interface {
-		CompleteJSON(context.Context, string, []model.Message) (string, error)
-	}); ok {
-		raw, err = jsonClient.CompleteJSON(ctx, modelID, messages)
-	} else {
-		raw, err = client.Complete(ctx, modelID, messages)
-	}
+	raw, err := completeSourcedJSON(ctx, client, modelID, messages, func(raw string) error {
+		_, err := ParseInitiative(raw, references)
+		return err
+	})
 	if err != nil {
 		return Initiative{}, err
 	}
@@ -200,7 +225,7 @@ Return only JSON: {"action":"wait","kind":"","reason":"brief explanation","evide
 func ParseInitiative(raw string, references []actor.Evidence) (Initiative, error) {
 	var p Initiative
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &p); err != nil {
-		return p, errors.New("invalid initiative JSON")
+		return p, fmt.Errorf("invalid initiative JSON (%d bytes): %w", len(raw), err)
 	}
 	p.Reason = strings.TrimSpace(p.Reason)
 	if p.Reason == "" || len([]rune(p.Reason)) > 240 {

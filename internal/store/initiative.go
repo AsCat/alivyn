@@ -134,8 +134,8 @@ ORDER BY m.id DESC LIMIT 1`).Scan(&lastVisibleID, &role, &latestStamp); err != n
 	if err != nil {
 		return check, err
 	}
-	if now.Before(userAt) || now.Sub(userAt) > 72*time.Hour {
-		check.Reason = "conversation too old"
+	if now.Before(userAt) {
+		check.Reason = "conversation timestamp is in the future"
 		return check, nil
 	}
 	var pending int
@@ -164,12 +164,22 @@ WHERE source_message_id=? AND committed=1 AND json_extract(turn_json,'$.mode')='
 		return check, err
 	}
 	check.Unanswered = unanswered
-	if unanswered >= profile.MaxUnanswered {
-		check.Reason = "waiting for user to return"
+	var recentUnanswered int
+	rollingStart := now.Add(-72 * time.Hour)
+	if userAt.After(rollingStart) {
+		rollingStart = userAt
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT
+ (SELECT COUNT(*) FROM contact_delivery WHERE state='sent' AND sent_ns>=?) +
+ (SELECT COUNT(*) FROM contact_outbox WHERE sent_ns>=?)`, rollingStart.UnixNano(), rollingStart.UnixNano()).Scan(&recentUnanswered); err != nil {
+		return check, err
+	}
+	if recentUnanswered >= profile.MaxUnanswered {
+		check.Reason = "recent unanswered contact ceiling"
 		return check, nil
 	}
 	if unanswered > 0 {
-		gap = profile.FollowupGap
+		gap = profile.FollowupInterval(unanswered)
 	}
 	variation := 11
 	if check.Level > 75 {
@@ -404,6 +414,21 @@ func initiativeHasNewConversationTx(ctx context.Context, tx *sql.Tx, sourceID in
 
 func initiativeTopicKey(p character.Initiative, unanswered int) string {
 	return fmt.Sprintf("%s:%d", p.TopicKey(), unanswered)
+}
+
+// LatestConversationUser anchors long-running proactive context even when the
+// bounded recent transcript no longer contains the original user turn.
+func (h *History) LatestConversationUser(ctx context.Context) (int64, time.Time, error) {
+	var id int64
+	var stamp string
+	err := h.db.QueryRowContext(ctx, `SELECT m.id,m.created_at FROM messages m WHERE m.role='user'
+AND NOT EXISTS(SELECT 1 FROM local_commands c WHERE c.source_message_id=m.id)
+ORDER BY m.id DESC LIMIT 1`).Scan(&id, &stamp)
+	if err != nil {
+		return 0, time.Time{}, err
+	}
+	at, err := time.Parse(time.RFC3339Nano, stamp)
+	return id, at, err
 }
 
 func (h *History) FailInitiative(ctx context.Context, id int64) error {

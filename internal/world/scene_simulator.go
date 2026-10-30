@@ -75,7 +75,13 @@ func (s SceneSimulator) Advance(ctx context.Context, request extension.Simulatio
 		if event.Kind == "world.action" || event.Kind == "world.event" {
 			date = event.At.Format("2006-01-02") // An authored world date is a calendar day, not an instant.
 		}
-		recent = append(recent, map[string]string{"id": event.ID, "date": date, "event": payload.Zh})
+		item := map[string]string{"date": date, "event": payload.Zh}
+		// Only prior simulated scenes are valid causal parents. Authored
+		// history is useful context but cannot be cited as a scene parent.
+		if event.Kind == "world.scene" && event.WorldID == request.WorldID && !event.At.After(request.AsOf) {
+			item["id"] = event.ID
+		}
+		recent = append(recent, item)
 	}
 	if len(recent) > 8 {
 		recent = recent[len(recent)-8:]
@@ -123,10 +129,9 @@ func (s SceneSimulator) Advance(ctx context.Context, request extension.Simulatio
 				break
 			}
 		}
-		if !validParent {
-			return nil, errors.New("model cited an unavailable world scene parent")
+		if validParent {
+			proposal.ParentIDs = []string{draft.ParentID}
 		}
-		proposal.ParentIDs = []string{draft.ParentID}
 	}
 	if draft.ActorPresent {
 		proposal.SubjectID = "default"

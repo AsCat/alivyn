@@ -28,6 +28,21 @@ func proposedContact() character.Initiative {
 	return character.Initiative{Action: "contact", Kind: "follow_up", Reason: "想到画旧书店时可以保留的一个细节", EvidenceIDs: []string{"chat:3"}, AfterMinutes: 5}
 }
 
+func TestInitiativeCanReconsiderAnOldRelationship(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	h, err := OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	seedInitiative(t, h, now.Add(-4*24*time.Hour))
+	check, err := h.ClaimInitiative(ctx, now, time.UTC)
+	if err != nil || !check.Ready {
+		t.Fatalf("old conversation permanently stopped autonomous consideration: %+v %v", check, err)
+	}
+}
+
 func TestInitiativeCanConsiderAfterCompletedQuietTurn(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
@@ -60,7 +75,7 @@ func TestInitiativeCanConsiderAfterCompletedQuietTurn(t *testing.T) {
 	}
 }
 
-func TestInitiativeRestartCompositionDeliveryAndNoUnansweredChasing(t *testing.T) {
+func TestInitiativeRestartCompositionDeliveryAndFollowupGap(t *testing.T) {
 	ctx := context.Background()
 	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
 	dir := t.TempDir()
@@ -106,8 +121,12 @@ func TestInitiativeRestartCompositionDeliveryAndNoUnansweredChasing(t *testing.T
 		t.Fatal(err)
 	}
 	c, err = h.ClaimInitiative(ctx, now.Add(2*time.Hour), time.UTC)
-	if err != nil || c.Ready || c.Reason != "waiting for user to return" {
-		t.Fatalf("chased unanswered contact: %+v %v", c, err)
+	if err != nil || c.Ready || c.Reason != "conversation still recent" {
+		t.Fatalf("follow-up ignored silence interval: %+v %v", c, err)
+	}
+	c, err = h.ClaimInitiative(ctx, now.Add(5*time.Hour), time.UTC)
+	if err != nil || !c.Ready || c.Unanswered != 1 {
+		t.Fatalf("one unanswered contact permanently froze initiative: %+v %v", c, err)
 	}
 }
 
@@ -146,7 +165,7 @@ func TestHighInitiativeCanFollowUpSeveralTimesAndResetsAfterReply(t *testing.T) 
 			t.Fatal(err)
 		}
 	}
-	if check, err := h.ClaimInitiative(ctx, now.Add(160*time.Minute), time.UTC); err != nil || check.Ready || check.Reason != "waiting for user to return" {
+	if check, err := h.ClaimInitiative(ctx, now.Add(160*time.Minute), time.UTC); err != nil || check.Ready || check.Reason != "recent unanswered contact ceiling" {
 		t.Fatalf("unanswered cap failed: %+v %v", check, err)
 	}
 	if err := h.AddUserMessage(ctx, "回来啦", now.Add(180*time.Minute), time.UTC); err != nil {

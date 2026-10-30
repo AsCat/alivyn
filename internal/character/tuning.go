@@ -26,7 +26,9 @@ func ProfileForInitiative(level int) InitiativeProfile {
 	if level > 100 {
 		level = 100
 	}
-	profile := InitiativeProfile{Enabled: true, MaxUnanswered: 1}
+	// MaxUnanswered is a rolling safety ceiling, independent of temperament.
+	// The character model still decides whether any follow-up is wanted.
+	profile := InitiativeProfile{Enabled: true, MaxUnanswered: 4}
 	if level <= 25 {
 		profile.ConsiderationGap = time.Duration(360-(level*240/25)) * time.Minute
 		profile.FirstContactGap = time.Duration(120-(level*90/25)) * time.Minute
@@ -47,13 +49,23 @@ func ProfileForInitiative(level int) InitiativeProfile {
 		profile.RoutineDailyChecks = 2
 	}
 	profile.FreshDailyChecks = profile.RoutineDailyChecks + 2
-	switch {
-	case level >= 90:
-		profile.MaxUnanswered = 4
-	case level >= 75:
-		profile.MaxUnanswered = 3
-	case level >= 50:
-		profile.MaxUnanswered = 2
-	}
 	return profile
+}
+
+// FollowupInterval gives silence increasing weight without making the first
+// unanswered message an absolute stop. This is an opportunity gate, not a
+// decision to contact; the character and relationship still choose that.
+func (p InitiativeProfile) FollowupInterval(unanswered int) time.Duration {
+	if unanswered <= 0 {
+		return p.FirstContactGap
+	}
+	multiplier := unanswered + 1
+	if multiplier > 6 {
+		multiplier = 6
+	}
+	gap := p.FollowupGap * time.Duration(multiplier)
+	if gap > 24*time.Hour {
+		return 24 * time.Hour
+	}
+	return gap
 }

@@ -2,6 +2,7 @@ package character
 
 import (
 	"context"
+	"fmt"
 	"github.com/AsCat/alivyn/internal/actor"
 	"github.com/AsCat/alivyn/internal/model"
 	"strings"
@@ -13,6 +14,29 @@ type initiativeCapture struct{ input []model.Message }
 func (c *initiativeCapture) Complete(_ context.Context, _ string, input []model.Message) (string, error) {
 	c.input = input
 	return `{"action":"wait","reason":"need some room"}`, nil
+}
+
+type malformedJSONModel struct{ plainCalls int }
+
+func (m *malformedJSONModel) CompleteJSON(context.Context, string, []model.Message) (string, error) {
+	return `{"impulses":[`, nil
+}
+
+func (m *malformedJSONModel) Complete(_ context.Context, _ string, input []model.Message) (string, error) {
+	m.plainCalls++
+	if len(input) != 3 {
+		return "", fmt.Errorf("retry lost its context: %d messages", len(input))
+	}
+	return `{"impulses":[{"kind":"share","want":"想说点自己的事","subject":"旧录音","evidence_ids":["self:character"]}]}`, nil
+}
+
+func TestImpulseFormationRecoversMalformedProviderJSON(t *testing.T) {
+	client := &malformedJSONModel{}
+	refs := []actor.Evidence{{ID: "self:character", Provenance: "authored_character", Text: "Likes old recordings"}}
+	impulses, err := ImagineImpulses(context.Background(), client, "mock", Context{}, refs)
+	if err != nil || len(impulses) != 1 || client.plainCalls != 1 {
+		t.Fatalf("malformed JSON was not recovered once: %+v %d %v", impulses, client.plainCalls, err)
+	}
 }
 
 func TestInitiativeSeesConnectionAndActualOutreachHistory(t *testing.T) {

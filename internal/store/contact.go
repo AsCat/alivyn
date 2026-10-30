@@ -642,8 +642,18 @@ AND NOT EXISTS(SELECT 1 FROM local_commands WHERE source_message_id=messages.id)
 	if !profile.Enabled {
 		return contact.Decision{Reason: "initiative disabled"}, nil
 	}
-	if unanswered >= profile.MaxUnanswered {
-		return contact.Decision{Reason: "waiting for user to return"}, nil
+	rollingStart := now.Add(-72 * time.Hour)
+	if userAt.After(rollingStart) {
+		rollingStart = userAt
+	}
+	var recentUnanswered int
+	if err := tx.QueryRowContext(ctx, `SELECT
+ (SELECT COUNT(*) FROM contact_delivery WHERE state='sent' AND sent_ns>=?) +
+ (SELECT COUNT(*) FROM contact_outbox WHERE sent_ns>=?)`, rollingStart.UnixNano(), rollingStart.UnixNano()).Scan(&recentUnanswered); err != nil {
+		return contact.Decision{}, err
+	}
+	if recentUnanswered >= profile.MaxUnanswered {
+		return contact.Decision{Reason: "recent unanswered contact ceiling"}, nil
 	}
 	var lastSent sql.NullInt64
 	if err := tx.QueryRowContext(ctx, `SELECT MAX(stamp) FROM (
@@ -651,7 +661,7 @@ AND NOT EXISTS(SELECT 1 FROM local_commands WHERE source_message_id=messages.id)
  UNION ALL SELECT MAX(sent_ns) FROM contact_outbox)`).Scan(&lastSent); err != nil {
 		return contact.Decision{}, err
 	}
-	if lastSent.Valid && now.Sub(time.Unix(0, lastSent.Int64)) < profile.FirstContactGap {
+	if lastSent.Valid && now.Sub(time.Unix(0, lastSent.Int64)) < profile.FollowupInterval(unanswered) {
 		return contact.Decision{Reason: "contact still recent"}, nil
 	}
 	return contact.Decision{Ready: true}, nil

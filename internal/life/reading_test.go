@@ -27,3 +27,10 @@ func TestReadingKeepsSourceSeparateFromPrivateReaction(t *testing.T) {
 		t.Fatalf("source and reaction were not kept apart: %+v, %v", reading, err)
 	}
 }
+
+func TestFeedExcerptTruncationFitsValidationBudget(t *testing.T) {
+	text := shorten(strings.Repeat("字", 1300), 1200)
+	if len([]rune(text)) != 1200 || !strings.HasSuffix(text, "…") {
+		t.Fatalf("truncated excerpt exceeds its schema limit: %d", len([]rune(text)))
+	}
+}

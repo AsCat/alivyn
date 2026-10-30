@@ -47,7 +47,8 @@ type thinking struct {
 
 type response struct {
 	Choices []struct {
-		Message Message `json:"message"`
+		Message      Message `json:"message"`
+		FinishReason string  `json:"finish_reason"`
 	} `json:"choices"`
 }
 
@@ -108,6 +109,12 @@ func (c Client) Complete(ctx context.Context, model string, messages []Message) 
 	}
 	if len(out.Choices) == 0 {
 		return "", errors.New("provider returned no choices")
+	}
+	if out.Choices[0].FinishReason == "length" {
+		return "", errors.New("provider output reached its token limit")
+	}
+	if strings.TrimSpace(out.Choices[0].Message.Content) == "" {
+		return "", errors.New("provider returned empty content")
 	}
 	return out.Choices[0].Message.Content, nil
 }

@@ -2,6 +2,8 @@
 
 Status: **architecture target with one runnable world–person event path, not a completed plugin host**. The experimental `pkg/extension` `v1alpha1` contract supports explicit registration and selection. `character_v2` can use selected memory retrieval and current-state projection modules, and the daily reading loop can use a selected perception module. Chat, recording-world progress, readings, contact decisions, and new simulated scenes enter one source-reference event index. The built-in Tidehaven simulator asks the user-configured model for one bounded daily scene; only a witnessed scene reaches the character's dialogue evidence. `alivyn inspect demo|timeline|person|graph` is the terminal acceptance path. Existing SQLite and public RSS implementations remain the defaults; ADB, vision, audio, physical devices, the 2D world, and the graphical console are future modules.
 
+The `character.initiative` `decide` slot now also accepts a selected social-decision module. It may propose sourced impulses and a contact or wait choice; the core validates evidence and still owns relationship boundaries, quiet hours, cadence, persistence, and delivery. The built-in character decision remains the default. This is an explicitly registered in-process interface, not an installation host for arbitrary external code.
+
 ## Model
 
 Alivyn is a person who experiences events in bounded worlds, forms a subjective view, and chooses actions. A world and a person are separate objects.

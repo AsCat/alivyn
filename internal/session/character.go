@@ -225,19 +225,25 @@ func (s Session) characterContactContext(ctx context.Context, now time.Time) (ch
 		}
 	}
 	var sourceID int64
+	var lastUserAt time.Time
 	for i := len(entries) - 1; i >= 0; i-- {
 		if entries[i].Role == "user" {
 			sourceID = entries[i].ID
+			lastUserAt = entries[i].CreatedAt
 			break
 		}
 	}
 	if sourceID == 0 {
-		return character.Context{}, nil, errors.New("proactive character contact needs prior conversation")
+		sourceID, lastUserAt, err = s.History.LatestConversationUser(ctx)
+		if err != nil {
+			return character.Context{}, nil, fmt.Errorf("proactive character contact needs prior conversation: %w", err)
+		}
 	}
 	c, err := s.characterContext(ctx, now, sourceID)
 	if err != nil {
 		return character.Context{}, nil, err
 	}
+	c.LastUserAt = lastUserAt.Format(time.RFC3339)
 	// Proactive contact includes the last response, unlike a source-bound reply.
 	c.Frame.Recent = nil
 	// A proactive turn happens after the last inbound message. New activities

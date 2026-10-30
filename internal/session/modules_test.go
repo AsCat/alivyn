@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AsCat/alivyn/internal/actor"
 	"github.com/AsCat/alivyn/internal/character"
 	"github.com/AsCat/alivyn/internal/config"
 	"github.com/AsCat/alivyn/internal/life"
@@ -31,6 +32,38 @@ func (m *testAffectModule) Project(_ context.Context, q extension.ProjectionRequ
 }
 
 type testReadingModule struct{ invalid bool }
+
+type testInitiativeModule struct {
+	decision extension.Decision
+	seen     bool
+}
+
+func (m *testInitiativeModule) Decide(_ context.Context, q extension.DecisionRequest) (extension.Decision, error) {
+	m.seen = q.SubjectID == "default" && q.AsOf.After(time.Time{}) && len(q.Context) > 0
+	return m.decision, nil
+}
+
+func TestInitiativeModuleMayProposeButMustCiteCurrentEvidence(t *testing.T) {
+	refs := []actor.Evidence{{ID: "self:character", Provenance: "authored_character", Text: "喜欢旧录音"}}
+	payload := json.RawMessage(`{"action":"contact","kind":"share","reason":"想聊旧录音","evidence_ids":["self:character"],"after_minutes":5,"impulses":[{"kind":"share","want":"想聊两句","subject":"旧录音","evidence_ids":["self:character"]}]}`)
+	module := &testInitiativeModule{decision: extension.Decision{Kind: "character.initiative/v1", Payload: payload, SourceIDs: []string{"self:character"}}}
+	r := extension.NewRegistry()
+	if err := r.Register(extension.Registration{Manifest: extension.Manifest{ID: "test.initiative", Version: "1", APIVersion: extension.APIVersion, Capabilities: []extension.Capability{extension.Decide}}, Decider: module}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Use("character.initiative", extension.Decide, "test.initiative"); err != nil {
+		t.Fatal(err)
+	}
+	s := Session{Extensions: r}
+	p, err := s.characterInitiativeDecision(context.Background(), time.Now(), character.Context{}, refs)
+	if err != nil || !module.seen || p.Action != "contact" || len(p.Impulses) != 1 {
+		t.Fatalf("selected social module not used: %+v %v", p, err)
+	}
+	module.decision.SourceIDs = []string{"chat:missing"}
+	if _, err := s.characterInitiativeDecision(context.Background(), time.Now(), character.Context{}, refs); err == nil {
+		t.Fatal("module source mismatch was accepted")
+	}
+}
 
 func (m testReadingModule) Observe(_ context.Context, at time.Time) ([]extension.Observation, error) {
 	candidate := life.Candidate{Title: "A sourced event", URL: "https://example.org/article", Excerpt: "A verified public excerpt that the character may choose to read."}

@@ -60,7 +60,10 @@ func cleanText(s string) string {
 func shorten(s string, max int) string {
 	r := []rune(s)
 	if len(r) > max {
-		return string(r[:max]) + "…"
+		if max <= 1 {
+			return string(r[:max])
+		}
+		return string(r[:max-1]) + "…"
 	}
 	return s
 }

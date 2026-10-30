@@ -33,20 +33,14 @@ func (s Session) ConsiderInitiative(ctx context.Context, now time.Time) (string,
 	c.InitiativeLevel = check.Level
 	c.UnansweredOutreach = check.Unanswered
 	c.TestRequest = check.TestRequest
-	c.Impulses, err = character.ImagineImpulses(ctx, s.Client, s.Config.Model, c, refs)
-	if err != nil {
-		s.History.FailInitiative(ctx, check.ID)
-		return "impulse update failed", err
-	}
-	p, err := character.ConsiderContact(ctx, s.Client, s.Config.Model, c, refs)
+	p, err := s.characterInitiativeDecision(ctx, now, c, refs)
 	if err != nil {
 		s.History.FailInitiative(ctx, check.ID)
 		return "consideration failed", err
 	}
 	p.Unanswered = check.Unanswered
-	p.Impulses = c.Impulses
 	if p.Action == "contact" {
-		p.Subject = character.ChosenSubject(p, c.Impulses)
+		p.Subject = character.ChosenSubject(p, p.Impulses)
 	}
 	queued, err := s.History.FinishInitiative(ctx, check, p, now.Add(time.Since(started)), zone)
 	if err != nil {

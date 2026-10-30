@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"slices"
 	"time"
 
+	"github.com/AsCat/alivyn/internal/actor"
 	"github.com/AsCat/alivyn/internal/character"
 	"github.com/AsCat/alivyn/internal/life"
 	"github.com/AsCat/alivyn/internal/store"
@@ -181,4 +183,65 @@ func (s Session) characterAffect(ctx context.Context, sourceID int64, now time.T
 		return character.Moment{}, nil, time.Time{}, err
 	}
 	return state.Moment, state.OpenThreads, result.At, nil
+}
+
+// characterInitiativeDecision is the social-decision module boundary. The
+// core still owns eligibility, evidence validation, persistence and delivery;
+// a selected module can propose an impulse and a choice, never send a message.
+func (s Session) characterInitiativeDecision(ctx context.Context, now time.Time, c character.Context, refs []actor.Evidence) (character.Initiative, error) {
+	if s.Extensions != nil {
+		if selected, ok := s.Extensions.Active("character.initiative", extension.Decide); ok {
+			input, err := json.Marshal(struct {
+				Version    string            `json:"version"`
+				Character  character.Context `json:"character"`
+				References []actor.Evidence  `json:"references"`
+			}{"alivyn.character.initiative/v1", c, refs})
+			if err != nil {
+				return character.Initiative{}, err
+			}
+			decision, err := selected.Decider.Decide(ctx, extension.DecisionRequest{SubjectID: actorSubject, AsOf: now, Context: input})
+			if err != nil {
+				return character.Initiative{}, err
+			}
+			if decision.Kind != "character.initiative/v1" || len(decision.Payload) == 0 || len(decision.Payload) > 16384 {
+				return character.Initiative{}, errors.New("invalid character initiative module decision")
+			}
+			p, err := character.ParseInitiative(string(decision.Payload), refs)
+			if err != nil {
+				return character.Initiative{}, err
+			}
+			impulses, err := json.Marshal(struct {
+				Impulses []character.Impulse `json:"impulses"`
+			}{p.Impulses})
+			if err != nil {
+				return character.Initiative{}, err
+			}
+			if p.Impulses, err = character.ParseImpulses(string(impulses), refs); err != nil {
+				return character.Initiative{}, err
+			}
+			if p.Action == "contact" {
+				declared := append([]string(nil), decision.SourceIDs...)
+				cited := append([]string(nil), p.EvidenceIDs...)
+				slices.Sort(declared)
+				slices.Sort(cited)
+				if !slices.Equal(declared, cited) {
+					return character.Initiative{}, errors.New("character initiative module source mismatch")
+				}
+			} else if len(decision.SourceIDs) != 0 {
+				return character.Initiative{}, errors.New("wait decision cannot cite a contact source")
+			}
+			return p, nil
+		}
+	}
+	var err error
+	c.Impulses, err = character.ImagineImpulses(ctx, s.Client, s.Config.Model, c, refs)
+	if err != nil {
+		return character.Initiative{}, err
+	}
+	p, err := character.ConsiderContact(ctx, s.Client, s.Config.Model, c, refs)
+	if err != nil {
+		return character.Initiative{}, err
+	}
+	p.Impulses = c.Impulses
+	return p, nil
 }

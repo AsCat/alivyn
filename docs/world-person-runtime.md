@@ -4,6 +4,8 @@ Status: **architecture target with one runnable world–person event path, not a
 
 The `character.initiative` `decide` slot now also accepts a selected social-decision module. It may propose sourced impulses and a contact or wait choice; the core validates evidence and still owns relationship boundaries, quiet hours, cadence, persistence, and delivery. The built-in character decision remains the default. This is an explicitly registered in-process interface, not an installation host for arbitrary external code.
 
+An independent **inner wake** loop reads person-visible experience and saves a sourced focus, brief reason, and up to three social impulses. It sends nothing and continues through outbound quiet hours or a contact pause. The later contact decision separately asks whether to speak, whether policy permits it, and what to say. Attention to her own life may coexist with a wish to talk. If an inner wake fails, the established contact path remains available. Completed wakes enter the event index and their brief saved state appears under `/mind` in diagnostic mode. Reset and forgetting clear derived state. The inner wake itself is not yet a replaceable plugin.
+
 ## Model
 
 Alivyn is a person who experiences events in bounded worlds, forms a subjective view, and chooses actions. A world and a person are separate objects.
@@ -59,7 +61,7 @@ Built-in modules can initially register Go interfaces. Installable third-party m
 
 ## Migration path
 
-1. **Done:** experimental contract and explicit registry; character memory, affect, and public-reading perception have selected-module seams with SQLite and RSS defaults. A source-reference event index covers old chat, recording-world progress, readings, contact decisions, and validated simulated scenes without copying private chat text. Reset clears the index. A model-backed Tidehaven module may propose one scene per day in the Feishu runtime. A terminal timeline, person view, Mermaid graph, and isolated world–person demo are available.
+1. **Done:** experimental contract and explicit registry; character memory, affect, and public-reading perception have selected-module seams with SQLite and RSS defaults. A source-reference event index covers old chat, recording-world progress, readings, inner wakes, contact decisions, and validated simulated scenes without copying private chat text. Reset clears the index. A model-backed Tidehaven module may propose one scene per day in the Feishu runtime, and an independent inner wake can continue the person's own life thread. A terminal timeline, person view, Mermaid graph, and isolated world–person demo are available.
 2. Complete the event index for delivery receipts and reflection. Existing source tables still own their records. Continue verifying restart, correction, forgetting, and replay.
 3. Project relationship, interests, goals, attention, and affect from the same person-visible events; ordinary and proactive decisions consume the same state.
 4. Wrap the existing recording task as the first world module, then admit validated simulator proposals. Build the console and 2D view as read-only event consumers first.

@@ -156,6 +156,23 @@ CREATE TABLE IF NOT EXISTS initiative_checks (
   topic_key TEXT NOT NULL DEFAULT '',
   intent_id INTEGER REFERENCES contact_intents(id)
 );
+CREATE TABLE IF NOT EXISTS inner_wake_clock (
+  id INTEGER PRIMARY KEY CHECK(id=1),
+  next_check_ns INTEGER NOT NULL DEFAULT 0,
+  budget_day TEXT NOT NULL DEFAULT '',
+  checks INTEGER NOT NULL DEFAULT 0,
+  last_source_id INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO inner_wake_clock(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS inner_wakes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_message_id INTEGER NOT NULL REFERENCES messages(id),
+  through_message_id INTEGER NOT NULL REFERENCES messages(id),
+  at_ns INTEGER NOT NULL,
+  state_json TEXT NOT NULL DEFAULT '',
+  outcome TEXT NOT NULL DEFAULT 'considering' CHECK(outcome IN ('considering','done','superseded','error'))
+);
+CREATE INDEX IF NOT EXISTS inner_wakes_recent ON inner_wakes(outcome,at_ns);
 CREATE TABLE IF NOT EXISTS contact_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   intent_id INTEGER NOT NULL REFERENCES contact_intents(id),

@@ -101,6 +101,8 @@ type Context struct {
 	LastUserAt         string // Last actual user message, excluding control commands.
 	OutreachHistory    []OutreachBeat
 	Impulses           []Impulse // Current authored wants, formed before choosing whether to act.
+	InnerFocus         string    // Most recent private attention; not a contact order.
+	InnerReason        string    // Brief sourced summary of that attention.
 	TestRequest        bool      // Explicit operator preview, outside character memory.
 }
 

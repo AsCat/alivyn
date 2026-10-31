@@ -16,6 +16,9 @@ func (s Session) ConsiderInitiative(ctx context.Context, now time.Time) (string,
 	if s.Config.EffectiveEngine() != "character_v2" {
 		return "engine disabled", nil
 	}
+	// The private wake is an independent loop. A temporary failure there must
+	// not disable the established contact decision path.
+	inner, innerAt, hasInner, _ := s.WakeInnerLife(ctx, now)
 	zone, err := s.Config.Location()
 	if err != nil {
 		return "", err
@@ -33,7 +36,19 @@ func (s Session) ConsiderInitiative(ctx context.Context, now time.Time) (string,
 	c.InitiativeLevel = check.Level
 	c.UnansweredOutreach = check.Unanswered
 	c.TestRequest = check.TestRequest
-	p, err := s.characterInitiativeDecision(ctx, now, c, refs)
+	lastUserAt, _ := time.Parse(time.RFC3339, c.LastUserAt)
+	useInner := hasInner && innerAt.After(lastUserAt) && now.Sub(innerAt) >= 0 && now.Sub(innerAt) <= 6*time.Hour && character.ValidateInnerState(inner, refs) == nil
+	if useInner {
+		c.Impulses = append([]character.Impulse{}, inner.Impulses...)
+		c.InnerFocus = inner.Focus
+		c.InnerReason = inner.Reason
+	}
+	var p character.Initiative
+	if useInner && len(c.Impulses) == 0 && inner.Focus != "connect" {
+		p = character.Initiative{Action: "wait", Reason: inner.Reason, ReconsiderIn: inner.RevisitIn, Impulses: c.Impulses}
+	} else {
+		p, err = s.characterInitiativeDecision(ctx, now, c, refs)
+	}
 	if err != nil {
 		s.History.FailInitiative(ctx, check.ID)
 		return "consideration failed", err

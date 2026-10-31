@@ -64,6 +64,16 @@ func runInitiativeDemo(ctx context.Context, out io.Writer) error {
 				return err
 			}
 			report := map[string]any{"scenario": tc.Name, "outcome": result, "calls": counter.calls}
+			if inner, _, exists, err := h.LatestInnerState(ctx); err != nil {
+				return err
+			} else if exists {
+				report["inner_state"] = inner
+			}
+			if decisions, err := h.RecentOutreach(ctx, now, 1); err != nil {
+				return err
+			} else if len(decisions) > 0 {
+				report["contact_choice"] = decisions[0]
+			}
 			items, err := h.ContactIntents(ctx, 10)
 			if err != nil {
 				return err

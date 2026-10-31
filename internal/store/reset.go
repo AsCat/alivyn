@@ -29,7 +29,7 @@ func resetCharacterTx(ctx context.Context, tx *sql.Tx, command string, at time.T
 		"experience_events",
 		"simulated_events",
 		"character_absence", "reply_deferrals",
-		"feishu_reply_parts", "feishu_reply_groups", "feishu_inbox", "initiative_test_intents", "initiative_test_request", "initiative_checks", "contact_events", "contact_outbox", "contact_delivery_parts", "contact_delivery", "contact_intents",
+		"feishu_reply_parts", "feishu_reply_groups", "feishu_inbox", "initiative_test_intents", "initiative_test_request", "initiative_checks", "inner_wakes", "contact_events", "contact_outbox", "contact_delivery_parts", "contact_delivery", "contact_intents",
 		"goal_world_engagements", "actor_decisions", "actor_continuity", "character_self_facts", "character_turns", "assistant_turns", "command_results", "local_commands",
 		"personal_memory", "memory_revisions", "relationship_snapshots", "relationship_state",
 		"life_readings", "goal_world_events", "goal_world_state", "world_events", "world_state", "messages",
@@ -45,6 +45,9 @@ func resetCharacterTx(ctx context.Context, tx *sql.Tx, command string, at time.T
 		return 0, err
 	}
 	if _, err := tx.ExecContext(ctx, "UPDATE runtime_state SET last_active_ns=?,last_gap_created_ns=NULL WHERE id=1", at.UnixNano()); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE inner_wake_clock SET next_check_ns=0,last_source_id=0 WHERE id=1"); err != nil {
 		return 0, err
 	}
 	// The API budget is operational state, not a character memory. Keeping

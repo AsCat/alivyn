@@ -21,6 +21,13 @@ func TestResetClearsLifeAndQueuedWorkButPreservesPolicyAndReceipts(t *testing.T)
 	}
 	at := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
 	seedInitiative(t, h, at)
+	wake, err := h.ClaimInnerWake(ctx, at, time.UTC)
+	if err != nil || !wake.Ready {
+		t.Fatal(wake, err)
+	}
+	if done, err := h.FinishInnerWake(ctx, wake, character.InnerState{Focus: "rest", Reason: "想安静", RevisitIn: 120}, at); err != nil || !done {
+		t.Fatal(done, err)
+	}
 	check, err := h.ClaimInitiative(ctx, at, time.UTC)
 	if err != nil || !check.Ready {
 		t.Fatal(check, err)
@@ -55,7 +62,7 @@ func TestResetClearsLifeAndQueuedWorkButPreservesPolicyAndReceipts(t *testing.T)
 	if _, err := h.EnqueueFeishu(ctx, "reset", "chat", "m2", "/清除记忆", at.Add(time.Minute), time.UTC); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"character_turns", "character_self_facts", "personal_memory", "memory_revisions", "relationship_snapshots", "world_state", "world_events", "goal_world_state", "goal_world_events", "initiative_checks", "contact_intents", "contact_delivery", "assistant_turns"} {
+	for _, table := range []string{"character_turns", "character_self_facts", "personal_memory", "memory_revisions", "relationship_snapshots", "world_state", "world_events", "goal_world_state", "goal_world_events", "initiative_checks", "inner_wakes", "contact_intents", "contact_delivery", "assistant_turns"} {
 		var n int
 		if err := h.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&n); err != nil || n != 0 {
 			t.Fatalf("%s survived reset: %d %v", table, n, err)
@@ -79,6 +86,9 @@ func TestResetClearsLifeAndQueuedWorkButPreservesPolicyAndReceipts(t *testing.T)
 	}
 	if err := h.SaveCharacterTurn(ctx, old.UserMessageID, turn, at); !errors.Is(err, ErrTurnSuperseded) {
 		t.Fatal("in-flight generation resurrected", err)
+	}
+	if done, err := h.FinishInnerWake(ctx, wake, character.InnerState{Focus: "rest", Reason: "旧念头", RevisitIn: 120}, at); err != nil || done {
+		t.Fatal("old wake committed after reset", done, err)
 	}
 	if err := h.CommitCharacterReply(ctx, old.UserMessageID, turn.Reply, at); !errors.Is(err, ErrTurnSuperseded) {
 		t.Fatal("old reply committed", err)

@@ -68,6 +68,33 @@ WHERE c.outcome IN ('wait','queued') ORDER BY c.id DESC LIMIT 1`).Scan(&at, &out
 	}
 	zh := fmt.Sprintf("【内心 · 已保存的切片】\n感受：%s\n关系倾向：%s\n自己的意向：%s\n状态记录：%s\n最近联系决定：%s", feelingZH, connectionZH, intentionZH, stateAtZH, choiceZH)
 	en := fmt.Sprintf("Mind · saved snapshot\nFeeling: %s\nConnection: %s\nOwn intention: %s\nState recorded: %s\nLast contact choice: %s", feelingEN, connectionEN, intentionEN, stateAtEN, choiceEN)
+	var innerRaw string
+	var innerAt int64
+	err = tx.QueryRowContext(ctx, "SELECT state_json,at_ns FROM inner_wakes WHERE outcome='done' ORDER BY id DESC LIMIT 1").Scan(&innerRaw, &innerAt)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", "", err
+	}
+	if err == nil {
+		var inner character.InnerState
+		if err := json.Unmarshal([]byte(innerRaw), &inner); err != nil {
+			return "", "", err
+		}
+		focusZH := map[string]string{"own_life": "自己的生活", "reflect": "整理经历", "connect": "想联系", "rest": "想休息"}[inner.Focus]
+		if focusZH == "" {
+			focusZH = inner.Focus
+		}
+		stamp := time.Unix(0, innerAt).UTC().Format(time.RFC3339)
+		zh += "\n最近内在唤醒：" + stamp + "\n当时关注：" + focusZH + "\n当时缘由：" + inner.Reason
+		en += "\nLast private wake: " + stamp + "\nFocus then: " + inner.Focus + "\nReason then: " + inner.Reason
+		if len(inner.Impulses) > 0 {
+			zh += "\n当时仍在挂念："
+			en += "\nSocial impulses then:"
+			for _, impulse := range inner.Impulses {
+				zh += "\n· " + impulse.Want + "（" + impulse.Subject + "）"
+				en += "\n· " + impulse.Want + " (" + impulse.Subject + ")"
+			}
+		}
+	}
 	if choiceAtZH != "" {
 		zh += "\n决定时间：" + choiceAtZH + "\n当时理由：" + reasonZH
 		en += "\nChoice recorded: " + choiceAtEN + "\nReason at the time: " + reasonEN

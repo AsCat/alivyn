@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/AsCat/alivyn/internal/character"
 	"github.com/AsCat/alivyn/pkg/extension"
 )
 
@@ -72,6 +73,12 @@ CREATE TRIGGER IF NOT EXISTS experience_contact_insert AFTER INSERT ON contact_e
   VALUES('contact:'||NEW.id,'contact_events',NEW.id,datetime(NEW.at_ns/1000000000,'unixepoch'),
     'interaction_policy','runtime_decision','owner');
 END;
+CREATE TRIGGER IF NOT EXISTS experience_inner_wake_done AFTER UPDATE OF outcome ON inner_wakes
+WHEN NEW.outcome='done' BEGIN
+  INSERT OR IGNORE INTO experience_events(event_id,source_table,source_id,happened_at,domain,provenance,visibility)
+  VALUES('innerwake:'||NEW.id,'inner_wakes',NEW.id,datetime(NEW.at_ns/1000000000,'unixepoch'),
+    'inference','character_state','owner');
+END;
 INSERT OR IGNORE INTO experience_events(event_id,source_table,source_id,happened_at,domain,provenance,visibility)
 SELECT 'chat:'||src.id,'messages',src.id,src.created_at,'conversation','observed_chat','private' FROM messages src
 WHERE NOT EXISTS(SELECT 1 FROM experience_events e WHERE e.source_table='messages' AND e.source_id=src.id) ORDER BY src.id;
@@ -94,6 +101,10 @@ INSERT OR IGNORE INTO experience_events(event_id,source_table,source_id,happened
 SELECT 'contact:'||src.id,'contact_events',src.id,datetime(src.at_ns/1000000000,'unixepoch'),
   'interaction_policy','runtime_decision','owner' FROM contact_events src
 WHERE NOT EXISTS(SELECT 1 FROM experience_events e WHERE e.source_table='contact_events' AND e.source_id=src.id) ORDER BY src.id;
+INSERT OR IGNORE INTO experience_events(event_id,source_table,source_id,happened_at,domain,provenance,visibility)
+SELECT 'innerwake:'||src.id,'inner_wakes',src.id,datetime(src.at_ns/1000000000,'unixepoch'),
+  'inference','character_state','owner' FROM inner_wakes src WHERE src.outcome='done'
+AND NOT EXISTS(SELECT 1 FROM experience_events e WHERE e.source_table='inner_wakes' AND e.source_id=src.id) ORDER BY src.id;
 `)
 	return err
 }
@@ -151,7 +162,8 @@ func (h *History) ReadEvents(ctx context.Context, q extension.EventQuery) ([]ext
   w.kind,w.zh,w.en,w.local_date,
   l.title,l.source_url,l.excerpt,l.thought,l.feeling,l.question,l.occurred_ns,
   se.kind,se.subject_id,se.observer_ids_json,se.payload_json,se.schema,se.occurred_ns,
-  ce.outcome,ce.reason,ce.at_ns,ci.topic
+  ce.outcome,ce.reason,ce.at_ns,ci.topic,
+  iw.state_json,iw.at_ns
 FROM experience_events e
 LEFT JOIN messages m ON e.source_table='messages' AND m.id=e.source_id
 LEFT JOIN local_commands lc ON lc.source_message_id=m.id
@@ -161,6 +173,7 @@ LEFT JOIN life_readings l ON e.source_table='life_readings' AND l.id=e.source_id
 LEFT JOIN simulated_events se ON e.source_table='simulated_events' AND se.id=e.source_id
 LEFT JOIN contact_events ce ON e.source_table='contact_events' AND ce.id=e.source_id
 LEFT JOIN contact_intents ci ON ci.id=ce.intent_id
+LEFT JOIN inner_wakes iw ON e.source_table='inner_wakes' AND iw.id=e.source_id AND iw.outcome='done'
 WHERE e.sequence>? AND (?='' OR e.world_id=?)
 ORDER BY e.sequence LIMIT ?`, q.After, q.WorldID, q.WorldID, q.Limit)
 	if err != nil {
@@ -180,13 +193,16 @@ ORDER BY e.sequence LIMIT ?`, q.After, q.WorldID, q.WorldID, q.Limit)
 		var simOccurred sql.NullInt64
 		var outcome, reason, topic sql.NullString
 		var contactAt sql.NullInt64
+		var innerRaw sql.NullString
+		var innerAt sql.NullInt64
 		if err := rows.Scan(&sequence, &id, &table, &sourceID, &happened, &recorded, &domain, &worldID, &provenance, &visibility, &parent,
 			&role, &content, &created, &command,
 			&action, &object, &goalZh, &goalEn, &goalDate,
 			&legacyKind, &legacyZh, &legacyEn, &legacyDate,
 			&title, &url, &excerpt, &thought, &feeling, &question, &occurred,
 			&simKind, &simSubject, &simObservers, &simPayload, &simSchema, &simOccurred,
-			&outcome, &reason, &contactAt, &topic); err != nil {
+			&outcome, &reason, &contactAt, &topic,
+			&innerRaw, &innerAt); err != nil {
 			return nil, err
 		}
 		var payload any
@@ -235,6 +251,17 @@ ORDER BY e.sequence LIMIT ?`, q.After, q.WorldID, q.WorldID, q.Limit)
 			at = time.Unix(0, contactAt.Int64).UTC()
 			kind = "contact.decision"
 			payload = map[string]any{"topic": topic.String, "outcome": outcome.String, "reason": reason.String}
+		case "inner_wakes":
+			if !innerRaw.Valid || !innerAt.Valid {
+				continue
+			}
+			var state character.InnerState
+			if err := json.Unmarshal([]byte(innerRaw.String), &state); err != nil {
+				return nil, err
+			}
+			at = time.Unix(0, innerAt.Int64).UTC()
+			kind = "person.inner_wake"
+			payload = state
 		default:
 			return nil, fmt.Errorf("unknown experience source %q", table)
 		}
@@ -262,7 +289,7 @@ ORDER BY e.sequence LIMIT ?`, q.After, q.WorldID, q.WorldID, q.Limit)
 				return nil, err
 			}
 		}
-		if table == "contact_events" {
+		if table == "contact_events" || table == "inner_wakes" {
 			event.ObserverIDs = nil
 		}
 		if parent != "" {

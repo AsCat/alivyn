@@ -116,11 +116,11 @@ func TestInitiativeFromIdleToMessageAndQuietChoice(t *testing.T) {
 			if choice == "invalid" {
 				response = " "
 			}
-			impulses := `{"impulses":[]}`
-			if choice == "contact" {
-				impulses = `{"impulses":[{"kind":"follow_up","want":"想再听他聊画画","subject":"旧书店的画面","evidence_ids":["chat:3"]}]}`
+			inner := `{"focus":"rest","reason":"此刻想安静一会儿","evidence_ids":[],"impulses":[],"revisit_in_minutes":120}`
+			if choice != "wait" {
+				inner = `{"focus":"connect","reason":"还想聊旧书店","evidence_ids":["chat:3"],"impulses":[{"kind":"follow_up","want":"想再听他聊画画","subject":"旧书店的画面","evidence_ids":["chat:3"]}],"revisit_in_minutes":120}`
 			}
-			client := &characterScript{replies: []string{impulses, response, "[[wait]]"}}
+			client := &characterScript{replies: []string{inner, response, "[[wait]]"}}
 			s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", WorldPack: "none", Timezone: "UTC"}, History: h, Client: client}
 			outcome, err := s.ConsiderInitiative(ctx, now)
 			if choice == "invalid" {
@@ -131,6 +131,9 @@ func TestInitiativeFromIdleToMessageAndQuietChoice(t *testing.T) {
 				t.Fatal(err)
 			}
 			expectedCalls := 2
+			if choice == "wait" {
+				expectedCalls = 1 // A private rest choice needs no contact model call.
+			}
 			if choice == "invalid" {
 				expectedCalls = 3 // One bounded plain-completion retry.
 			}
@@ -166,5 +169,60 @@ func TestInitiativeFromIdleToMessageAndQuietChoice(t *testing.T) {
 				t.Fatalf("no-message choice lost: %v", err)
 			}
 		})
+	}
+}
+
+func TestInnerWakeContinuesDuringContactQuietHours(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 31, 1, 0, 0, 0, time.UTC)
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if err := h.AddUserMessage(ctx, "那首旧歌挺好听", now.Add(-time.Hour), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	client := &characterScript{replies: []string{`{"focus":"rest","reason":"今晚想休息","evidence_ids":[],"impulses":[],"revisit_in_minutes":120}`}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", WorldPack: "none", Timezone: "UTC"}, History: h, Client: client}
+	outcome, err := s.ConsiderInitiative(ctx, now)
+	if err != nil || outcome != "quiet hours" || len(client.calls) != 1 {
+		t.Fatalf("quiet hours stopped inner life or allowed contact: %q %d %v", outcome, len(client.calls), err)
+	}
+	inner, _, exists, err := h.LatestInnerState(ctx)
+	if err != nil || !exists || inner.Focus != "rest" {
+		t.Fatalf("private wake was not saved: %+v %t %v", inner, exists, err)
+	}
+}
+
+func TestInnerWakeFailureFallsBackToContactDecision(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if err := h.AddUserMessage(ctx, "旧书店那幅画还没画完", now.Add(-3*time.Hour), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Add(ctx, "assistant", "那块招牌我还记得。", now.Add(-3*time.Hour+time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.AddUserMessage(ctx, "我刚又翻到那个速写本", now.Add(-2*time.Hour), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Add(ctx, "assistant", "你后来还添了颜色吗", now.Add(-2*time.Hour+time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	client := &characterScript{replies: []string{
+		`{"focus":"invalid","reason":"bad model output","revisit_in_minutes":120}`,
+		`{"impulses":[]}`,
+		`{"action":"wait","reason":"今天没有新的话题"}`,
+	}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", WorldPack: "none", Timezone: "UTC"}, History: h, Client: client}
+	outcome, err := s.ConsiderInitiative(ctx, now)
+	if err != nil || outcome != "wait" || len(client.calls) != 3 {
+		t.Fatalf("inner wake failure disabled contact path: %q %d %v", outcome, len(client.calls), err)
 	}
 }

@@ -19,6 +19,42 @@ func (sceneSimulator) Advance(_ context.Context, q extension.SimulationRequest) 
 	return []extension.EventProposal{{ProposalID: "archive-one", Kind: "world.scene", SubjectID: q.SubjectID, At: q.AsOf, ObserverIDs: []string{"default"}, Payload: scene, Schema: "alivyn.world.scene/v1"}}, nil
 }
 
+func TestOwnLifeWakeCanAdvanceSelectedWorldWithoutSending(t *testing.T) {
+	ctx := context.Background()
+	h, err := store.OpenHistory(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	at := time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)
+	if err := h.AddUserMessage(ctx, "你最近忙什么", at.Add(-time.Hour), time.UTC); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Add(ctx, "assistant", "在整理一盒旧录音。", at.Add(-time.Hour+time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	r := extension.NewRegistry()
+	if err := r.Register(extension.Registration{Manifest: extension.Manifest{ID: "test.world", Version: "1", APIVersion: extension.APIVersion, Capabilities: []extension.Capability{extension.Simulate}}, Simulator: sceneSimulator{}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Use("world.tidehaven", extension.Simulate, "test.world"); err != nil {
+		t.Fatal(err)
+	}
+	client := &characterScript{replies: []string{`{"focus":"own_life","reason":"想继续整理录音","evidence_ids":["self:character"],"impulses":[],"revisit_in_minutes":120}`}}
+	s := Session{Config: config.Config{Name: "意续", Language: "zh-CN", Model: "mock", Engine: "character_v2", WorldPack: "tidehaven", Timezone: "UTC"}, History: h, Client: client, Extensions: r}
+	inner, _, exists, err := s.WakeInnerLife(ctx, at)
+	if err != nil || !exists || inner.Focus != "own_life" {
+		t.Fatalf("private wake failed: %+v %t %v", inner, exists, err)
+	}
+	events, err := h.VisibleSimulatedScenes(ctx, "tidehaven", "default", at.Add(time.Second), 5)
+	if err != nil || len(events) != 1 {
+		t.Fatalf("own-life choice did not enter world ledger: %+v %v", events, err)
+	}
+	if len(client.calls) != 1 {
+		t.Fatalf("world action unexpectedly generated a contact: %d model calls", len(client.calls))
+	}
+}
+
 func TestSelectedSimulatorEntersOnlyWitnessedConversationEvidence(t *testing.T) {
 	ctx := context.Background()
 	h, err := store.OpenHistory(ctx, t.TempDir())

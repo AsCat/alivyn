@@ -161,10 +161,17 @@ func TestMindInspectionShowsSavedConnectionAndContactChoice(t *testing.T) {
 VALUES(?,?,?,'wait','想继续聊，但这一刻先留点空隙')`, sourceID, throughID, at.Add(time.Minute).UnixNano()); err != nil {
 		t.Fatal(err)
 	}
+	wake, err := h.ClaimInnerWake(ctx, at.Add(time.Minute), time.UTC)
+	if err != nil || !wake.Ready {
+		t.Fatal(wake, err)
+	}
+	if done, err := h.FinishInnerWake(ctx, wake, character.InnerState{Focus: "connect", Reason: "想起旧歌", EvidenceIDs: []string{"chat:2"}, Impulses: []character.Impulse{{Kind: "share", Want: "想聊旧歌", Subject: "旧歌", EvidenceIDs: []string{"chat:2"}}}, RevisitIn: 120}, at.Add(time.Minute)); err != nil || !done {
+		t.Fatal(done, err)
+	}
 	controlTestMessage(t, h, "/诊断", at.Add(2*time.Minute))
 	controlTestMessage(t, h, "/确认诊断", at.Add(2*time.Minute+time.Second))
 	got := controlTestMessage(t, h, "/内心", at.Add(2*time.Minute+2*time.Second))
-	for _, expected := range []string{"愿意再靠近一点", "想再说两句", "那时决定先不联系", "这一刻先留点空隙", "不代表此刻仍在实时思考"} {
+	for _, expected := range []string{"愿意再靠近一点", "想再说两句", "那时决定先不联系", "这一刻先留点空隙", "最近内在唤醒", "想起旧歌", "不代表此刻仍在实时思考"} {
 		if !strings.Contains(got, expected) {
 			t.Fatalf("mind missing %q: %s", expected, got)
 		}

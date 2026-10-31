@@ -538,7 +538,16 @@ func (h *History) CancelChannelContact(ctx context.Context, id int64, now time.T
 }
 
 func clearInitiativesTx(ctx context.Context, tx *sql.Tx) error {
-	_, err := tx.ExecContext(ctx, "DELETE FROM initiative_checks")
+	if _, err := tx.ExecContext(ctx, "DELETE FROM initiative_checks"); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM experience_events WHERE source_table='inner_wakes'"); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM inner_wakes"); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, "UPDATE inner_wake_clock SET next_check_ns=0,last_source_id=0 WHERE id=1")
 	return err
 }
 

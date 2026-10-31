@@ -234,9 +234,11 @@ func (s Session) characterInitiativeDecision(ctx context.Context, now time.Time,
 		}
 	}
 	var err error
-	c.Impulses, err = character.ImagineImpulses(ctx, s.Client, s.Config.Model, c, refs)
-	if err != nil {
-		return character.Initiative{}, err
+	if c.Impulses == nil {
+		c.Impulses, err = character.ImagineImpulses(ctx, s.Client, s.Config.Model, c, refs)
+		if err != nil {
+			return character.Initiative{}, err
+		}
 	}
 	p, err := character.ConsiderContact(ctx, s.Client, s.Config.Model, c, refs)
 	if err != nil {

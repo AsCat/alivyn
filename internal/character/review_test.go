@@ -97,3 +97,28 @@ func TestReflectionReviewRevisesUnsupportedUserMotive(t *testing.T) {
 		t.Fatal(turn, err)
 	}
 }
+
+func TestReflectionRecoversEmptyJSONWithSourcedPulse(t *testing.T) {
+	s := &reviewedScript{
+		dialogue: []string{`{"moment":{"feeling":"平静","affect":{"valence":0,"activation":1,"social_pull":1,"source_ids":["chat:7"]}},"open_threads":[],"used_world_ids":[]}`},
+		reviews:  []string{"", `{"valid":true,"issue":""}`},
+	}
+	c := Context{Frame: actor.Frame{Now: "2026-11-21T20:00:00+08:00", Language: "zh-CN", Latest: actor.Evidence{ID: "chat:7"}}, Sources: []actor.Evidence{{ID: "chat:7", Provenance: "observed_chat", Text: "user: 在吗"}}}
+	turn, err := Reflect(context.Background(), s, "mock", c, "在")
+	if err != nil || turn.Moment.Affect == nil || turn.Moment.Affect.SocialPull != 1 || len(s.dialogue) != 0 {
+		t.Fatal(turn, err)
+	}
+}
+
+func TestReflectionRetriesUnsupportedSourceWithoutSavingIt(t *testing.T) {
+	s := &reviewedScript{reviews: []string{
+		`{"moment":{"affect":{"valence":1,"activation":1,"social_pull":1,"source_ids":["chat:999"]}},"open_threads":[],"used_world_ids":[]}`,
+		`{"moment":{"affect":{"valence":1,"activation":1,"social_pull":1,"source_ids":["chat:7"]}},"open_threads":[],"used_world_ids":[]}`,
+		`{"valid":true,"issue":""}`,
+	}}
+	c := Context{Frame: actor.Frame{Now: "2026-11-21T20:00:00+08:00", Latest: actor.Evidence{ID: "chat:7"}}, Sources: []actor.Evidence{{ID: "chat:7", Provenance: "observed_chat", Text: "user: 在吗"}}}
+	turn, err := Reflect(context.Background(), s, "mock", c, "在")
+	if err != nil || turn.Moment.Affect == nil || turn.Moment.Affect.SourceIDs[0] != "chat:7" {
+		t.Fatal(turn, err)
+	}
+}

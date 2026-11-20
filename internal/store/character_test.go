@@ -20,7 +20,7 @@ func TestCharacterStateCommitsWithReplyExpiresAndForgets(t *testing.T) {
 	if _, err := h.EnqueueFeishu(ctx, "one", "chat", "m1", "我叫小明", at, time.UTC); err != nil {
 		t.Fatal(err)
 	}
-	turn := character.Turn{Mode: "say", Reply: "小明，记住了。", StateUpdated: true, StateVersion: 2, Moment: character.Moment{Feeling: "好奇", Attention: "小明刚才说的事", Scene: "在听歌"}, Episode: &character.Episode{Event: "对方说自己叫小明", Effect: "我记住了这个称呼", SourceIDs: []string{"chat:1"}}}
+	turn := character.Turn{Mode: "say", Reply: "小明，记住了。", StateUpdated: true, StateVersion: 2, Moment: character.Moment{Feeling: "好奇", Attention: "小明刚才说的事", Scene: "在听歌", Affect: &character.AffectPulse{Valence: 1, Activation: 2, SocialPull: 2, SourceIDs: []string{"chat:1"}}}, Episode: &character.Episode{Event: "对方说自己叫小明", Effect: "我记住了这个称呼", SourceIDs: []string{"chat:1"}}}
 	if err := h.SaveCharacterTurn(ctx, 1, turn, at); err != nil {
 		t.Fatal(err)
 	}
@@ -45,6 +45,21 @@ func TestCharacterStateCommitsWithReplyExpiresAndForgets(t *testing.T) {
 		m, _, err := h.CharacterMomentBefore(ctx, 2, at.Add(tc.age))
 		if err != nil || (m.Feeling != "") != tc.feeling || (m.Scene != "") != tc.scene || (m.Attention != "") != tc.attention {
 			t.Fatalf("bad expiry at %v: %+v %v", tc.age, m, err)
+		}
+	}
+	for _, tc := range []struct {
+		age              time.Duration
+		activation, pull float64
+		present          bool
+	}{
+		{time.Hour, 2, 2, true}, {3 * time.Hour, 1, 1, true}, {9 * time.Hour, 0, 0, false},
+	} {
+		m, _, err := h.CharacterMomentBefore(ctx, 2, at.Add(tc.age))
+		if err != nil || (m.Affect != nil) != tc.present {
+			t.Fatalf("bad affect expiry at %v: %+v %v", tc.age, m, err)
+		}
+		if tc.present && (m.Affect.Activation != tc.activation || m.Affect.SocialPull != tc.pull) {
+			t.Fatalf("affect did not settle at %v: %+v", tc.age, m.Affect)
 		}
 	}
 	if err := h.AddUserMessage(ctx, "忘记我的名字", at.Add(time.Minute), time.UTC); err != nil {

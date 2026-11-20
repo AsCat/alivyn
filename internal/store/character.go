@@ -226,11 +226,18 @@ ORDER BY source_message_id DESC LIMIT 1`, sourceID).Scan(&raw, &stamp)
 	if age > 8*time.Hour {
 		t.Moment.Feeling = ""
 		t.Moment.Cause = ""
+		t.Moment.Affect = nil
 	}
 	if age > 2*time.Hour {
 		t.Moment.Intention = ""
 		t.Moment.Energy = ""
 		t.Moment.Engagement = ""
+		if t.Moment.Affect != nil {
+			pulse := *t.Moment.Affect
+			pulse.Activation /= 2
+			pulse.SocialPull /= 2
+			t.Moment.Affect = &pulse
+		}
 	}
 	if age > 6*time.Hour {
 		t.Moment.Scene = ""

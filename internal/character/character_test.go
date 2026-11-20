@@ -70,6 +70,25 @@ func TestTurnAllowsAuthoredSceneButRejectsInventedWorldReferences(t *testing.T) 
 	}
 }
 
+func TestAffectPulseRequiresRealSourceAndReachesDialogue(t *testing.T) {
+	frame := actor.Frame{Language: "zh-CN", Latest: actor.Evidence{ID: "chat:7"}, Evidence: []actor.Evidence{{ID: "chat:7", Provenance: "observed_chat"}, {ID: "self:character", Provenance: "authored_character"}}, Recent: []model.Message{{Role: "user", Content: "我回来了"}}}
+	raw := `{"mode":"say","reply":"回来啦","moment":{"feeling":"有点高兴","affect":{"valence":1,"activation":1,"social_pull":1,"source_ids":["chat:7"]}},"used_world_ids":[]}`
+	turn, err := Parse(raw, frame)
+	if err != nil || turn.Moment.Affect == nil {
+		t.Fatal(turn, err)
+	}
+	messages, err := Messages(Context{Frame: frame, Moment: turn.Moment})
+	if err != nil || !strings.Contains(messages[0].Content, `"social_pull":1`) || !strings.Contains(messages[0].Content, "change participation") {
+		t.Fatal("pulse did not reach the next dialogue", err)
+	}
+	if _, err := Parse(strings.Replace(raw, "chat:7", "chat:999", 1), frame); err == nil {
+		t.Fatal("invented affect source accepted")
+	}
+	if _, err := Parse(strings.Replace(raw, "chat:7", "self:character", 1), frame); err == nil {
+		t.Fatal("persona alone caused a new affect event")
+	}
+}
+
 func TestOpenThreadRequiresRealChatSource(t *testing.T) {
 	frame := actor.Frame{Evidence: []actor.Evidence{{ID: "chat:7", Provenance: "observed_chat"}, {ID: "worldv2:1", Provenance: "simulated_world"}}}
 	raw := `{"mode":"say","reply":"明天再聊。","moment":{"intention":"想休息"},"open_threads":[{"subject":"用户提到有件事还没说","owner":"user","source_ids":["chat:7"]}]}`

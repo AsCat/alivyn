@@ -73,7 +73,7 @@ func eventSummary(e extension.Event, language string) string {
 	switch e.Kind {
 	case "chat.message":
 		return field("role") + ": " + field("text")
-	case "life.reading":
+	case "life.reading", "life.popular_video":
 		return field("title") + " · " + field("thought")
 	case "contact.decision":
 		return field("topic") + " · " + field("outcome") + " · " + field("reason")

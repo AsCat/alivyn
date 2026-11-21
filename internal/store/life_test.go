@@ -2,12 +2,45 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/AsCat/alivyn/internal/life"
 )
+
+func TestLifeReadingKindMigratesExistingHistory(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "alivyn.db")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE life_readings (id INTEGER PRIMARY KEY AUTOINCREMENT, local_date TEXT NOT NULL, occurred_ns INTEGER NOT NULL, title TEXT NOT NULL, source_url TEXT NOT NULL, excerpt TEXT NOT NULL, thought TEXT NOT NULL, feeling TEXT NOT NULL, question TEXT NOT NULL, UNIQUE(local_date), UNIQUE(source_url));
+	INSERT INTO life_readings(local_date,occurred_ns,title,source_url,excerpt,thought,feeling,question) VALUES('2026-11-20',1,'old','https://example.org/old','old excerpt','old thought','','')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	h, err := OpenHistory(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	r, err := h.LifeReading(ctx, 1)
+	if err != nil || r.Kind != life.FeedExcerpt {
+		t.Fatalf("old record did not migrate: %+v %v", r, err)
+	}
+}
 
 func TestLifeReadingQueuesSourcedContactAndResetFencesOldWork(t *testing.T) {
 	ctx := context.Background()

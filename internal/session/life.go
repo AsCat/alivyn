@@ -97,10 +97,16 @@ func (s Session) StartLifeLoop(ctx context.Context, report func(error)) func() {
 
 func readingEvidence(r life.Reading) []actor.Evidence {
 	base := fmt.Sprintf("reading:%d", r.ID)
+	source := fmt.Sprintf("On %s the character read a public feed excerpt, not the full article. Title: %s. URL: %s. Actual excerpt: %s", r.Date, r.Title, r.URL, r.Excerpt)
+	reaction := "Her private, tentative reaction to that excerpt"
+	if r.Kind == life.PopularVideo {
+		source = fmt.Sprintf("On %s the character noticed a Bilibili popular-video listing. She saw only its title and creator description; she did not watch the video or read comments. Title: %s. URL: %s. Listing metadata: %s", r.Date, r.Title, r.URL, r.Excerpt)
+		reaction = "Her private, tentative reaction to that listing"
+	}
 	return []actor.Evidence{
 		{ID: base + ":source", Provenance: "external_excerpt", At: r.At.Format(time.RFC3339),
-			Text: fmt.Sprintf("On %s the character read a public feed excerpt, not the full article. Title: %s. URL: %s. Actual excerpt: %s", r.Date, r.Title, r.URL, r.Excerpt)},
+			Text: source},
 		{ID: base + ":thought", Provenance: "character_reflection", At: r.At.Format(time.RFC3339),
-			Text: fmt.Sprintf("Her private, tentative reaction to that excerpt: %s. Feeling: %s. Open question: %s", r.Thought, r.Feeling, r.Question)},
+			Text: fmt.Sprintf("%s: %s. Feeling: %s. Open question: %s", reaction, r.Thought, r.Feeling, r.Question)},
 	}
 }

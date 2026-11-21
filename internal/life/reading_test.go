@@ -42,6 +42,15 @@ func TestFeedExcerptTruncationFitsValidationBudget(t *testing.T) {
 	}
 }
 
+func TestPopularListingIsTitleAndMetadataOnly(t *testing.T) {
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	raw := fmt.Sprintf(`{"code":0,"data":{"list":[{"title":"今天吃什么","bvid":"BV123abc","desc":"去菜场买了两把青菜","tname":"美食","pubdate":%d},{"title":"旧视频","bvid":"BV456def","desc":"很久之前","tname":"生活","pubdate":%d}]}}`, now.Add(-time.Hour).Unix(), now.Add(-96*time.Hour).Unix())
+	items, err := parsePopular([]byte(raw), now)
+	if err != nil || len(items) != 1 || items[0].Kind != PopularVideo || items[0].URL != "https://www.bilibili.com/video/BV123abc" || !strings.Contains(items[0].Excerpt, "未观看视频") {
+		t.Fatalf("popular listing was not bounded metadata: %+v %v", items, err)
+	}
+}
+
 func TestFetchKeepsChineseAndEntertainmentSourcesInChoicePool(t *testing.T) {
 	client := &http.Client{Transport: feedTransport(func(req *http.Request) (*http.Response, error) {
 		var items strings.Builder

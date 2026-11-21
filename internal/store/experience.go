@@ -160,7 +160,7 @@ func (h *History) ReadEvents(ctx context.Context, q extension.EventQuery) ([]ext
   m.role,m.content,m.created_at,lc.command,
   g.action,g.object_id,g.zh,g.en,g.local_date,
   w.kind,w.zh,w.en,w.local_date,
-  l.title,l.source_url,l.excerpt,l.thought,l.feeling,l.question,l.occurred_ns,
+  l.kind,l.title,l.source_url,l.excerpt,l.thought,l.feeling,l.question,l.occurred_ns,
   se.kind,se.subject_id,se.observer_ids_json,se.payload_json,se.schema,se.occurred_ns,
   ce.outcome,ce.reason,ce.at_ns,ci.topic,
   iw.state_json,iw.at_ns
@@ -187,7 +187,7 @@ ORDER BY e.sequence LIMIT ?`, q.After, q.WorldID, q.WorldID, q.Limit)
 		var role, content, created, command sql.NullString
 		var action, object, goalZh, goalEn, goalDate sql.NullString
 		var legacyKind, legacyZh, legacyEn, legacyDate sql.NullString
-		var title, url, excerpt, thought, feeling, question sql.NullString
+		var readingKind, title, url, excerpt, thought, feeling, question sql.NullString
 		var occurred sql.NullInt64
 		var simKind, simSubject, simObservers, simPayload, simSchema sql.NullString
 		var simOccurred sql.NullInt64
@@ -199,7 +199,7 @@ ORDER BY e.sequence LIMIT ?`, q.After, q.WorldID, q.WorldID, q.Limit)
 			&role, &content, &created, &command,
 			&action, &object, &goalZh, &goalEn, &goalDate,
 			&legacyKind, &legacyZh, &legacyEn, &legacyDate,
-			&title, &url, &excerpt, &thought, &feeling, &question, &occurred,
+			&readingKind, &title, &url, &excerpt, &thought, &feeling, &question, &occurred,
 			&simKind, &simSubject, &simObservers, &simPayload, &simSchema, &simOccurred,
 			&outcome, &reason, &contactAt, &topic,
 			&innerRaw, &innerAt); err != nil {
@@ -236,7 +236,10 @@ ORDER BY e.sequence LIMIT ?`, q.After, q.WorldID, q.WorldID, q.Limit)
 			}
 			at = time.Unix(0, occurred.Int64).UTC()
 			kind = "life.reading"
-			payload = map[string]any{"title": title.String, "url": url.String, "excerpt": excerpt.String, "thought": thought.String, "feeling": feeling.String, "question": question.String}
+			if readingKind.String == "public_popular_video" {
+				kind = "life.popular_video"
+			}
+			payload = map[string]any{"source_kind": readingKind.String, "title": title.String, "url": url.String, "excerpt": excerpt.String, "thought": thought.String, "feeling": feeling.String, "question": question.String}
 		case "simulated_events":
 			if !simKind.Valid || !simOccurred.Valid || !simPayload.Valid {
 				continue

@@ -258,7 +258,7 @@ func (s Session) ComposeContactForAt(ctx context.Context, topic, key string, now
 		if err != nil || reading.At.After(now) {
 			return "", errors.New("reading contact source is unavailable")
 		}
-		occasion = fmt.Sprintf("You have just had some time with your own reading. Consider whether to share one concrete thought from reading:%d with this person. The source excerpt and your tentative note are in sourced records. You read an excerpt, not the full article. Attribute external events only when the excerpt explicitly identifies who did what; a title or your tentative thought does not prove an actor or motive. Speak only if it matters to you; one short personal message is enough. Do not require an answer or invent extra facts.", id)
+		occasion = fmt.Sprintf("You have just noticed one public item during your own time. Consider whether to share one concrete thought from reading:%d with this person. The sourced record specifies exactly what you saw. For a feed excerpt, you did not read the full article. For a popular-video listing, you saw only the title and creator description; you did not watch the video or read comments. A title or your tentative thought does not prove an actor or motive. Speak only if it matters to you; one short personal message is enough. Do not require an answer or invent extra facts.", id)
 	default:
 		return "", errors.New("unknown contact topic")
 	}

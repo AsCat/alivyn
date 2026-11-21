@@ -339,6 +339,7 @@ CREATE TABLE IF NOT EXISTS life_reading_clock (
 INSERT OR IGNORE INTO life_reading_clock(id) VALUES(1);
 CREATE TABLE IF NOT EXISTS life_readings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL DEFAULT 'public_feed_excerpt',
   local_date TEXT NOT NULL,
   occurred_ns INTEGER NOT NULL,
   title TEXT NOT NULL,
@@ -354,6 +355,10 @@ CREATE INDEX IF NOT EXISTS life_readings_time ON life_readings(occurred_ns);
 `); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("initialize history: %w", err)
+	}
+	if err := h.ensureLifeReadingKind(ctx); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("initialize life reading kind: %w", err)
 	}
 	if err := h.ensureContactPolicy(ctx); err != nil {
 		db.Close()

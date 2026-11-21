@@ -11,6 +11,33 @@ import (
 	"github.com/AsCat/alivyn/internal/relationship"
 )
 
+func (h *History) ensureLifeReadingKind(ctx context.Context) error {
+	rows, err := h.db.QueryContext(ctx, "PRAGMA table_info(life_readings)")
+	if err != nil {
+		return err
+	}
+	found := false
+	for rows.Next() {
+		var id, notnull, pk int
+		var name, typ string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&id, &name, &typ, &notnull, &defaultValue, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "kind" {
+			found = true
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil || found {
+		return err
+	}
+	_, err = h.db.ExecContext(ctx, "ALTER TABLE life_readings ADD COLUMN kind TEXT NOT NULL DEFAULT 'public_feed_excerpt'")
+	return err
+}
+
 // ClaimLifeReading gives one runtime at most one reading per local day. Its
 // generation fences an in-flight model result against /reset.
 func (h *History) ClaimLifeReading(ctx context.Context, now time.Time, zone *time.Location, force bool) (int64, bool, error) {
@@ -47,6 +74,12 @@ func (h *History) ReleaseLifeReading(ctx context.Context, generation int64, date
 }
 
 func (h *History) SaveLifeReading(ctx context.Context, generation int64, reading life.Reading) (life.Reading, error) {
+	if reading.Kind == "" {
+		reading.Kind = life.FeedExcerpt
+	}
+	if reading.Kind != life.FeedExcerpt && reading.Kind != life.PopularVideo {
+		return life.Reading{}, errors.New("invalid life reading kind")
+	}
 	if reading.At.IsZero() || reading.Title == "" || reading.URL == "" || reading.Excerpt == "" || reading.Thought == "" || reading.Date == "" {
 		return life.Reading{}, errors.New("incomplete sourced life reading")
 	}
@@ -63,8 +96,8 @@ func (h *History) SaveLifeReading(ctx context.Context, generation int64, reading
 	if current != generation || claimed != reading.Date || until < reading.At.UnixNano() {
 		return life.Reading{}, ErrTurnSuperseded
 	}
-	result, err := tx.ExecContext(ctx, `INSERT INTO life_readings(local_date,occurred_ns,title,source_url,excerpt,thought,feeling,question)
-VALUES(?,?,?,?,?,?,?,?)`, reading.Date, reading.At.UnixNano(), reading.Title, reading.URL, reading.Excerpt, reading.Thought, reading.Feeling, reading.Question)
+	result, err := tx.ExecContext(ctx, `INSERT INTO life_readings(kind,local_date,occurred_ns,title,source_url,excerpt,thought,feeling,question)
+VALUES(?,?,?,?,?,?,?,?,?)`, reading.Kind, reading.Date, reading.At.UnixNano(), reading.Title, reading.URL, reading.Excerpt, reading.Thought, reading.Feeling, reading.Question)
 	if err != nil {
 		return life.Reading{}, err
 	}
@@ -110,8 +143,8 @@ VALUES('life_reading',?,?,?,?,?)`, reading.At.Add(3*time.Minute).UnixNano(), rea
 func (h *History) LifeReading(ctx context.Context, id int64) (life.Reading, error) {
 	var r life.Reading
 	var stamp int64
-	err := h.db.QueryRowContext(ctx, `SELECT id,local_date,occurred_ns,title,source_url,excerpt,thought,feeling,question FROM life_readings WHERE id=?`, id).
-		Scan(&r.ID, &r.Date, &stamp, &r.Title, &r.URL, &r.Excerpt, &r.Thought, &r.Feeling, &r.Question)
+	err := h.db.QueryRowContext(ctx, `SELECT id,kind,local_date,occurred_ns,title,source_url,excerpt,thought,feeling,question FROM life_readings WHERE id=?`, id).
+		Scan(&r.ID, &r.Kind, &r.Date, &stamp, &r.Title, &r.URL, &r.Excerpt, &r.Thought, &r.Feeling, &r.Question)
 	r.At = time.Unix(0, stamp)
 	return r, err
 }
@@ -120,7 +153,7 @@ func (h *History) LifeReadingsBefore(ctx context.Context, before time.Time, limi
 	if limit < 1 || limit > 50 {
 		return nil, errors.New("invalid life reading limit")
 	}
-	rows, err := h.db.QueryContext(ctx, `SELECT id,local_date,occurred_ns,title,source_url,excerpt,thought,feeling,question
+	rows, err := h.db.QueryContext(ctx, `SELECT id,kind,local_date,occurred_ns,title,source_url,excerpt,thought,feeling,question
 FROM life_readings WHERE occurred_ns<=? ORDER BY occurred_ns DESC,id DESC LIMIT ?`, before.UnixNano(), limit)
 	if err != nil {
 		return nil, err
@@ -130,7 +163,7 @@ FROM life_readings WHERE occurred_ns<=? ORDER BY occurred_ns DESC,id DESC LIMIT 
 	for rows.Next() {
 		var r life.Reading
 		var stamp int64
-		if err := rows.Scan(&r.ID, &r.Date, &stamp, &r.Title, &r.URL, &r.Excerpt, &r.Thought, &r.Feeling, &r.Question); err != nil {
+		if err := rows.Scan(&r.ID, &r.Kind, &r.Date, &stamp, &r.Title, &r.URL, &r.Excerpt, &r.Thought, &r.Feeling, &r.Question); err != nil {
 			return nil, err
 		}
 		r.At = time.Unix(0, stamp)

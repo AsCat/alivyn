@@ -31,7 +31,7 @@ func (builtinFeedPerceptor) Observe(ctx context.Context, at time.Time) ([]extens
 		if err != nil {
 			return nil, err
 		}
-		observations = append(observations, extension.Observation{Kind: "public_feed_excerpt", At: at, Source: candidate.URL, MediaType: "text/plain", Payload: payload})
+		observations = append(observations, extension.Observation{Kind: candidate.Kind, At: at, Source: candidate.URL, MediaType: "text/plain", Payload: payload})
 	}
 	return observations, nil
 }
@@ -52,16 +52,25 @@ func (s Session) readingCandidates(ctx context.Context, at time.Time) ([]life.Ca
 	}
 	candidates := make([]life.Candidate, 0, len(observations))
 	for _, observed := range observations {
-		if observed.Kind != "public_feed_excerpt" || observed.At.After(at) || observed.Source == "" {
+		if observed.Kind != life.FeedExcerpt && observed.Kind != life.PopularVideo || observed.At.After(at) || observed.Source == "" {
 			return nil, errors.New("invalid reading observation")
 		}
 		var candidate life.Candidate
 		if err := json.Unmarshal(observed.Payload, &candidate); err != nil {
 			return nil, err
 		}
+		if candidate.Kind == "" && observed.Kind == life.FeedExcerpt {
+			candidate.Kind = life.FeedExcerpt
+		}
+		if candidate.Kind != observed.Kind {
+			return nil, errors.New("reading kind mismatch")
+		}
 		link, err := url.Parse(candidate.URL)
 		if err != nil || link.Scheme != "https" || link.Host == "" || candidate.URL != observed.Source || candidate.Title == "" || candidate.Excerpt == "" || len([]rune(candidate.Excerpt)) > 1200 {
 			return nil, errors.New("invalid sourced reading candidate")
+		}
+		if candidate.Kind == life.PopularVideo && (link.Host != "www.bilibili.com" || len(link.Path) < len("/video/BV") || link.Path[:len("/video/BV")] != "/video/BV") {
+			return nil, errors.New("invalid popular video source")
 		}
 		candidates = append(candidates, candidate)
 	}
